@@ -1,0 +1,26 @@
+{
+  "name": "@dib/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./dungeon": "./src/dungeon.ts",
+    "./dungeon-runtime": "./src/dungeonRuntime.ts",
+    "./rewards": "./src/rewards.ts",
+    "./jsonSafe": "./src/jsonSafe.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dib/gamedata": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  }
+}

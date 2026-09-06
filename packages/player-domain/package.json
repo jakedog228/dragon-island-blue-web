@@ -1,0 +1,29 @@
+{
+  "name": "@dib/player-domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./playerProfile": "./src/playerProfile.ts",
+    "./playerCollection": "./src/playerCollection.ts",
+    "./battlePlayerState": "./src/battlePlayerState.ts",
+    "./battleTripParty": "./src/battleTripParty.ts",
+    "./rewards": "./src/rewards.ts",
+    "./demoPlayerProfile": "./src/demoPlayerProfile.ts",
+    "./inventory": "./src/inventory.ts",
+    "./store": "./src/store.ts"
+  },
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dib/engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  }
+}

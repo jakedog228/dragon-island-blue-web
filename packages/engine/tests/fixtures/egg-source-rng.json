@@ -1,0 +1,211 @@
+{
+  "basis": "Independent Python source translation, not emulator execution; original plist, Silver, no registered species/bench/recipes/spirit XP, no licensed slots, seed1, lab full-path keys then installed TouchHLE qsort.",
+  "providers": [
+    {
+      "kind": "monster",
+      "shortType": "WhitePiranha",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "WhitePiranha",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Wolf",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Wolf",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "BatSquirrel",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "BatSquirrel",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "BatFiend",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "BatFiend",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "gold",
+      "amount": 50
+    },
+    {
+      "kind": "gold",
+      "amount": 50
+    },
+    {
+      "kind": "gold",
+      "amount": 50
+    },
+    {
+      "kind": "gold",
+      "amount": 50
+    },
+    {
+      "kind": "gold",
+      "amount": 150
+    },
+    {
+      "kind": "gold",
+      "amount": 150
+    },
+    {
+      "kind": "silver",
+      "amount": 500
+    },
+    {
+      "kind": "silver",
+      "amount": 500
+    },
+    {
+      "kind": "silver",
+      "amount": 1500
+    },
+    {
+      "kind": "silver",
+      "amount": 1500
+    },
+    {
+      "kind": "item",
+      "definitionPath": "Usables.CardSilver",
+      "level": 2
+    },
+    {
+      "kind": "item",
+      "definitionPath": "Usables.CardSilver",
+      "level": 2
+    },
+    {
+      "kind": "item",
+      "definitionPath": "Usables.CardGold",
+      "level": 3
+    },
+    {
+      "kind": "item",
+      "definitionPath": "Usables.CardGold",
+      "level": 3
+    },
+    {
+      "kind": "gem",
+      "level": 0,
+      "quality": 0,
+      "slot": 0,
+      "enabledStats": [
+        "Defense"
+      ]
+    },
+    {
+      "kind": "gem",
+      "level": 0,
+      "quality": 0,
+      "slot": 0,
+      "enabledStats": [
+        "MaxHP"
+      ]
+    },
+    {
+      "kind": "gem",
+      "level": 0,
+      "quality": 0,
+      "slot": 0,
+      "enabledStats": [
+        "MaxHP"
+      ]
+    },
+    {
+      "kind": "gem",
+      "level": 0,
+      "quality": 0,
+      "slot": 0,
+      "enabledStats": [
+        "MaxHP"
+      ]
+    },
+    {
+      "kind": "gem",
+      "level": 0,
+      "quality": 1,
+      "slot": 0,
+      "enabledStats": [
+        "Resist",
+        "MaxHP"
+      ]
+    },
+    {
+      "kind": "gem",
+      "level": 0,
+      "quality": 1,
+      "slot": 0,
+      "enabledStats": [
+        "MaxHP",
+        "Resist"
+      ]
+    }
+  ],
+  "reelProviderIndices": [
+    6,
+    4,
+    13,
+    19,
+    23,
+    1,
+    25,
+    14,
+    18,
+    2,
+    12,
+    27,
+    17,
+    16,
+    24,
+    26,
+    9,
+    11,
+    22,
+    0,
+    21,
+    15,
+    8,
+    3,
+    7,
+    10,
+    20,
+    5
+  ],
+  "previews": [
+    "Wolf",
+    "BatFiend"
+  ],
+  "poolDrawEnd": 24,
+  "shuffleDrawEnd": 52,
+  "previewDrawEnd": 54,
+  "stateAfterPreviews": 3409541077,
+  "casinoDrawEnd": 55,
+  "stateBeforeRelease": 1572275124,
+  "releaseU32": 100300756,
+  "friction": 2.7140116691589355
+}

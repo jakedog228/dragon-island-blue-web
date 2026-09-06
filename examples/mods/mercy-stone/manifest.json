@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 4,
+  "id": "dev.dragonislandblue.mercy-stone",
+  "version": "1.0.0",
+  "displayName": "Mercy Stone",
+  "apiVersion": 4,
+  "mode": "offline",
+  "dependencies": {},
+  "entry": "scripts/main.js"
+}

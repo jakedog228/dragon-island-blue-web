@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 4,
+  "id": "dev.dragonislandblue.blue-dragon-overdrive",
+  "version": "1.0.0",
+  "displayName": "Blue Dragon Overdrive",
+  "apiVersion": 4,
+  "mode": "offline",
+  "dependencies": {},
+  "entry": "scripts/main.js"
+}

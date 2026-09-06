@@ -1,0 +1,23 @@
+{
+  "name": "@dib/official-game",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dib/engine": "workspace:*",
+    "@dib/gamedata": "workspace:*",
+    "@dib/game-protocol": "workspace:*",
+    "@dib/game-service": "workspace:*",
+    "@dib/logic-pack": "workspace:*",
+    "@dib/player-domain": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  }
+}

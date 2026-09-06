@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Mer</key>
+	<dict>
+		<key>MerKing</key>
+		<dict>
+			<key>index</key>
+			<integer>7100</integer>
+			<key>parent</key>
+			<string>RootMonster</string>
+			<key>rootStats</key>
+			<dict>
+				<key>Attack</key>
+				<real>3.5</real>
+			</dict>
+		</dict>
+	</dict>
+	<key>RootMonster</key>
+	<dict>
+		<key>class</key>
+		<string>Monster</string>
+		<key>rootStats</key>
+		<dict>
+			<key>Attack</key>
+			<integer>10</integer>
+		</dict>
+	</dict>
+</dict>
+</plist>

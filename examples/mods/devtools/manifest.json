@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 4,
+  "id": "dev.dragonislandblue.devtools",
+  "version": "1.0.0",
+  "displayName": "Devtools",
+  "apiVersion": 4,
+  "mode": "offline",
+  "dependencies": {},
+  "entry": "scripts/main.js"
+}

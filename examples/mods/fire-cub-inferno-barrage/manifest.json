@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 4,
+  "id": "dev.dragonislandblue.fire-cub-inferno-barrage",
+  "version": "2.3.0",
+  "displayName": "Inferno: Incomplete Movesets",
+  "apiVersion": 4,
+  "mode": "offline",
+  "dependencies": {},
+  "entry": "scripts/main.js",
+  "optionalDependencies": {
+    "dev.dragonislandblue.devtools": "^1.0.0"
+  },
+  "loadAfter": [
+    "dev.dragonislandblue.devtools"
+  ]
+}

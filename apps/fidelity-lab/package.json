@@ -1,0 +1,23 @@
+{
+  "name": "@dib/fidelity-lab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/launcher.mjs",
+    "start:advanced": "node src/index.mjs",
+    "native:observer": "node scripts/make-native-observer.mjs",
+    "native:task-script": "node scripts/make-native-task-script.mjs",
+    "scenario:dashboard": "node tests/browser/dashboard-smoke.playwright.mjs",
+    "scenario:launcher": "node tests/browser/launcher-smoke.playwright.mjs",
+    "scenario:managed-task": "node tests/browser/managed-task.playwright.mjs",
+    "scenario:managed-live": "node tests/browser/managed-live.playwright.mjs",
+    "scenario:north-cave": "node tests/browser/north-cave-rng.playwright.mjs",
+    "scenario:task": "node tests/browser/task-run.playwright.mjs",
+    "test": "node --test tests/core.test.mjs",
+    "typecheck": "node --check src/launcher.mjs && node --check src/launcherCore.mjs && node --check src/index.mjs && node --check src/options.mjs && node --check src/portAudio.mjs && node --check src/session.mjs && node --check src/nativeSceneLog.mjs && node --check src/dungeonTopology.mjs && node --check src/nativeCapture.mjs && node --check src/liveStreams.mjs && node --check src/liveTouchBridge.mjs && node --check src/stateRules.mjs && node --check src/task.mjs && node --check src/public/setup.js && node --check src/public/inputGate.mjs && node --check src/public/dashboard.js && node --check scripts/make-native-observer.mjs && node --check scripts/make-native-task-script.mjs && node --check tests/browser/launcher-smoke.playwright.mjs && node --check tests/browser/managed-task.playwright.mjs && node --check tests/browser/managed-live.playwright.mjs && node --check tests/browser/north-cave-rng.playwright.mjs && node --check tests/browser/dashboard-smoke.playwright.mjs && node --check tests/browser/task-run.playwright.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.61.1"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 4,
+  "id": "dev.dragonislandblue.pirate-panic-dancer",
+  "version": "1.0.0",
+  "displayName": "Pirate: Panic Dancer",
+  "apiVersion": 4,
+  "mode": "offline",
+  "dependencies": {},
+  "optionalDependencies": {
+    "dev.dragonislandblue.leslie-circle-caster": "*"
+  },
+  "loadAfter": ["dev.dragonislandblue.leslie-circle-caster"],
+  "entry": "scripts/main.js"
+}

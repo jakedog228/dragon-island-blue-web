@@ -1,0 +1,96 @@
+# Reverse proxy and static host for the Dragon Island Blue port.
+#
+# Serving the client and the API from ONE origin is deliberate. The game server's CORS layer
+# short-circuits same-host requests entirely (`applyCors` in apps/game-server/src/gameServer.ts),
+# so a single-origin deployment needs no allowlist entry, sends no CORS headers, and has no
+# preflight surface. Only add DIB_GAME_ALLOWED_ORIGINS if a genuinely separate client host exists.
+
+{
+	email {$DIB_ACME_EMAIL}
+	# Admin API stays on loopback inside the container; the compose healthcheck uses it.
+	admin 127.0.0.1:2019
+	servers {
+		# Caddy is the only thing facing the internet, so it is the only thing allowed to assert a
+		# client address. It overwrites rather than appends X-Forwarded-For.
+		trusted_proxies static private_ranges
+	}
+}
+
+{$DIB_PUBLIC_HOST} {
+	encode zstd gzip
+
+	# Access logs go to a file on a named volume, NOT to stdout. Docker's json-file driver rotates
+	# against the container lifetime, so every redeploy or restart truncated the traffic history --
+	# which made trend data impossible and left roughly a day and a half of visibility. Caddy's own
+	# roller is bounded by size and age instead, so history survives a redeploy.
+	#
+	# Runtime messages (ACME, config load, errors) still reach stderr and stay in `docker logs`.
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 20MiB
+			roll_keep 12
+			roll_keep_for 2160h
+		}
+		format json
+	}
+
+	header {
+		# The document CSP lives in apps/web/index.html. A <meta> CSP structurally cannot express
+		# frame-ancestors, so clickjacking protection has to be set here.
+		Content-Security-Policy "frame-ancestors 'none'"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		-Server
+	}
+
+	# --- Authoritative API -----------------------------------------------------------------------
+	handle /api/game/* {
+		reverse_proxy game:8788 {
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+
+			# Passive ejection plus an active probe against the server's own liveness route. A
+			# single-replica deployment cannot fail over, but this keeps Caddy from dispatching
+			# into a process that is still loading resources after a restart.
+			health_uri /api/game/health
+			health_interval 10s
+			health_timeout 3s
+
+			# Must stay below the server's keepAliveTimeout (130s) so Caddy always retires a
+			# pooled socket before the origin does, which is what prevents spurious 502s.
+			transport http {
+				keepalive 60s
+				dial_timeout 5s
+				response_header_timeout 60s
+			}
+		}
+	}
+
+	# --- Static client ---------------------------------------------------------------------------
+	# Vite emits content-hashed asset filenames, so they are safe to cache permanently.
+	@immutable path /assets/*
+	handle @immutable {
+		header Cache-Control "public, max-age=31536000, immutable"
+		root * /srv/web
+		file_server
+	}
+
+	handle {
+		# index.html names the current asset hashes, so it must never be cached or a redeploy
+		# leaves clients pinned to deleted bundles.
+		header Cache-Control "no-cache"
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+
+	# The example archive downloads in apps/web/vite.config.ts are development/preview only and
+	# are deliberately absent here: they are operator-owned content, published separately if at all.
+	handle /downloads/* {
+		respond "This download is not published on this host." 404
+	}
+}

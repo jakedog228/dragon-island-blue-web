@@ -1,0 +1,1286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Developer documentation for asset archives and Offline JavaScript mods: quick starts, runtime API, lifecycle, save profiles, import validation, data schemas, and asset roles." />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; form-action 'none'; base-uri 'none'" />
+    <meta name="theme-color" content="#10131d" />
+    <link rel="alternate" type="text/markdown" href="./asset-archive-spec.md" title="Asset Archive machine specification" />
+    <title>Modding guide</title>
+    <script type="module" src="./src/modding/moddingGuide.ts"></script>
+  </head>
+  <body>
+    <a class="skip" href="#doc">Skip to content</a>
+
+    <header class="top">
+      <a class="top__brand" href="./">DIB Engine</a>
+      <span class="top__title">Modding guide</span>
+      <div class="top__search" data-search hidden>
+        <label class="top__search-label" for="doc-search">Find a file, key, or loader message</label>
+        <input id="doc-search" type="search" autocomplete="off" spellcheck="false"
+               placeholder="Find a file, key, or loader message" role="combobox" aria-autocomplete="list" aria-controls="doc-search-results" aria-expanded="false" />
+        <kbd class="top__search-key" aria-hidden="true">/</kbd>
+        <div class="search-results" id="doc-search-results" role="listbox" hidden></div>
+      </div>
+      <button class="top__nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="rail" hidden>Contents</button>
+      <a class="top__loader" href="./">Open archive loader</a>
+      <button class="top__theme" type="button" data-gate-theme-toggle aria-label="Switch color mode">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <g class="top__theme-sun">
+            <circle cx="12" cy="12" r="3.5"></circle>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"></path>
+          </g>
+          <path class="top__theme-moon" d="M19.4 15.1A8 8 0 0 1 8.9 4.6 8 8 0 1 0 19.4 15.1Z"></path>
+        </svg>
+      </button>
+    </header>
+
+    <div class="shell">
+      <nav class="rail" id="rail" aria-label="Guide contents">
+        <p class="rail__group">Start</p>
+        <a href="#start">What a package is</a>
+
+        <p class="rail__group">Offline code mods</p>
+        <a href="#code-mods">Choose an extension format</a>
+        <a href="#mod-quick-start">First JavaScript mod</a>
+        <a href="#mod-manifest">Manifest and load order</a>
+        <a href="#mod-api">Runtime API</a>
+        <a href="#mod-lifecycle">Lifecycle and cleanup</a>
+        <a href="#mod-profiles">Profiles and saves</a>
+        <a href="#mod-examples">Examples and debugging</a>
+
+        <p class="rail__group">Import pipeline</p>
+        <ol class="rail__gates">
+          <li><a href="#gate-container">Container and paths</a></li>
+          <li><a href="#gate-root">Resource root</a></li>
+          <li><a href="#gate-world">World scan</a></li>
+          <li><a href="#gate-quests">Quest catalog</a></li>
+          <li><a href="#gate-dungeon">Dungeon scan</a></li>
+          <li><a href="#gate-data">Data files</a></li>
+          <li><a href="#gate-rewards">Reward paths</a></li>
+          <li><a href="#gate-collection">Collection route</a></li>
+          <li><a href="#gate-startup">Startup resources</a></li>
+          <li><a href="#gate-egg">Egg reel resources</a></li>
+          <li><a href="#gate-manifest">Render manifest</a></li>
+          <li><a href="#gate-combat">Combat background</a></li>
+        </ol>
+        <a href="#after-import">After import: play start</a>
+
+        <p class="rail__group">Data contract</p>
+        <a href="#data-inheritance">Inheritance</a>
+        <a href="#data-monsters">Monsters</a>
+        <a href="#data-jobs">Jobs</a>
+        <a href="#data-abilities">Abilities and components</a>
+        <a href="#data-items">Items and soul stones</a>
+        <a href="#data-licenses">Licenses</a>
+        <a href="#data-combines">Combines</a>
+        <a href="#data-localization">Localization</a>
+
+        <p class="rail__group">Capabilities</p>
+        <a href="#capabilities">Requirement matrix</a>
+        <a href="#cap-battle">Battle</a>
+        <a href="#cap-world">World navigation</a>
+        <a href="#cap-town">Town</a>
+        <a href="#cap-dungeon">Dungeon</a>
+        <a href="#cap-guild">Guild and Tavern</a>
+        <a href="#cap-monsterpedia">Monsterpedia</a>
+        <a href="#cap-collection">Collection</a>
+        <a href="#cap-tournament">Tournament</a>
+        <a href="#cap-intro">Intro and tutorials</a>
+
+        <p class="rail__group">Assets</p>
+        <a href="#assets-atlases">Atlases</a>
+        <a href="#assets-sprites">Standalone sprites</a>
+        <a href="#assets-fonts">Bitmap fonts</a>
+        <a href="#assets-audio">Audio</a>
+        <a href="#assets-particles">Particles</a>
+
+        <p class="rail__group">Saves and Online</p>
+        <a href="#saves">Save compatibility identity</a>
+        <a href="#online">Online logic identity</a>
+
+        <p class="rail__group">Validate</p>
+        <a href="#validate">Commands</a>
+        <a href="#validate-browser">Browser scenarios</a>
+        <a href="#validate-release">Release checklist</a>
+
+        <p class="rail__group">Reference</p>
+        <a href="#errors">Loader message index</a>
+        <a href="#limits">What a package cannot do</a>
+        <a href="#source-map">Source of truth</a>
+      </nav>
+
+      <main class="doc" id="doc">
+        <section id="start" data-section>
+          <h1>Modding guide</h1>
+          <p class="lead">
+            Start with an <strong>asset archive</strong> for game data and resources. Add an
+            <strong>Offline JavaScript mod</strong> to change behavior, renderers, or interface code.
+            This guide covers both workflows, from a first mod to the importer's validation gates
+            and the runtime's required asset roles.
+          </p>
+
+          <h2>What a package is</h2>
+          <p>
+            An asset archive is a ZIP-compatible file (<code>.ipa</code> or <code>.zip</code>) with
+            one resource root containing property lists, PNGs, bitmap fonts, audio, and a
+            <code>Localizable.strings</code> dictionary. The importer classifies it by structure
+            only; the file name, app name, bundle identifier, and any executable inside are never
+            inspected or trusted.
+          </p>
+          <p>
+            Loading happens entirely in the browser tab. The loader reads the bytes with the File
+            API, discards executables and signing data, parses resources in memory, and exposes
+            them through session-scoped <code>blob:</code> URLs. Nothing is uploaded. After a
+            successful import and your rights attestation, the exact compressed archive may be
+            cached in this browser so a reload can restore it; a different byte stream needs a new
+            attestation.
+          </p>
+          <div class="note">
+            <p>
+              Import checks stop at the first failure and report it in the loader's status line.
+              Other schema, reference, or mechanic errors can appear at play start or when a
+              feature runs. The <a href="#errors">loader message index</a> identifies the stage;
+              passing import alone does not validate every reachable feature.
+            </p>
+          </div>
+
+        </section>
+
+        <section id="code-mods" data-section>
+          <h1>Offline code mods</h1>
+          <h2>Choose an extension format</h2>
+          <table>
+            <thead><tr><th>Format</th><th>Use it for</th><th>Loading</th></tr></thead>
+            <tbody>
+              <tr><td>Asset archive (<code>.ipa</code> / <code>.zip</code>)</td><td>Plist game definitions, maps, localization, art, fonts, and audio within the supported data contract.</td><td>Select one base archive. The structural importer does not execute its scripts.</td></tr>
+              <tr><td>Code mod (<code>.dibmod</code>)</td><td>New mechanics, UI, live object changes, module interception, or data overlays without rebuilding the base archive.</td><td>Select alongside the base archive, then choose Offline. Several mods can run in dependency order.</td></tr>
+            </tbody>
+          </table>
+          <p>
+            API v4 mods execute JavaScript directly in the game page with full client access,
+            including DOM, browser-local saves, storage, network requests, and further code loading.
+            They are not sandboxed. Only run code and publishers you trust. Official launch is
+            disabled with selected mods and stays disabled after mod execution until the page reloads.
+          </p>
+
+          <h2 id="mod-quick-start">First JavaScript mod</h2>
+          <p>Create this directory, with the manifest at its root:</p>
+<pre><code>my-mod/
+├── manifest.json
+└── scripts/
+    └── main.js</code></pre>
+          <p><code>manifest.json</code>:</p>
+<pre><code class="language-json" data-example="mod-manifest">{
+  "schemaVersion": 4,
+  "id": "dev.example.inspector",
+  "version": "1.0.0",
+  "displayName": "Runtime Inspector",
+  "apiVersion": 4,
+  "mode": "offline",
+  "dependencies": {},
+  "entry": "scripts/main.js"
+}</code></pre>
+          <p>
+            <code>scripts/main.js</code> adds a diagnostic field to the battle's text projection.
+            The entry is an async function body receiving <code>dibMod</code>: top-level
+            <code>await</code> works; static <code>import</code> declarations do not. Compile or
+            bundle TypeScript to the declared JavaScript file before packaging.
+          </p>
+<pre><code class="language-js" data-example="mod-entry">const { BattleNode } = await dibMod.modules.load("web/battle/battleNode.ts");
+
+dibMod.intercept(BattleNode.prototype, "renderGameState", function (next, ...args) {
+  return { ...next(...args), myInspector: { active: true } };
+});
+
+dibMod.hooks.on("boot:ready", ({ value }) =&gt; {
+  console.info("Inspector ready", value.scenes);
+});</code></pre>
+          <p>From the directory containing <code>my-mod</code>, package its contents using Python:</p>
+<pre><code>python -m zipfile -c inspector.zip my-mod/manifest.json my-mod/scripts
+python -c "from pathlib import Path; Path('inspector.zip').rename('inspector.dibmod')"</code></pre>
+          <p>
+            Select a compatible base archive in the loader, open the mods controls, choose
+            <code>inspector.dibmod</code>, and launch Offline. Enter a battle and inspect
+            <code>window.render_game_to_text()</code> in the browser console: the battle projection
+            includes <code>myInspector.active</code>. A mod ZIP is an overlay, not a replacement
+            for the base game's resource archive.
+          </p>
+
+          <h2 id="mod-manifest">Manifest and load order</h2>
+          <p>
+            All eight fields in the quick-start manifest are required. Unknown manifest keys are
+            rejected. IDs use lowercase reverse-DNS form; versions use <code>major.minor.patch</code>
+            with an optional prerelease suffix. The entry must be UTF-8 <code>.js</code> or
+            <code>.mjs</code>. The relation fields below default to empty except the required
+            <code>dependencies</code> map; priority defaults to 0:
+          </p>
+          <table>
+            <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td><code>dependencies</code></td><td>Required ID-to-version-range map; a missing dependency or incompatible version refuses the profile.</td></tr>
+              <tr><td><code>optionalDependencies</code></td><td>Version-check and order a dependency only when it is selected.</td></tr>
+              <tr><td><code>conflicts</code></td><td>Refuse matching selected packages unless the player chooses Load anyway.</td></tr>
+              <tr><td><code>loadAfter</code>, <code>loadBefore</code></td><td>Arrays of IDs establishing order when those packages are present.</td></tr>
+              <tr><td><code>priority</code></td><td>Integer from −1,000,000 to 1,000,000, default 0. Higher loads later among otherwise unordered packages; ID breaks ties.</td></tr>
+            </tbody>
+          </table>
+          <p>
+            Ranges support <code>*</code>, exact versions, comparison operators, <code>^</code>,
+            <code>~</code>, space-separated conjunctions, and <code>||</code> alternatives.
+            Picker selection order is ignored. Dependency and ordering edges precede priority;
+            a manual priority cannot bypass an edge or resolve a cycle. Later replacements win,
+            while interceptors can compose by calling <code>next</code>.
+          </p>
+          <p>
+            Mod archive limits differ from base archives: 64 MiB compressed, 128 MiB expanded,
+            512 entries, 32 MiB per entry, and a maximum 250:1 per-entry compression ratio.
+            Duplicate or unsafe paths, unsupported compression, invalid manifests, and dependency
+            cycles are rejected. These are integrity checks, not restrictions on executed mod code.
+          </p>
+
+          <h2 id="mod-api">Runtime API</h2>
+          <table>
+            <thead><tr><th>API</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><code>dibMod.modules.list()</code>, <code>has(id)</code>, <code>load(id)</code></td><td>Discover and load the actual web runtime modules as <code>web/&lt;source-relative-path&gt;.ts</code>. Public roots include <code>@dib/engine</code>, <code>@dib/gamedata/browser</code>, <code>@dib/player-domain</code>, <code>@dib/renderer</code>, and <code>pixi.js</code>.</td></tr>
+              <tr><td><code>dibMod.files</code></td><td><code>list</code>, <code>has</code>, <code>bytes</code>, <code>text</code>, <code>json</code>, <code>url</code>, and <code>run</code> access arbitrary bundled files. <code>run(path)</code> executes another function-body script with the same API.</td></tr>
+              <tr><td><code>dibMod.host</code></td><td><code>list</code>, <code>has</code>, <code>get</code>, <code>require</code>, <code>set</code>, and <code>delete</code> expose live services. <code>require</code> throws when a name is absent.</td></tr>
+              <tr><td><code>dibMod.exports</code></td><td>A mutable cross-mod API published as <code>mods.&lt;package-id&gt;</code> in the host registry.</td></tr>
+              <tr><td><code>dibMod.replace(target, key, value)</code></td><td>Replace a property with automatic descriptor restoration at disposal; returns an undo callback.</td></tr>
+              <tr><td><code>dibMod.intercept(target, key, wrapper)</code></td><td>Wrap a method. The wrapper receives <code>next</code> bound to the receiver, then the method arguments; returns an undo callback.</td></tr>
+              <tr><td><code>dibMod.original(target, key)</code></td><td>Read the member as it stood before any mod patched it.</td></tr>
+              <tr><td><code>dibMod.merge(base, patch)</code></td><td>Deep-merge data while retaining sibling keys added by other mods.</td></tr>
+              <tr><td><code>dibMod.loadOrder</code>, <code>dibMod.interference()</code></td><td>Inspect resolved package order and reported property, data, and service overlap.</td></tr>
+              <tr><td><code>dibMod.onDispose(callback)</code></td><td>Register cleanup for listeners, tickers, timers, and display objects your mod owns.</td></tr>
+            </tbody>
+          </table>
+          <p>
+            Internal module IDs describe the current source tree, not a stable compatibility API.
+            Pin and document the engine revision your mod targets. There is no feature-specific
+            endpoint requirement: load the module that owns the behavior and patch its real exports.
+          </p>
+
+          <h2 id="mod-lifecycle">Lifecycle and cleanup</h2>
+          <p>
+            Register <code>dibMod.hooks.on(name, ({ value, host }) =&gt; …)</code> during entry
+            execution. Handlers run in resolved mod order. A non-undefined return replaces the phase
+            value for subsequent handlers, so observation-only handlers should return nothing.
+          </p>
+          <table>
+            <thead><tr><th>Phase, in order</th><th>Available value</th></tr></thead>
+            <tbody>
+              <tr><td><code>mods:ready</code></td><td>Interference report after every package entry has executed; a place for compatibility patches.</td></tr>
+              <tr><td><code>content:loaded</code></td><td>Imported content before save fingerprinting. Return a replacement package to overlay data; retain the resource catalog, manifest, and disposal contract.</td></tr>
+              <tr><td><code>boot:starting</code></td><td>DOM host, acquired content/save connection, scene coordinator, and startup diagnostics.</td></tr>
+              <tr><td><code>boot:ready</code></td><td>DOM/render hosts, content, scenes, Pixi stage, keyboard, audio, diagnostics, and deterministic <code>advanceTime</code>.</td></tr>
+              <tr><td><code>game:loaded</code></td><td><code>LoadedGame</code>; may return a replacement.</td></tr>
+              <tr><td><code>startup:loaded</code></td><td>Startup result/save session, game, stage, scenes, audio, and content.</td></tr>
+            </tbody>
+          </table>
+          <p>
+            Completed phases are also stored under their names in <code>dibMod.host</code>;
+            <code>content</code> and <code>game</code> are published directly. Return new data
+            objects when editing phase values so the interference report can attribute changed
+            leaves. In-place mutations can evade that comparison. Reports describe overlap;
+            they do not prove compatibility.
+          </p>
+          <p>
+            Disposal restores properties patched with <code>replace</code>/<code>intercept</code>
+            and revokes URLs created with <code>files.url</code>. Direct assignments and arbitrary
+            browser side effects cannot be automatically undone. Own your cleanup, including
+            renderer restarts and scene transitions; a full page reload establishes a clean realm.
+          </p>
+
+          <h2 id="mod-profiles">Profiles and saves</h2>
+          <p>
+            The gate caches recently used mod archives and remembers save-linked profiles on this
+            device. <strong>Use</strong> restores a profile when its mod bytes remain cached.
+            <strong>Clear mods</strong> clears selection and suppresses automatic profile restoration;
+            if code already ran, it reloads the page so Online can become available again.
+          </p>
+          <p>
+            Save namespaces use effective mechanics-bearing content data after the
+            <code>content:loaded</code> overlay. Exact mod bytes and resolved order identify the
+            profile, but do not themselves select the save namespace. Code-only and visual updates
+            can therefore share saves; profile changes still display a warning because code changes
+            can alter save semantics without changing the data fingerprint.
+          </p>
+          <p>
+            <strong>Try here</strong> clones a foreign profile's slot into a free current slot,
+            retaining the original. This is an explicit compatibility override and can produce a
+            broken clone. <strong>Delete</strong> confirms removal of one slot and its rollback
+            revisions; it leaves other slots, cached packages, and profile metadata intact.
+            Export a backup before testing incompatible data or save behavior.
+          </p>
+
+          <h2 id="mod-examples">Examples and debugging</h2>
+          <p>Build the repository's selectable examples:</p>
+<pre><code>pnpm mods:examples</code></pre>
+          <p>
+            Output is <code>examples/mods/dist/*.dibmod</code>. Start with
+            <code>blue-dragon-overdrive</code> for a content overlay, <code>devtools</code> for
+            runtime/UI interception, <code>fire-cub-inferno-barrage</code> for a move composed with
+            another mod, or <code>mercy-stone</code> for an item spanning data, assets, shop, and battle.
+            Their sources live under <code>examples/mods/</code>.
+          </p>
+          <p>
+            Check the resolved order and interference report in the loader, browser console errors,
+            and <code>window.render_game_to_text()</code>. For deterministic scenarios, use short
+            <code>window.advanceTime(ms)</code> bursts. Test the mod alone and with its declared
+            dependencies, then exercise scene changes, reload, save/restore, and Clear mods.
+            Browser validation is opt-in and must launch Chromium with <code>--mute-audio</code>.
+          </p>
+          <p>
+            The full TypeScript API and compatibility guidance are available as
+            <a href="./code-mod-api.md">code-mod-api.md</a>. The archive contract below applies
+            to the base resource importer; executable mods have the separate full-trust boundary
+            described above.
+          </p>
+        </section>
+
+        <section id="pipeline" data-section>
+          <h1>Import pipeline</h1>
+          <p class="lead">
+            <code>importContentArchive()</code> runs these gates in order and stops at the first
+            failure. A message from an early gate means later gates never ran, so fix from the top.
+          </p>
+
+          <h2 id="gate-container"><span class="gate">1</span>Container and paths</h2>
+          <table>
+            <thead><tr><th>Check</th><th>Limit</th><th>Loader message</th></tr></thead>
+            <tbody>
+              <tr><td>Compressed size</td><td>256 MiB</td><td><code>Archive exceeds the 256 MiB limit.</code></td></tr>
+              <tr><td>Entry count</td><td>5,000</td><td><code>Archive contains more than 5000 entries.</code></td></tr>
+              <tr><td>Expanded size</td><td>512 MiB total</td><td><code>Archive expands beyond the 512 MiB limit.</code></td></tr>
+              <tr><td>Single entry</td><td>64 MiB</td><td><code>Archive entry … exceeds the 64 MiB per-file limit.</code></td></tr>
+              <tr><td>Compression</td><td>Stored (0) or Deflate (8) only</td><td><code>Unsupported ZIP compression method …</code></td></tr>
+              <tr><td>Entry path</td><td>No absolute paths, drive prefixes, backslashes, NULs, or <code>..</code> components</td><td><code>Unsafe archive path: …</code></td></tr>
+              <tr><td>Empty file</td><td>At least one byte</td><td><code>The selected archive is empty.</code></td></tr>
+            </tbody>
+          </table>
+          <p>
+            Only entries with these extensions are read; everything else is skipped before
+            extraction: <code>.plist</code>, <code>.strings</code>, <code>.png</code>,
+            <code>.fnt</code>, <code>.m4a</code>, <code>.mp3</code>, <code>.wav</code>,
+            <code>.json</code>, <code>.txt</code>, <code>.csv</code>. Executables, signatures,
+            provisioning profiles, and vendor metadata are dropped even when present.
+          </p>
+
+          <h2 id="gate-root"><span class="gate">2</span>Resource root</h2>
+          <p>
+            The importer looks for exactly one directory that contains <code>Monsters.plist</code>,
+            <code>Jobs.plist</code>, and <code>Abilities.plist</code>. Two shapes qualify:
+          </p>
+          <div class="pair">
+<pre><code>Payload/
+└── AnyName.app/
+    ├── Monsters.plist
+    ├── Jobs.plist
+    ├── Abilities.plist
+    └── …</code></pre>
+<pre><code>Monsters.plist
+Jobs.plist
+Abilities.plist
+AbilityComponents.plist
+en.lproj/
+└── Localizable.strings
+…</code></pre>
+          </div>
+          <p>
+            Every later path in this guide is relative to that root. XML and binary
+            (<code>bplist</code>) property lists are both accepted; a plist that fails to parse
+            stops the import with <code>Invalid property list &lt;path&gt;: …</code>.
+          </p>
+          <table>
+            <thead><tr><th>Situation</th><th>Loader message</th></tr></thead>
+            <tbody>
+              <tr><td>No directory has all three discovery files</td><td><code>No app resource root containing Monsters.plist, Jobs.plist, and Abilities.plist was found.</code></td></tr>
+              <tr><td>The three files sit under <code>plists/</code></td><td><code>This is a clean-room source bundle, not its generated app archive. Run its builder and select the generated IPA/ZIP.</code></td></tr>
+              <tr><td>Two or more qualifying roots</td><td><code>Archive contains N candidate game resource roots; expected exactly one.</code></td></tr>
+            </tbody>
+          </table>
+
+          <h2 id="gate-world"><span class="gate">3</span>World scan</h2>
+          <p>
+            If <code>Worlds.plist</code> exists, its keys become the package's world names and one
+            <code>&lt;world&gt;.plist</code> is expected per key. A package has <em>town
+            capability</em> when any world's <code>pointsOfInterest[].arguments</code> contains a
+            <code>buildings</code> key. Town-capable packages must also provide a strict
+            <code>Towns.plist</code> registry (see <a href="#cap-town">Town</a>); a bad registry
+            fails with <code>Invalid Town Portal registry: …</code>. Without
+            <code>Worlds.plist</code> the package is battle-only and this gate is skipped.
+          </p>
+
+          <h2 id="gate-quests"><span class="gate">4</span>Quest catalog</h2>
+          <p>
+            A present <code>Quests.plist</code> is never treated as opaque. It must be an ordered
+            array of records with unique nonempty <code>name</code> values and one of the twelve
+            implemented quest classes, each with its exact field vocabulary. Duplicate names,
+            unknown classes or keys, nonpositive quantities or floors, reversed floor ranges, and
+            malformed battle-key arrays fail with <code>Invalid Guild quest catalog: …</code>.
+            <code>challengeLevel</code> is clamped to a minimum of 1.
+          </p>
+
+          <h2 id="gate-dungeon"><span class="gate">5</span>Dungeon scan</h2>
+          <p>
+            The presence of <code>Dungeons.plist</code>, <code>Rooms.plist</code>, or any
+            <code>Dungeon_*.plist</code> marks the package as dungeon-capable. Once marked, a
+            partial set is rejected rather than silently disabling dungeons:
+            <code>Incomplete dungeon resources: &lt;missing list&gt;.</code> The required set is
+            listed under <a href="#cap-dungeon">Dungeon</a>. Packages with no marker skip this gate.
+          </p>
+
+          <h2 id="gate-data"><span class="gate">6</span>Data files</h2>
+          <p>
+            The importer now reads the data dictionaries. Required files are loaded as dictionaries
+            here; their contents are validated against the strict schemas when play starts (see
+            <a href="#after-import">after import</a>), or earlier when a later gate needs resolved
+            data.
+          </p>
+          <table>
+            <thead><tr><th>File</th><th>Presence</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td><code>Monsters.plist</code></td><td class="req">required</td><td>Dictionary; nested groups with <code>parent</code> inheritance.</td></tr>
+              <tr><td><code>Combines.plist</code></td><td class="req">required</td><td>Dictionary; result type to exactly two ordered ingredient types.</td></tr>
+              <tr><td><code>Jobs.plist</code></td><td class="req">required</td><td>Dictionary mirroring monster paths.</td></tr>
+              <tr><td><code>Abilities.plist</code></td><td class="req">required</td><td>Dictionary of <code>CombatAbility</code> nodes.</td></tr>
+              <tr><td><code>AbilityComponents.plist</code></td><td class="req">required</td><td>Dictionary of <code>{class}</code> or <code>{class, roll}</code> leaves.</td></tr>
+              <tr><td><code>en.lproj/Localizable.strings</code> or <code>Localizable.strings</code></td><td class="req">required</td><td>String-valued dictionary; the <code>en.lproj</code> copy wins when both exist.</td></tr>
+              <tr><td><code>Buffs.plist</code></td><td class="cond">optional</td><td>Defaults to empty; required in practice when any ability references a buff.</td></tr>
+              <tr><td><code>Items.plist</code></td><td class="cond">optional</td><td>Required when soul stones, usable items, Gems, Store, or fixed rewards are reachable.</td></tr>
+              <tr><td><code>Licenses.plist</code></td><td class="cond">optional</td><td>Required when Character/Gem or Arena progression is reachable.</td></tr>
+              <tr><td><code>Tournaments.plist</code></td><td class="cond">optional</td><td>Array; strict when present (see <a href="#cap-tournament">Tournament</a>).</td></tr>
+              <tr><td><code>ThingsInWorld.plist</code></td><td class="cond">optional</td><td>Display-only long descriptions for Recipe and SpiritTotem items.</td></tr>
+              <tr><td><code>Animations.plist</code>, <code>MeleeAttacks.plist</code>, <code>Scale9Sprites.plist</code></td><td class="cond">optional</td><td>Default to empty; the battle renderer and startup gate require entries from them, so ship all three.</td></tr>
+            </tbody>
+          </table>
+          <p>
+            A missing required file reports <code>Required resource is missing: &lt;path&gt;</code>.
+            A <code>.strings</code> file with a non-string value reports
+            <code>&lt;path&gt; contains non-string value at &lt;key&gt;.</code>
+          </p>
+
+          <h2 id="gate-rewards"><span class="gate">7</span>Reward paths</h2>
+          <p>
+            Only when <code>Quests.plist</code> is present: the importer resolves the full strict
+            data set (this is the first point where <a href="#data-monsters">schema errors</a> can
+            surface) and parses every quest's <code>treasureData</code>. Each fixed
+            <code>items[].data.type</code> is a dotted <code>Items.plist</code> key path, not a
+            reward name from a fixed list. The resolved leaf's <code>class</code> decides behavior:
+            <code>Item</code> becomes a durable inventory item, <code>Egg</code> with a positive
+            integer <code>arguments.numRepeats</code> becomes the Clone Egg route, and anything
+            else fails with <code>Invalid Guild quest reward catalog: …</code>.
+          </p>
+
+          <h2 id="gate-collection"><span class="gate">8</span>Collection route</h2>
+          <p>
+            Every world is scanned for a POI whose menu class is
+            <code>MonsterCollectionMenuItem</code>. A promoted route requires
+            <code>Collection.plist</code> with the exact authored collection-type root plus the
+            presentation roles listed under <a href="#cap-collection">Collection</a>. A package with
+            no promoted route may omit the catalog entirely; a present catalog is still parsed
+            strictly (<code>Invalid Collection resources: …</code>).
+          </p>
+
+          <h2 id="gate-startup"><span class="gate">9</span>Startup resources</h2>
+          <p>
+            The title, save-slot, credits, and options screens are part of every accepted package.
+            All of the following must exist at the resource root.
+          </p>
+          <table>
+            <thead><tr><th>Resource</th><th>Rule</th></tr></thead>
+            <tbody>
+              <tr><td><code>Info.plist</code></td><td>Nonempty <code>CFBundleShortVersionString</code> or <code>CFBundleVersion</code>.</td></tr>
+              <tr><td><code>Credits.plist</code></td><td>Nonempty array. Each row is <code>{type: title|entry, value: nonempty string}</code> or <code>{type: space, value: positive number}</code>. Text rows are localized when their value is a key; otherwise printed literally.</td></tr>
+              <tr><td><code>mainscreenBackground.png</code>, <code>saveSlotBackground.png</code></td><td>Bare files, at least 1024×768; cropped by the shared background helper.</td></tr>
+              <tr><td><code>ClerkGirl-hd.png</code>, <code>TutorialRightSide-hd.png</code></td><td>Present.</td></tr>
+              <tr><td><code>PopupMenuButton2-hd.png</code>, <code>PopupBackgroundThin-hd.png</code></td><td>Present as files at the root.</td></tr>
+              <tr><td><code>Scale9Sprites.plist</code> entries <code>MenuButton2</code>, <code>PopupBackgroundThin</code></td><td>Each is a dictionary with a PNG <code>image</code> and a string <code>contentRect</code>; the file <code>&lt;image stem&gt;-hd.png</code> must exist.</td></tr>
+              <tr><td>Audio stems <code>Opening1</code>, <code>click</code></td><td>Each present as <code>.m4a</code>, <code>.mp3</code>, or <code>.wav</code>.</td></tr>
+            </tbody>
+          </table>
+          <details>
+            <summary>Required startup localization keys (18)</summary>
+            <p>
+              <code>LoadingKey</code>, <code>First-Time Loading On 3GS May Take A While</code>,
+              <code>TouchToContinueKey</code>, <code>PickSaveSlotKey</code>,
+              <code>NewGameButtonKey</code>, <code>GameDisplayFormatKey</code>,
+              <code>EraseGameButtonKey</code>, <code>CreditsButtonKey</code>,
+              <code>OptionsKey</code>, <code>BackButtonKey</code>,
+              <code>PickEraseSaveSlotKey</code>, <code>EraseGameAreYouSureTitleKey</code>,
+              <code>EraseGameAreYouSureMessageKey</code>, <code>YesButtonKey</code>,
+              <code>NoButtonKey</code>, <code>MusicVolumeKey</code>, <code>SoundVolumeKey</code>,
+              <code>OkButtonKey</code>
+            </p>
+          </details>
+          <p>
+            Messages from this gate start with <code>Startup resources require …</code>,
+            <code>Credits.plist …</code>, <code>Info.plist requires …</code>, or
+            <code>Scale9Sprites.plist …</code>.
+          </p>
+
+          <h2 id="gate-egg"><span class="gate">10</span>Egg reel resources</h2>
+          <p>
+            Silver and Gold Eggs are ordinary destroy-on-pickup rewards reachable from quests,
+            treasure, and battle settlement, so the slot-machine presentation is validated for every
+            package. Pixel sizes are strict because the engine derives logical content size from
+            them.
+          </p>
+          <table>
+            <thead><tr><th>Resource</th><th>Rule</th></tr></thead>
+            <tbody>
+              <tr><td><code>SlotBackground-hd.png</code></td><td>Exactly 960×640</td></tr>
+              <tr><td><code>SlotBackground-ipadhd.png</code></td><td>Exactly 1024×768</td></tr>
+              <tr><td><code>SlotBacking-hd.png</code></td><td>Exactly 364×203</td></tr>
+              <tr><td><code>SlotBacking-ipadhd.png</code></td><td>Exactly 426×238</td></tr>
+              <tr><td><code>SlotArrow-hd.png</code></td><td>Exactly 94×62</td></tr>
+              <tr><td><code>largeRarityStar-hd.png</code></td><td>Exactly 64×59</td></tr>
+              <tr><td>Audio stem <code>Casino1</code></td><td><code>.m4a</code>, <code>.mp3</code>, or <code>.wav</code></td></tr>
+              <tr><td><code>InventoryItemFrames-hd.plist</code> frames</td><td><code>pileGold.png</code>, <code>pileSilver.png</code>, <code>Item_Recipe.png</code>, <code>Item_Totem.png</code>, <code>Item_Card2.png</code>, <code>Item_Card3.png</code>; for each of Novice, Veteran, Elite: at least one <code>&lt;Rank&gt;Gem&lt;n&gt;.png</code> and <code>&lt;Rank&gt;GemGlow.png</code></td></tr>
+              <tr><td><code>MonsterpediaFrames-hd.plist</code> frame</td><td><code>rarityStar.png</code></td></tr>
+            </tbody>
+          </table>
+          <details>
+            <summary>Required Egg localization keys (31)</summary>
+            <p>
+              <code>WinPrizeTitleFormatKey</code>, <code>WonMonsterMessageKey</code>,
+              <code>KeepKey</code>, <code>FeedToButtonKey</code>, <code>CancelButtonKey</code>,
+              <code>SpinFedFullMessageFormatKey</code>, <code>SpinFedMessageFormatKey</code>,
+              <code>SpinAgainMessageKey</code>, <code>SpinFinishedMessageFormatKey</code>,
+              <code>SpinAgainTitleKey</code>, <code>SpinFinishedTitleKey</code>,
+              <code>YesGoldFormatKey</code>, <code>NoButtonKey</code>, <code>OkButtonKey</code>,
+              <code>CannotAffordThingTitleKey</code>, <code>CannotAffordThingMessageKey</code>,
+              <code>RenderableGoldNameKey</code>, <code>RenderableSilverNameKey</code>,
+              <code>RenderableRecipeNameKey</code>, <code>RenderableSpiritTotemNameKey</code>,
+              <code>NoviceSlotKey</code>, <code>VeteranSlotKey</code>, <code>EliteSlotKey</code>,
+              <code>GemItemLevel1Key</code> through <code>GemItemLevel6Key</code>
+            </p>
+          </details>
+          <p>
+            Messages start with <code>Egg hatch resources require …</code>,
+            <code>Egg hatch resource … must be WxHpx</code>, or
+            <code>InventoryItemFrames-hd.plist is missing egg-hatch frame …</code>.
+          </p>
+
+          <h2 id="gate-manifest"><span class="gate">11</span>Render manifest</h2>
+          <p>
+            The importer projects retained files into the renderer manifest. This is where atlases,
+            fonts, particles, audio, and world or dungeon presentation roles are checked.
+          </p>
+          <ol class="steps">
+            <li>If <code>Worlds.plist</code> exists, every data-referenced world and POI sprite is collected and the <a href="#cap-world">world presentation roles</a> (plus <a href="#cap-town">town roles</a> when town-capable) are validated. Failures read <code>Invalid world resources: …</code>, <code>World resources require …</code>, or <code>Town resources require …</code>.</li>
+            <li>If dungeon-capable, <code>Sparkle.plist</code> must resolve its texture and every theme's room-atlas frames, pickup frames, and spirit-totem portraits are checked.</li>
+            <li>If <code>Menus.plist</code> exists, every <code>*.fullScreenBackground</code> PNG it names must be a root-level file and is projected.</li>
+            <li>Every <code>*-hd.plist</code> that parses as a Cocos format-2 atlas becomes a Pixi sheet. Its texture resolves through the derived <code>&lt;stem&gt;.png</code> first, then the plist metadata (<code>Atlas … references missing texture …</code>).</li>
+            <li>Standalone PNGs enter the sprite manifest when the stem ends in <code>-hd</code>, <code>-ipadhd</code>, or <code>Combat</code>, or the file is data-referenced, or it is one of the fixed bare roles listed under <a href="#assets-sprites">Standalone sprites</a>.</li>
+            <li>Every <code>*-hd.fnt</code> must declare a page file; the importer prefers <code>&lt;page&gt;-hd.png</code> and falls back to the named page (<code>Bitmap font … has no page texture.</code> / <code>… references missing texture …</code>).</li>
+            <li>Every particle plist with a <code>textureFileName</code> must resolve it (<code>Particle … references missing texture …</code>).</li>
+            <li>Audio files are keyed by extensionless stem. Files are visited as <code>.m4a</code>, then <code>.mp3</code>, then <code>.wav</code>, and a later format with the same stem replaces the earlier entry. Avoid same-stem collisions unless that precedence is intended.</li>
+          </ol>
+
+          <h2 id="gate-combat"><span class="gate">12</span>Combat background</h2>
+          <p>
+            At least one bare <code>&lt;Biome&gt;Combat.png</code> (stem ending in
+            <code>Combat</code>, not <code>-hd</code>) at 1024×768 or larger must be present.
+            Bare combat images are cropped by source-derived renderer rules; an overworld texture
+            is not a substitute. Otherwise: <code>No bare &lt;Biome&gt;Combat.png battle background
+            was found.</code>
+          </p>
+
+          <h2 id="after-import">After import: play start</h2>
+          <p>
+            Passing the importer makes the archive selectable and enables the play modes. When a
+            slot starts, the engine resolves inheritance and validates every monster, job, ability,
+            and component against the strict schemas in <code>packages/gamedata/src/schemas.ts</code>,
+            loads each world through the typed world loader, and preloads the manifest. A schema
+            failure at this stage appears in the same status line as a loader message; the README
+            calls this case "the archive parses but cannot start".
+          </p>
+          <p>
+            Some data errors surface even later. Ability construction arguments may come from the
+            ability dictionary, the component reference, or the job-ability reference, and a
+            missing argument only fails when that move is selected in battle. The opt-in archive
+            test in <a href="#validate">Validate</a> runs authored moves to a terminal state to catch
+            those.
+          </p>
+        </section>
+
+        <section id="data" data-section>
+          <h1>Data contract</h1>
+          <p class="lead">
+            Schemas are strict: an unknown key is an error, not metadata. Keep display names and
+            descriptions in <code>Localizable.strings</code>, never as extra fields on data nodes.
+          </p>
+
+          <h2 id="data-inheritance">Inheritance</h2>
+          <p>
+            Dictionaries are trees of dotted paths (<code>Fire.Emberling</code>). A node is a
+            definition when it has <code>parent</code>, <code>class</code>, <code>index</code>, or
+            <code>jobAbilities</code>, or is named as some other node's <code>parent</code>;
+            grouping containers are not resolvable on their own. Child keys deep-merge over the
+            resolved parent, with one exception: a child-authored <code>jobAbilities.&lt;slot&gt;</code>
+            replaces that slot wholesale, so repeat every argument the replacement needs.
+          </p>
+          <p>
+            A child job that declares <code>parent</code> may omit <code>jobAbilities</code> (or
+            author an empty one) and keeps every parent slot. This does not fabricate a job for a
+            monster that has no matching <code>Jobs.plist</code> entry.
+          </p>
+
+          <h2 id="data-monsters">Monsters</h2>
+          <p>A resolved monster leaf must contain exactly these keys.</p>
+<pre><code>class: Monster
+category: Collection | Combine | Egg | Normal | Summon
+element: Air | Arcane | Death | Earth | Fire | Life | Water
+index: number            # unique identity, not array position
+quality: number
+stars: number
+unarmedAttackType: string
+rootStats: { Attack, Defense, Magic, MaxHP, Resist, Speed }   # all six, numbers
+# optional
+evolveData: { levelReq: number, newType: &lt;known monster&gt; }
+eggUnlockQuality: number
+summonXpBonus: number
+rendererData: any        # display passthrough, e.g. { scale: 1.2 }</code></pre>
+          <p>
+            Do not let authoring-only flags (<code>abstract</code>, image or name fields) inherit
+            into leaves. The demo roster needs enough independent identities to form two teams; the
+            archive acceptance test builds a 6v6 roster from the first twelve resolved monsters.
+          </p>
+
+          <h2 id="data-jobs">Jobs</h2>
+<pre><code>class: Job
+slots: [string, …]
+xpPenalty: number
+jobAbilities:
+  usable1:
+    type: Moves.SparkPeck        # dotted Abilities.plist path
+    arguments: { … }             # optional construction arguments</code></pre>
+          <p>
+            Every playable monster needs a matching job with at least one executable
+            <code>usableN</code> entry. Job inheritance unions <code>slots</code>.
+          </p>
+
+          <h2 id="data-abilities">Abilities and components</h2>
+          <p>
+            A battle ability resolves to <code>class: CombatAbility</code>, a
+            <code>targetPicker</code> dictionary, an <code>activationLength</code> string, and a
+            <code>components</code> array of <code>{type, arguments?}</code> references into
+            <code>AbilityComponents.plist</code>. Other accepted keys are <code>aiChance</code>,
+            <code>eventData</code>, <code>soundTable</code>, <code>abilityScalor</code>,
+            <code>abstract</code>, <code>noHaste</code>, and the buff arrays
+            <code>enemyBuffs</code>, <code>sourceBuffs</code>, <code>friendlyBuffs</code>,
+            <code>passiveBuffs</code>, <code>revengeBuffs</code>.
+          </p>
+<pre><code>Moves.SparkPeck:
+  class: CombatAbility
+  activationLength: "{3}"
+  components:
+    - type: Offensive.MagicAttack
+  targetPicker:
+    class: TargetPickerGui
+    enemyTargets: 1
+
+Offensive.MagicAttack:            # AbilityComponents.plist
+  class: AttackAbilityComponent
+  roll: { relatedStat: Magic }</code></pre>
+          <p>
+            A component's <code>class</code> is an executable contract. The engine implements
+            exactly the classes below and throws on anything else; never map an unimplemented
+            mechanic onto a plausible substitute.
+          </p>
+          <table class="compact">
+            <thead><tr><th>Component class</th><th>Phase(s)</th></tr></thead>
+            <tbody>
+              <tr><td><code>AttackAbilityComponent</code></td><td>enemy</td></tr>
+              <tr><td><code>DamageDealingAbilityComponent</code></td><td>enemy</td></tr>
+              <tr><td><code>HealingAbilityComponent</code></td><td>friends</td></tr>
+              <tr><td><code>CaptureAbilityComponent</code></td><td>enemy</td></tr>
+              <tr><td><code>AnalyzeAbilityComponent</code></td><td>source</td></tr>
+              <tr><td><code>StatModAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>HasteAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>MagnifyAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>StunAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>ParalyzeAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>SleepAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>ConfuseAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>StatusRemoveAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>RemoveAllBuffsAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>DrainLifeAbilityComponent</code></td><td>source, friends, enemy</td></tr>
+              <tr><td><code>DiceAbilityComponent</code></td><td>enemy</td></tr>
+              <tr><td><code>AddMonsterAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>CallMonsterAbilityComponent</code></td><td>source</td></tr>
+              <tr><td><code>SacrificeAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>SwitchAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>SpendSilverAbilityComponent</code></td><td>source</td></tr>
+              <tr><td><code>MoveToFrontAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>ApplyBuffAbilityComponent</code></td><td>friends, enemy</td></tr>
+              <tr><td><code>EscapeAbilityComponent</code></td><td>source</td></tr>
+              <tr><td><code>DesoulAbilityComponent</code></td><td>friends (item-gated)</td></tr>
+            </tbody>
+          </table>
+          <p>
+            <code>FeatherAbilityComponent</code> is deliberately absent: it is a scene replacement
+            handled by the item/navigation flow rather than this component phase table.
+            Taunt redirection is implemented by the engine's target resolver.
+            Unsupported mechanics include <code>SelfDestructAbility</code>,
+            <code>AuraAbility</code> with <code>hurt: true</code>, standalone
+            <code>StunBuff</code>, and <code>AuraBuff</code>.
+          </p>
+
+          <h2 id="data-items">Items and soul stones</h2>
+          <p>
+            <code>Items.plist</code> is the strict definition catalog for soul stones, usable items,
+            Gems, and Eggs. When soul-stone behavior is reachable it must contain all seven
+            <code>SoulStones.&lt;Element&gt;SoulStone</code> leaves:
+          </p>
+<pre><code>class: SoulStone
+slot: Monster
+stats: { Attack: true, … }   # partial map of stat name to boolean</code></pre>
+          <p>
+            A usable quest reward points at any dotted path whose leaf has
+            <code>class = Item</code>, <code>slot = Useable</code>, and a
+            <code>rendererData.spriteFrame</code> present in <code>InventoryItemFrames-hd</code>.
+            Optional creation <code>arguments.level</code> defaults to 1; a definition-level
+            <code>level</code> takes precedence. Items can be received, inspected, grouped, and
+            dropped; there is no generic Use command. Runtime item state belongs to the save, never
+            to catalog leaves.
+          </p>
+          <p>
+            The Clone Egg is an <code>Items.plist</code> leaf with <code>class = Egg</code> (normally
+            <code>DestroyOnPickup.RepeatEgg</code>) referenced by a fixed reward with positive
+            integer <code>arguments.numRepeats</code>. It additionally needs
+            <code>RenderableRepeatEggNameKey</code>, <code>RepeatEggTitleKey</code>,
+            <code>RepeatEggMessageKey</code>, and <code>RepeatEggSelectionTitleKey</code>. Clone
+            Egg and generic-Item rewards are local-only: Online packages that make them reachable
+            fail with <code>CAPABILITY_UNSUPPORTED</code>.
+          </p>
+          <p>
+            A Store building needs the root sprites <code>ShopScreen.png</code> and
+            <code>buy.png</code>; opening the Store fails loudly if either is missing. Stock and
+            prices come from the catalog; payment uses profile silver or gold; external purchase is
+            absent and fails closed.
+          </p>
+
+          <h2 id="data-licenses">Licenses</h2>
+          <p>
+            When Character/Gem or Arena progression is reachable, <code>Licenses.plist</code> must
+            contain exactly <code>Novice</code>, <code>Apprentice</code>, <code>Veteran</code>,
+            <code>Expert</code>, <code>Elite</code>, <code>Master</code>, and
+            <code>Grandmaster</code>, each with hero/quest requirements, challenge level,
+            batting-order size, Gem slot count, and monster populator. Slot and challenge
+            progression are ordinal, so a missing intermediate license fails loading instead of
+            shortening the chain.
+          </p>
+
+          <h2 id="data-combines">Combines</h2>
+          <p>
+            <code>Combines.plist</code> is a flat dictionary from a <code>Combine</code>-category
+            result type to exactly two ordered ingredient types, all resolvable through
+            <code>Monsters.plist</code>. Order is gameplay-significant: the Monsterpedia picker
+            fills the two slots in authored order, and a repeated-species recipe needs two distinct
+            monster instances. This file is the only recipe relation; no metadata flag can unlock a
+            recipe or enable combining outside a town.
+          </p>
+
+          <h2 id="data-localization">Localization</h2>
+          <p>
+            Use a plist-compatible <code>.strings</code> dictionary with string values. Every
+            renderable, move, popup, status, quest, chat, world, and town key referenced by data must
+            resolve. Structural UI keys checked by the startup, Egg, town, and Collection gates are
+            runtime API: keep them synchronized with <code>validate_current_runtime()</code> in the
+            reference builder.
+          </p>
+        </section>
+
+        <section id="capabilities" data-section>
+          <h1>Capabilities</h1>
+          <p class="lead">
+            Capabilities are inferred from structure, never from metadata.
+            <code>DIBContentManifest.plist</code> is informational only; it cannot enable a
+            feature, pick a loader, or relax a check.
+          </p>
+          <h2>Requirement matrix</h2>
+          <table class="matrix">
+            <thead><tr><th>Capability</th><th>Promoted by</th><th>Adds requirements for</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td><a href="#cap-battle">Battle</a></td><td>Every package</td><td>Data files, startup, Egg reel, atlases, fonts, particles, GUI audio, combat background</td><td><span class="state state--validated">runtime-validated</span></td></tr>
+              <tr><td><a href="#cap-world">World navigation</a></td><td><code>Worlds.plist</code></td><td>POI catalog, hero-walk atlas, flags, menu button, name plate, XP frames, <code>Field1</code> audio</td><td><span class="state state--validated">runtime-validated</span></td></tr>
+              <tr><td><a href="#cap-town">Town</a></td><td>Any POI with <code>buildings</code></td><td><code>Towns.plist</code>, town audio, sunrise, remove-all control, day/party localization</td><td><span class="state state--validated">runtime-validated</span></td></tr>
+              <tr><td><a href="#cap-dungeon">Dungeon</a></td><td><code>Dungeons.plist</code>, <code>Rooms.plist</code>, or <code>Dungeon_*.plist</code></td><td>Registries, room atlases, sparkle, waypoint prompts, dungeon audio</td><td><span class="state state--integrated">runtime-integrated</span></td></tr>
+              <tr><td><a href="#cap-guild">Guild and Tavern</a></td><td><code>Quests.plist</code>; a <code>TavernMenuItem</code> building</td><td>Strict quest records, quest-giver sprite, Tavern background, notification roles</td><td><span class="state state--integrated">runtime-integrated</span></td></tr>
+              <tr><td><a href="#cap-monsterpedia">Monsterpedia</a></td><td>Every package (book); town for combining</td><td>Book page, leave icon, picker controls, <code>MonsterpediaFrames-hd</code></td><td><span class="state state--validated">runtime-validated</span></td></tr>
+              <tr><td><a href="#cap-collection">Collection</a></td><td>A <code>MonsterCollectionMenuItem</code> POI</td><td><code>Collection.plist</code>, close button, chat font, finish arrow, reward roles</td><td><span class="state state--integrated">runtime-integrated, browser-proven</span></td></tr>
+              <tr><td><a href="#cap-tournament">Tournament</a></td><td><code>Tournaments.plist</code></td><td>Bracket art, Arena combat background, prize renderables, localization</td><td><span class="state state--integrated">runtime-integrated</span></td></tr>
+              <tr><td><a href="#cap-intro">Intro and tutorials</a></td><td>Complete <code>Plot.plist</code> set</td><td>Plot frames, starter identities, <code>Dungeon2</code> audio</td><td><span class="state state--inert">optional, all-or-nothing</span></td></tr>
+            </tbody>
+          </table>
+          <p class="fine">
+            "Runtime-validated" means the engine, unit tests, and muted browser scenarios have
+            proven it against both the reference package and an operator-owned archive.
+            "Runtime-integrated" means the engine and unit tests cover it; browser proof is opt-in
+            and may not have been run for every variant.
+          </p>
+
+          <h2 id="cap-battle">Battle</h2>
+          <p>
+            Beyond the data files and the startup and Egg gates, the current battle renderer
+            requests these roles by name. They are structural API: the art may be anything, the
+            names may not.
+          </p>
+          <table>
+            <thead><tr><th>Family</th><th>Roles</th></tr></thead>
+            <tbody>
+              <tr><td>Atlases</td><td><code>General-hd</code>, <code>MonsterPortraits-hd</code>, <code>MonsterpediaFrames-hd</code>, <code>InventoryItemFrames-hd</code>, <code>FXSheet-hd</code>, <code>HeroWalkFrames-hd</code>, each with its PNG sheet</td></tr>
+              <tr><td>Per monster</td><td>Standalone <code>&lt;shortType&gt;-hd.png</code> and a <code>&lt;shortType&gt;_icon.png</code> frame in <code>MonsterPortraits-hd</code></td></tr>
+              <tr><td>Fonts</td><td><code>arial_14-hd</code>, <code>arial_14_bold-hd</code>, <code>arial_18_bold-hd</code>, <code>arial_20_bold-hd</code></td></tr>
+              <tr><td>Battle chrome</td><td><code>combatBottomBar-hd</code>, <code>heroBattlePortrait-hd</code>, <code>heroFrame-hd</code>, <code>button-hd</code>, <code>benchButton-hd</code>, <code>retreatButton-hd</code>, <code>delayButton-hd</code>, <code>benchBox-hd</code>, <code>spiritBkg-hd</code>, <code>charscreenBackButton-hd</code>, <code>scrollbar-hd</code>, <code>scrollbarTrack-hd</code>, <code>downArrow-hd</code>, <code>PopupMenuCloseButton-hd</code>, <code>MMScreen</code></td></tr>
+              <tr><td>Status and capture</td><td><code>sleepZ-hd</code>, <code>confusionStatus-hd</code>, <code>paralyzeBolt-hd</code>, <code>captureCard1-hd</code>, <code>captureCard2-hd</code>, <code>captureCard3-hd</code>, <code>cardGlow-hd</code>, <code>largeRarityStar-hd</code>, <code>monsterEvolved</code></td></tr>
+              <tr><td>Party editor</td><td><code>inBattingOrderBkg-hd</code>, <code>notInBattingOrderBkg-hd</code>, <code>emptySlotHeads-hd</code>, <code>emptySlotArrows-hd</code>, <code>orderAllLeftArrow-hd</code>, <code>orderLeftArrow-hd</code>, <code>orderRightArrow-hd</code>, <code>orderAllRightArrow-hd</code>, <code>soulStoneButton-hd</code>, <code>sortByName-hd</code>, <code>sortByStars-hd</code>, <code>sortByLevel-hd</code>, <code>destroyMonster-hd</code>, <code>removeAllFromBattingOrder-hd</code>, plus <code>destroyMonsterParticles.plist</code> with a resolvable texture</td></tr>
+              <tr><td>Particles</td><td><code>PoisonParticles.plist</code>, <code>progressBarParticles.plist</code>; <code>Heal.plist</code> when a reachable kit heals</td></tr>
+              <tr><td>Audio stems</td><td><code>Encounter</code>, <code>click</code>, <code>notAllowed</code>, <code>CaptureSuccess</code>, <code>CaptureFail</code>, <code>Escape</code>, <code>Battle1</code> through <code>Battle7</code>, <code>Win1</code>, <code>Evolve1</code></td></tr>
+              <tr><td>Notifications</td><td>Bare <code>Icon.png</code> (57×57) and <code>Icon@2x.png</code> (114×114), the default display node for Guild quest banners</td></tr>
+              <tr><td>Background</td><td>At least one bare <code>&lt;Biome&gt;Combat.png</code></td></tr>
+            </tbody>
+          </table>
+          <p class="fine">
+            <code>apps/web/tests/runtimeContentArchive.test.ts</code> is the maintained
+            machine-readable form of this list.
+          </p>
+
+          <h2 id="cap-world">World navigation</h2>
+          <p>
+            <code>Worlds.plist</code>, <code>PointsOfInterest.plist</code>, and one
+            <code>&lt;world&gt;.plist</code> per declared world. The typed loader validates the
+            selected map, authored 480×320 point coordinates, undirected connection strings, random
+            monster references, combat backgrounds, and world-transition closure. Presentation roles:
+          </p>
+          <table>
+            <thead><tr><th>Resource</th><th>Rule</th></tr></thead>
+            <tbody>
+              <tr><td><code>HeroWalkFrames-hd.plist</code> / <code>.png</code></td><td>Frames <code>herowalk{Front,Back,Left,Right}_{1..8}.png</code></td></tr>
+              <tr><td><code>greenFlag-hd.png</code>, <code>redFlag-hd.png</code>, <code>blueFlag-hd.png</code></td><td>Present</td></tr>
+              <tr><td><code>menuButton-hd.png</code>, <code>namePlate-hd.png</code></td><td>Present</td></tr>
+              <tr><td><code>General-hd.plist</code></td><td>Frames <code>heroXpFrame.png</code> and <code>heroXpBar.png</code>; texture resolvable</td></tr>
+              <tr><td><code>walkArrow.png</code>, <code>ipadBorder.png</code></td><td>Bare files used by outdoor navigation</td></tr>
+              <tr><td>Audio stem <code>Field1</code></td><td><code>.m4a</code>, <code>.mp3</code>, or <code>.wav</code></td></tr>
+              <tr><td>Every <code>rendererData.spriteFile</code> in Worlds and PointsOfInterest</td><td>Projected data-first, bare PNGs included</td></tr>
+              <tr><td><code>bigmap.png</code></td><td>Optional; enables the World Map row, which stays visible but disabled without it</td></tr>
+            </tbody>
+          </table>
+          <p>
+            World identifiers need not follow <code>World_X-Y</code>. An exit to a cardinally
+            adjacent grid name gets the one-second slide; every other valid link, including custom
+            names like <code>ModWorld_1-2</code>, gets the generic half-second fade. Cardinality
+            selects presentation, not admission.
+          </p>
+          <p>
+            Encounter shapes keep their native meanings. Omitting <code>encounters.table</code>
+            means no table. An authored empty table, empty row, empty <code>monsterPopulator</code>,
+            or <code>DefaultMonsterPopulator</code> with empty <code>arguments</code> is accepted
+            and produces no battle. An explicit <code>types = []</code> with no fixed encounter is
+            rejected because the weighted picker would divide by zero. Fixed encounters live under a
+            table row's <code>monsterPopulator.arguments.fixedEncounters</code> with the vocabulary
+            <code>monsters</code>, <code>exactFloor</code>/<code>everyXFloors</code>,
+            <code>chanceToAppear</code>, <code>uniqueKey</code>, <code>questKey</code>,
+            <code>battleRewardKey</code>, <code>achievement</code>, <code>breeder</code>,
+            <code>startEvent</code>, <code>winEvent</code>, and <code>treasureData</code>. A
+            connection may carry <code>arguments.conditions = { pois = &lt;POI name&gt; }</code>
+            (<code>!name</code> negates), evaluated against the durable ever-completed registry.
+          </p>
+
+          <h2 id="cap-town">Town</h2>
+          <p>
+            Each town POI needs <code>zoom &gt; 1</code>, at least one source-ordered building, and
+            an <code>exit</code>. Every building, exit, and <code>questGiver</code> PNG is projected
+            from its data reference, and every <code>Menus.plist.*.fullScreenBackground</code> must
+            be a root-level PNG. The registry:
+          </p>
+<pre><code>&lt;town-id&gt; = {
+  class = Town;
+  sortOrder = &lt;nonnegative integer&gt;;
+  world = &lt;declared world id&gt;;
+  portalConditions = &lt;optional condition dictionary&gt;;
+};</code></pre>
+          <p>
+            Every town id must name a town POI in its world. Town Portal returns directly to the
+            saved <code>lastTown</code>; a new game on an independently authored package starts at
+            the lowest <code>sortOrder</code> town. Presentation roles:
+          </p>
+          <table>
+            <thead><tr><th>Resource</th><th>Rule</th></tr></thead>
+            <tbody>
+              <tr><td>Audio stems <code>night</code>, <code>rooster</code>, <code>Town1</code></td><td><code>.m4a</code>, <code>.mp3</code>, or <code>.wav</code></td></tr>
+              <tr><td><code>sunrise-hd.png</code>, <code>removeAllFromBattingOrder-hd.png</code></td><td>Present</td></tr>
+              <tr><td>Localization</td><td><code>DayFormatKey</code>, <code>DayEndKey</code>, <code>BattleGroupKey</code>, <code>SortButtonKey</code>, <code>BattingOrderFullTitleKey</code>, <code>BattingOrderFullMessageKey</code>, <code>CannotRemoveAllFromBattingOrderTitleKey</code>, <code>CannotRemoveAllFromBattingOrderMessageKey</code>, <code>ConfirmRemoveAllFromBattingOrderTitleKey</code>, <code>ConfirmRemoveAllFromBattingOrderMessageKey</code></td></tr>
+            </tbody>
+          </table>
+          <p>
+            Optional <code>enterChats</code> is an ordered array of chat keys or
+            <code>{ chatKey; conditions = { chats = &lt;seen key&gt; } }</code>. A referenced
+            <code>Chats.plist</code> record has one <code>images</code> entry, optional
+            <code>messages</code>, and optional <code>alwaysShow</code>; an absent record shows
+            <code>&lt;chatKey&gt;ChatKey</code> with no portrait. Buildings may keep
+            <code>tutorialFlashKey</code>; it is presentation state and is never inferred.
+          </p>
+          <p>
+            Implemented buildings: Monsters (editable style 0), Monsterpedia (town-only combining),
+            Tavern (see <a href="#cap-guild">Guild</a>), Warp Gate (<code>TownWarpMenuItem</code>,
+            needs <code>Menus.plist.TownWarp.fullScreenBackground</code> and the Warp localization
+            and popup roles), Store, character, and arena. Black Market shows the "Not Yet Ready"
+            dialog; a package cannot supply its cards or destinations. Other destinations stay
+            visibly inert.
+          </p>
+
+          <h2 id="cap-dungeon">Dungeon</h2>
+          <table>
+            <thead><tr><th>Resource</th><th>Rule</th></tr></thead>
+            <tbody>
+              <tr><td><code>Dungeons.plist</code>, <code>Rooms.plist</code>, <code>ZoneChanges.plist</code></td><td>Strict registries; at least one <code>Dungeon_*.plist</code> instance</td></tr>
+              <tr><td>Every theme's <code>spritesheets</code></td><td><code>&lt;atlas&gt;-hd.plist</code> with resolvable texture; formatted floor, door, wall, wall-item, north-door, overlay, <code>chest.png</code>, portal, and stairs frames for the selected room dimensions</td></tr>
+              <tr><td><code>Sparkle.plist</code></td><td>Resolvable texture; mounted on every chest</td></tr>
+              <tr><td><code>HeroWalkFrames-hd</code>, <code>InventoryItemFrames-hd</code>, <code>MonsterPortraits-hd</code>, <code>General-hd</code></td><td>Plist and PNG; pickup, currency, and gem frames; a portrait for every authored spirit-totem <code>shortType</code></td></tr>
+              <tr><td><code>downArrow.png</code>, <code>downArrow-hd.png</code>, <code>menuButton.png</code>, <code>menuButton-hd.png</code></td><td>Present</td></tr>
+              <tr><td>Audio stems <code>Dungeon1</code>, <code>Dungeon2</code>, <code>Encounter</code>, <code>Stairs_EnterDungeon</code></td><td><code>.m4a</code>, <code>.mp3</code>, or <code>.wav</code></td></tr>
+            </tbody>
+          </table>
+          <p>
+            <code>walkArrow</code>, <code>exitArrow</code>, <code>rightArrow</code>,
+            <code>portalIcon</code>, and <code>ipadBorder</code> are not dungeon roles; travel
+            targets room bodies directly. <code>mustClearFloor</code> defaults to false and gates
+            only ascending while monsters remain. <code>unguardedTreasureChance</code> overrides the
+            native 5%; the misspelled <code>unguardedTreasureDensity</code> is accepted as structure
+            and ignored.
+          </p>
+
+          <h2 id="cap-guild">Guild and Tavern</h2>
+          <p>
+            With <code>Quests.plist</code> present the runtime persists active, finished, progress,
+            dialogs-seen, fixed-encounter, and battle-reward state. Surfaces: Tavern New Quest,
+            claim, drop-all, My Quests; the Master Menu Quests row; QuestDisplay rows; Chat
+            descriptions; reward generation; direct <code>DestroyOnPickup.MonsterJoin</code>.
+          </p>
+          <table>
+            <thead><tr><th>Resource</th><th>Rule</th></tr></thead>
+            <tbody>
+              <tr><td><code>Quests.plist</code></td><td>Ordered array; unique names; one of twelve classes; exact fields</td></tr>
+              <tr><td>Fixed encounter <code>questKey</code></td><td>Must match an objective; never use <code>battleRewardKey</code> as a completion key</td></tr>
+              <tr><td>Tavern building</td><td>Nested PNG <code>questGiver</code>, <code>Menus.plist.Tavern.fullScreenBackground</code>, and <code>notification-hd.png</code>, <code>backpack-hd.png</code>, <code>quest-hd.png</code>, <code>questComplete-hd.png</code></td></tr>
+              <tr><td>Building predicates</td><td><code>chats</code>, <code>inProgressQuests</code>, <code>quests</code>; leading <code>!</code> negates. Other condition families are not implied.</td></tr>
+            </tbody>
+          </table>
+
+          <h2 id="cap-monsterpedia">Monsterpedia</h2>
+          <p>
+            Bare <code>bookPage.png</code> (at least the 1024×768 crop), bare
+            <code>leaveIcon.png</code>, <code>cancelMonsterPickButton-hd.png</code>,
+            <code>orderLeftArrow-hd.png</code>, <code>orderRightArrow-hd.png</code>, and the
+            <code>MonsterpediaFrames-hd</code> atlas owning tabs, category icons, card frames,
+            recipe and unknown decorations, rarity stars, and the help-line role. Localization
+            covers category, completion and page, recipe question, Make and Look, town-only,
+            missing-recipe and ingredients, style-2 Select and Cancel, and expansion help strings.
+          </p>
+
+          <h2 id="cap-collection">Collection</h2>
+          <table>
+            <thead><tr><th>Resource</th><th>Rule</th></tr></thead>
+            <tbody>
+              <tr><td><code>Collection.plist</code></td><td>Exact root per promoted <code>collectionType</code></td></tr>
+              <tr><td><code>PopupMenuCloseButton-hd.png</code>, <code>arial_18_bold-hd.fnt</code>, <code>downArrow-hd.png</code></td><td>Present</td></tr>
+              <tr><td>Localization</td><td><code>CollectionHutListTitleKey</code>, <code>MonsterCollectionChatKey</code>, <code>BackButtonKey</code>; with reachable goals also <code>&lt;key&gt;CollectionQuestTitleKey</code>, <code>&lt;key&gt;CollectionQuestDescriptionKey</code>, <code>CollectionGoalKey</code>, <code>OkButtonKey</code>, <code>AlreadyFinished*</code></td></tr>
+              <tr><td>Supported reward spawns</td><td><code>NewItemsKey</code>, <code>TakeAllKey</code>, <code>rightArrow-hd.png</code>, <code>General-hd.plist</code> (with <code>Stat*.png</code> frames for generated Gems), and the consumed <code>InventoryItemFrames-hd</code> Gem frames</td></tr>
+            </tbody>
+          </table>
+          <p>
+            A spawn with effective chance zero is not reachable for this closure. Online claims are
+            server-owned <code>collection.claim</code> commands; fixed <code>egg</code> and
+            <code>monsterEgg</code> rewards use the authoritative hatch continuation, and supported
+            rewards are claimed before generation.
+          </p>
+
+          <h2 id="cap-tournament">Tournament</h2>
+          <p>
+            <code>Tournaments.plist</code> is an ordered array with unique names. Each entry has
+            exactly <code>name</code>, <code>subtitle</code>, positive-integer
+            <code>challengeLevel</code>, nonempty <code>prizeImage</code>, exactly four
+            <code>monsterPopulators</code>, and a <code>treasureData</code> dictionary. Each round
+            populator must resolve to one <code>DefaultMonsterPopulator</code> fixed encounter;
+            malformed rounds fail when constructed. Also required:
+            <code>tournamentBrackets-hd.png</code>, <code>ArenaCombat.png</code>, the referenced
+            prize and monster renderables, and all Tournament, status, and button localization.
+          </p>
+
+          <h2 id="cap-intro">Intro and tutorials</h2>
+          <p>
+            The new-game plot and starter picker activate only as a complete set:
+            <code>Plot.plist</code>, the <code>Dungeon2</code> audio stem,
+            <code>plot_start1.png</code>, <code>pickDragonBacking-hd</code>, the four
+            <code>BlueBabyDragon</code>/<code>RedBabyDragon</code>/<code>WhiteBabyDragon</code>/<code>GoldBabyDragon</code>
+            identities with <code>-hd</code> art, <code>fieldMovement.png</code>,
+            <code>battleTutorial1.png</code>, <code>battleTutorial2.png</code>, and
+            <code>catchTutorial.png</code>. A partial set is still valid and uses the ordinary
+            bootstrap. Plot frames are 1024×1024 power-of-two PNGs whose active area is the
+            1024×768 rectangle at the origin.
+          </p>
+          <p>
+            Numbered <code>Tutorial0</code> through <code>Tutorial8</code> records in
+            <code>Plot.plist</code> are nonempty chains of
+            <code>{class = PlotGameFlowEvent; continueButton = true; image = &lt;nonempty&gt;}</code>.
+            A complete catalog with every referenced page enables the Tutorials menu;
+            <code>Tutorial4</code> alone enables the first-use Monster Management walkthrough.
+            Other Plot event names stay package-owned.
+          </p>
+        </section>
+
+        <section id="assets" data-section>
+          <h1>Assets</h1>
+          <p class="lead">
+            Expressive art and audio are yours. Structural names are the renderer's. Every data
+            reference and every required role must resolve within the resource root.
+          </p>
+
+          <h2 id="assets-atlases">Atlases</h2>
+          <p>
+            Cocos format-2 atlas plists whose stem ends in <code>-hd</code> are converted to Pixi
+            sheets. Keep geometry source-shaped and do not swap rotated frame dimensions; Pixi
+            handles rotation. The texture resolves through <code>&lt;stem&gt;.png</code> first, then
+            the plist's metadata filename. All named frames referenced by data must belong to an
+            included owning atlas; a PNG consumed as an atlas sheet is not also exposed as a
+            standalone sprite.
+          </p>
+
+          <h2 id="assets-sprites">Standalone sprites</h2>
+          <p>A PNG enters the sprite manifest when any of these hold:</p>
+          <ul>
+            <li>its stem ends in <code>-hd</code>, <code>-ipadhd</code>, or <code>Combat</code>;</li>
+            <li>it is referenced by world, POI, town building, dungeon, or <code>Menus.plist</code> data;</li>
+            <li>it is one of the fixed bare roles: <code>mainscreenBackground.png</code>, <code>saveSlotBackground.png</code>, <code>monsterEvolved.png</code>, <code>MMScreen.png</code>, <code>ShopScreen.png</code>, <code>buy.png</code>, <code>bigmap.png</code>, <code>bookPage.png</code>, <code>leaveIcon.png</code>, <code>Icon.png</code>, <code>Icon@2x.png</code>, <code>lock@2x.png</code>, or a recognized Plot frame.</li>
+          </ul>
+          <p>
+            Recognized Plot frames: <code>plot_start1.png</code>, <code>battleTutorial1.png</code>,
+            <code>battleTutorial2.png</code>, <code>catchTutorial.png</code>,
+            <code>fieldMovement.png</code>, <code>dungeonMovement.png</code>,
+            <code>monsterChange1.png</code>, <code>monsterChange2.png</code>,
+            <code>soulStoneTutorial1.png</code> through <code>soulStoneTutorial3.png</code>,
+            <code>insertSoulStoneTutorial1.png</code>, <code>insertSoulStoneTutorial2.png</code>,
+            <code>spiritTutorial.png</code>, <code>combineTutorial1.png</code>,
+            <code>combineTutorial2.png</code>. Recognition makes the bytes addressable; it does not
+            by itself enable the intro.
+          </p>
+
+          <h2 id="assets-fonts">Bitmap fonts</h2>
+          <p>
+            A text BMFont descriptor needs one well-formed <code>info</code> line with exactly one
+            quoted <code>face</code> attribute and a page file the importer can resolve
+            (<code>&lt;page&gt;-hd.png</code> preferred). The authored face may be anything; the
+            loader re-keys each font by manifest identity so descriptors cannot collide. The four
+            required identities are roles, not a requirement to ship any particular font program.
+          </p>
+
+          <h2 id="assets-audio">Audio</h2>
+          <p>
+            Manifest keys are extensionless stems. Any required stem accepts <code>.m4a</code>,
+            <code>.mp3</code>, or <code>.wav</code>; the blob URL carries the real MIME type
+            (<code>audio/mp4</code>, <code>audio/mpeg</code>, <code>audio/wav</code>). On a
+            same-stem collision the projection visits M4A, then MP3, then WAV, and the later format
+            wins.
+          </p>
+
+          <h2 id="assets-particles">Particles</h2>
+          <p>
+            A particle plist enters the manifest when its <code>textureFileName</code> resolves.
+            The native point-list renderer requires a positive safe-integer
+            <code>maxParticles</code> and has no quad or index-buffer ceiling. Required:
+            <code>PoisonParticles.plist</code>, <code>progressBarParticles.plist</code>,
+            <code>destroyMonsterParticles.plist</code>; <code>Heal.plist</code> when a reachable kit
+            heals; <code>Sparkle.plist</code> when dungeon-capable.
+          </p>
+        </section>
+
+        <section id="saves" data-section>
+          <h1>Saves and Online</h1>
+          <h2>Save compatibility identity</h2>
+          <p>
+            Browser-local saves are keyed by a SHA-256 over a canonical, path-sorted projection of
+            the identity-bearing plists (scope <code>dib-identity-plists-v7</code>):
+            <code>Monsters</code>, <code>Jobs</code>, <code>Abilities</code>,
+            <code>AbilityComponents</code>, <code>Combines</code>, plus any present
+            <code>Buffs</code>, <code>Items</code>, <code>Licenses</code>, <code>Tournaments</code>,
+            <code>Towns</code>, <code>Worlds</code>, <code>PointsOfInterest</code>,
+            <code>World_*</code>, <code>Quests</code>, and root <code>Collection</code>. Dictionary
+            keys are sorted before hashing. Archive name, ZIP metadata, compression, images, audio,
+            and other presentation bytes do not participate, so an equivalent repack keeps its
+            saves; changing a species, recipe, world graph, or collection goal intentionally selects
+            a new save namespace.
+          </p>
+          <p>
+            Older v1–v6 slots and backups migrate lazily on the first successful v7 write, but only
+            when they carry no Collection claims. Claimed historical state is shown as occupied and
+            incompatible and is never decoded or cleaned up. Never copy claims across fingerprints
+            or delete an incompatible slot to make a package look compatible.
+          </p>
+          <h2 id="online">Online logic identity</h2>
+          <p>
+            Online play uses a separate <code>logic-v1:&lt;sha256&gt;</code> identity computed over
+            the reviewed mechanics-bearing plist families and excluding media, localization,
+            <code>AirshipConfig.plist</code>, and presentation-only keys. The browser sends only that
+            id and semantic commands; it never uploads the archive, a plist, or a compiled pack. The
+            operator independently compiles and installs the matching trusted mechanics; unknown ids
+            fail closed. Presentation-only edits must keep the logic id; any mechanics-bearing edit
+            must change it. Compare your archive's browser id with the operator result from
+            <code>compileExtractedLogicPackIdentityV1</code> in <code>@dib/logic-pack/node</code>.
+          </p>
+        </section>
+
+        <section id="validate" data-section>
+          <h1>Validate</h1>
+          <p class="lead">
+            A successful ZIP parse is the first gate, not the last. A release candidate passes the
+            envelope, schema, reference-closure, runtime, presentation, and reproducibility checks.
+          </p>
+          <h2>Commands</h2>
+          <p>From the engine repository root:</p>
+<pre><code>pnpm test
+pnpm typecheck
+pnpm content:boundary</code></pre>
+          <p>
+            Then run the opt-in real-archive test against your package. It proves schema, component,
+            and asset closure, builds a 6v6 roster from the first twelve monsters, runs authored
+            moves to a terminal deterministic battle, and builds a muted scene:
+          </p>
+<pre><code>$env:DIB_TEST_CONTENT_ARCHIVE = 'path\to\YourPackage.ipa'
+pnpm --filter @dib/web exec vitest run tests/runtimeContentArchive.test.ts
+Remove-Item Env:\DIB_TEST_CONTENT_ARCHIVE</code></pre>
+          <p>
+            <code>content:boundary</code> builds the client and fails if the distribution contains
+            game-content file types or binary signatures. It is a packaging control, not a legal
+            opinion.
+          </p>
+
+          <h2 id="validate-browser">Browser scenarios</h2>
+          <p>
+            With the dev server running, point <code>DIB_CONTENT_ARCHIVE</code> at your package and
+            run the muted Chromium scenarios that match the capabilities you promote. Scenario
+            assertions and fixture requirements vary: inspect each scenario before selecting it
+            for a custom package. The local-content scenario checks the import and battle flow,
+            outbound writes, viewport overflow, and errors; evidence lands under <code>output/</code>.
+          </p>
+<pre><code>$env:DIB_CONTENT_ARCHIVE = 'path\to\YourPackage.ipa'
+pnpm scenario:local-content      # import, attestation, six-monster battle
+pnpm scenario:town               # arrival, notifications, Monsters style 0, departure
+pnpm scenario:world-menu         # Master Menu, Town Portal direct return
+pnpm scenario:guild-quest-ui     # Tavern actions, quest rows, Chat descriptions
+pnpm scenario:fixed-encounter    # quest-gated fixed battle, breeder capture prevention
+pnpm scenario:monsterpedia       # DIB_MONSTERPEDIA_DISPLAY_MODE = iphone | ipad
+pnpm scenario:egg-hatch          # DIB_EGG_DISPLAY_MODE = iphone | ipad
+Remove-Item Env:\DIB_CONTENT_ARCHIVE</code></pre>
+          <p>
+            Monsterpedia and Egg scenarios take a display mode and an output directory
+            (<code>DIB_MONSTERPEDIA_OUTPUT</code>, <code>DIB_EGG_OUTPUT</code>) so runs do not
+            overwrite each other. For the Clone Egg branch set <code>DIB_EGG_KIND=silver</code> and
+            <code>DIB_EGG_REPEAT_PICKS=&lt;count&gt;</code>. Inspect the screenshots; state and error
+            assertions alone are not a presentation check.
+          </p>
+
+          <h2 id="validate-release">Release checklist</h2>
+          <ul class="checklist">
+            <li>Two clean builds produce identical archive and source-kit SHA-256 hashes.</li>
+            <li>Every asset and dependency has recorded provenance and license text; <code>ASSET_PROVENANCE.csv</code> or <code>THIRD_PARTY_ASSETS.txt</code> is surfaced by the loader but never trusted as proof.</li>
+            <li>The archive contains no private keys, credentials, build-machine paths, executables, or unnecessary vendor metadata.</li>
+            <li>Capability claims distinguish runtime-validated systems from retained structure-only families.</li>
+            <li>Validation reports and build manifests match the exact published artifacts.</li>
+            <li>The compiled archive stays separate from the engine distribution and enters only through explicit user selection.</li>
+            <li>Ownership review is done. Compatibility and collision checks do not establish copyright, trademark, or license rights.</li>
+          </ul>
+        </section>
+
+        <section id="errors" data-section>
+          <h1>Loader message index</h1>
+          <p class="lead">
+            The loader prints importer messages verbatim in its status line. Find yours here; the
+            gate column links to the check that produced it.
+          </p>
+          <table class="errors">
+            <thead><tr><th>Message</th><th>Gate</th><th>Fix</th></tr></thead>
+            <tbody>
+              <tr><td><code>Could not read … as an IPA/ZIP</code></td><td><a href="#gate-container">1</a></td><td>The file is not a ZIP container or is truncated. Re-export it; do not rename a folder.</td></tr>
+              <tr><td><code>Unsafe archive path</code></td><td><a href="#gate-container">1</a></td><td>Emit forward-slash relative paths with no drive prefix, backslash, NUL, or <code>..</code>.</td></tr>
+              <tr><td><code>Unsupported ZIP compression method</code></td><td><a href="#gate-container">1</a></td><td>Use stored or deflate entries only.</td></tr>
+              <tr><td><code>No app resource root containing Monsters.plist, Jobs.plist, and Abilities.plist was found.</code></td><td><a href="#gate-root">2</a></td><td>Place the three files at the ZIP root or under <code>Payload/&lt;name&gt;.app/</code>; nested arbitrary folders do not qualify.</td></tr>
+              <tr><td><code>This is a clean-room source bundle, not its generated app archive.</code></td><td><a href="#gate-root">2</a></td><td>Run the builder and select the generated IPA or ZIP.</td></tr>
+              <tr><td><code>Archive contains N candidate game resource roots</code></td><td><a href="#gate-root">2</a></td><td>Ship one resource root per archive.</td></tr>
+              <tr><td><code>Invalid property list</code></td><td><a href="#gate-root">2</a></td><td>The named file is neither valid XML nor <code>bplist00</code>. Re-serialize it.</td></tr>
+              <tr><td><code>Invalid Town Portal registry</code></td><td><a href="#gate-world">3</a></td><td>Each <code>Towns.plist</code> entry needs exactly <code>class = Town</code>, integer <code>sortOrder</code>, a declared <code>world</code>, optional <code>portalConditions</code>, and a matching town POI.</td></tr>
+              <tr><td><code>Invalid world resources</code></td><td><a href="#gate-world">3</a>, <a href="#gate-manifest">11</a></td><td>Read the detail: a missing <code>&lt;world&gt;.plist</code>, unknown key or class, dangling POI or monster reference, or bad coordinate string.</td></tr>
+              <tr><td><code>Invalid Guild quest catalog</code></td><td><a href="#gate-quests">4</a></td><td>Unique names, one of the twelve classes, exact fields, positive quantities and floors, ordered floor ranges.</td></tr>
+              <tr><td><code>Incomplete dungeon resources</code></td><td><a href="#gate-dungeon">5</a></td><td>Add every listed file or remove all dungeon markers.</td></tr>
+              <tr><td><code>Invalid dungeon resources</code></td><td><a href="#gate-dungeon">5</a></td><td>A registry, room, zone, or theme record has an unknown key, wrong type, or unresolvable atlas.</td></tr>
+              <tr><td><code>Required resource is missing</code></td><td><a href="#gate-data">6</a></td><td>Add the named file at the resource root.</td></tr>
+              <tr><td><code>… contains non-string value at …</code></td><td><a href="#gate-data">6</a></td><td>Every <code>.strings</code> value must be a string.</td></tr>
+              <tr><td><code>Invalid Guild quest reward catalog</code></td><td><a href="#gate-rewards">7</a></td><td>Each fixed <code>items[].data.type</code> must resolve to an <code>Items.plist</code> leaf with a supported class and arguments.</td></tr>
+              <tr><td><code>Collection route … requires Collection.plist</code></td><td><a href="#gate-collection">8</a></td><td>Add the catalog with the exact <code>collectionType</code> root, or demote the POI.</td></tr>
+              <tr><td><code>Collection route resources require …</code></td><td><a href="#gate-collection">8</a></td><td>Add the named sprite, font, or localization key.</td></tr>
+              <tr><td><code>Startup resources require …</code></td><td><a href="#gate-startup">9</a></td><td>Add the named file, audio stem, or localization key.</td></tr>
+              <tr><td><code>Info.plist requires CFBundleShortVersionString or CFBundleVersion.</code></td><td><a href="#gate-startup">9</a></td><td>Set a nonempty version string.</td></tr>
+              <tr><td><code>Credits.plist row N has an invalid type/value.</code></td><td><a href="#gate-startup">9</a></td><td>Rows are title/entry with nonempty string values, or space with a positive number.</td></tr>
+              <tr><td><code>Scale9Sprites.plist … requires …</code></td><td><a href="#gate-startup">9</a></td><td>Give <code>MenuButton2</code> and <code>PopupBackgroundThin</code> a PNG <code>image</code>, a <code>contentRect</code> string, and the matching <code>-hd.png</code> file.</td></tr>
+              <tr><td><code>Egg hatch resources require …</code></td><td><a href="#gate-egg">10</a></td><td>Add the named file, <code>Casino1</code> stem, or localization key.</td></tr>
+              <tr><td><code>Egg hatch resource … must be WxHpx</code></td><td><a href="#gate-egg">10</a></td><td>Export at the exact pixel size listed in the Egg gate.</td></tr>
+              <tr><td><code>InventoryItemFrames-hd.plist is missing … frame</code></td><td><a href="#gate-egg">10</a>, <a href="#gate-manifest">11</a></td><td>Add the frame to the owning atlas; do not rename an existing frame.</td></tr>
+              <tr><td><code>World resources require …</code> / <code>Town resources require …</code></td><td><a href="#gate-manifest">11</a></td><td>Add the named presentation role, stem, atlas frame, or localization key.</td></tr>
+              <tr><td><code>Atlas … references missing texture</code></td><td><a href="#gate-manifest">11</a></td><td>Ship <code>&lt;stem&gt;.png</code> beside the atlas plist or fix its metadata filename.</td></tr>
+              <tr><td><code>Bitmap font … has no page texture</code> / <code>… references missing texture</code></td><td><a href="#gate-manifest">11</a></td><td>Keep one <code>info</code> line with a quoted <code>face</code> and a resolvable <code>page file</code>.</td></tr>
+              <tr><td><code>Particle … references missing texture</code></td><td><a href="#gate-manifest">11</a></td><td>Ship the file named by <code>textureFileName</code>.</td></tr>
+              <tr><td><code>Sparkle.plist references missing texture</code></td><td><a href="#gate-manifest">11</a></td><td>Dungeon packages must ship the sparkle texture.</td></tr>
+              <tr><td><code>No bare &lt;Biome&gt;Combat.png battle background was found.</code></td><td><a href="#gate-combat">12</a></td><td>Add a bare <code>&lt;Name&gt;Combat.png</code> of at least 1024×768.</td></tr>
+              <tr><td>Strict schema "unrecognized key"</td><td><a href="#after-import">play start</a></td><td>Authoring or display metadata leaked into a runtime node. Remove it or move text to localization.</td></tr>
+              <tr><td><code>UnimplementedMechanicError</code></td><td><a href="#after-import">play start</a>, battle</td><td>A component class or passive the engine does not implement. Author a supported component with complete arguments.</td></tr>
+              <tr><td>Move fails only when selected</td><td>battle</td><td>A construction argument is missing on the ability, component, or job reference. Run the opt-in archive test to catch it before release.</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="limits" data-section>
+          <h1>Asset archive limits</h1>
+          <p>These limits describe the base resource importer. <a href="#code-mods">Offline code mods</a> execute with full client access.</p>
+          <ul>
+            <li>Load from a URL, an upload endpoint, a CDN, or an embedded default. Archives enter only through the file chooser; the last-used copy is a client-only cache that is discarded before a save write when storage is scarce.</li>
+            <li>Execute JavaScript or use an external URL as an imported resource. The resource catalog resolves retained local bytes. Offline code mods can separately make network requests; the game page's CSP is not a mod sandbox.</li>
+            <li>Select a loader, relax a check, or claim a capability through <code>DIBContentManifest.plist</code> or any other metadata.</li>
+            <li>Register or upload trusted mechanics for Online play. The operator compiles and installs the logic pack; players send only its id.</li>
+            <li>Supply Black Market cards, images, or destinations. The two demo records are app-owned and the screen is disabled by default.</li>
+            <li>Add executables, signatures, provisioning profiles, or a native remote service. They are discarded on import.</li>
+            <li>Prove ownership. Provenance files are surfaced for review, not trusted, and the user must attest to their rights on every new byte stream.</li>
+          </ul>
+        </section>
+
+        <section id="source-map" data-section>
+          <h1>Source of truth</h1>
+          <p>When this guide and the code disagree, the code wins. Update this page in the same change.</p>
+          <table>
+            <thead><tr><th>Concern</th><th>Location</th></tr></thead>
+            <tbody>
+              <tr><td>ZIP safety, accepted files, root discovery, every gate above</td><td><code>apps/web/src/content/archivePackage.ts</code></td></tr>
+              <tr><td>Code-mod manifest, ZIP validation, dependency ordering</td><td><code>packages/mod-kernel/src/index.ts</code></td></tr>
+              <tr><td>Full-trust API and runtime module discovery</td><td><code>apps/web/src/content/codeModRuntime.ts</code>, <code>modModuleCatalog.ts</code>, <a href="./code-mod-api.md">code-mod-api.md</a></td></tr>
+              <tr><td>Lifecycle, mod selection, cached profiles, Official exclusion</td><td><code>apps/web/src/main.ts</code>, <code>apps/web/src/content/contentGate.ts</code>, <code>moddedContent.ts</code>, <code>modArchiveCache.ts</code></td></tr>
+              <tr><td>Strict data schemas</td><td><code>packages/gamedata/src/schemas.ts</code></td></tr>
+              <tr><td>Inheritance and job-slot replacement</td><td><code>packages/gamedata/src/inherit.ts</code></td></tr>
+              <tr><td>Implemented component classes and phases</td><td><code>packages/engine/src/ability.ts</code> (<code>COMPONENT_PHASES</code>)</td></tr>
+              <tr><td>World, town, dungeon, quest, collection loaders</td><td><code>packages/gamedata/src/world.ts</code>, <code>dungeon.ts</code>, and siblings</td></tr>
+              <tr><td>Battle asset roles</td><td><code>apps/web/tests/runtimeContentArchive.test.ts</code></td></tr>
+              <tr><td>Renderer manifest and BMFont behavior</td><td><code>packages/renderer/src/assetLibrary.ts</code>, <code>bitmapFontFile.ts</code></td></tr>
+              <tr><td>Save compatibility fingerprint</td><td><code>apps/web/src/content/contentFingerprint.ts</code></td></tr>
+              <tr><td>Online logic identity</td><td><code>packages/logic-pack</code>, <code>docs/logic-pack-v1.md</code></td></tr>
+              <tr><td>Distribution boundary</td><td><code>apps/web/scripts/check-content-boundary.mjs</code></td></tr>
+              <tr><td>Developer runbook and contract prose</td><td><code>docs/content-package-authoring.md</code>, <code>docs/content-archive-contract.md</code></td></tr>
+              <tr><td>Normative Markdown summary</td><td><a href="./asset-archive-spec.md">asset-archive-spec.md</a></td></tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

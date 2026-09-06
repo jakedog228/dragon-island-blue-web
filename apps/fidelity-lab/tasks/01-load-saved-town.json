@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "id": "load-saved-town",
+  "title": "Load the matched save into Corova",
+  "purpose": "Prove that a machine-authored task can wait for both runtimes, mirror startup/save-slot input, detect the shared town endpoint, and emit a paired review checkpoint.",
+  "setup": [
+    "Start both runtimes from fresh processes with the same copied native save in slot 1.",
+    "Use the iPhone display tier and a DUMP-only TouchHLE observer at 250 ms or faster.",
+    "The task assumes the title screen has not already been dismissed."
+  ],
+  "reviewFocus": [
+    "Confirm both sides select the same save slot and settle in Corova.",
+    "Compare town camera scale, building positions, labels, hero/XP chrome, and entry animation endpoint.",
+    "Treat the pixel heat map as a lead; use the paired state file for the machine verdict."
+  ],
+  "recommendedSaveSha256": "d13f5cabe2569c370a06e8999017b892cc80e62059cf805d961b35950d138e95",
+  "rng": { "initialState": 0, "skip": 0 },
+  "steps": [
+    {
+      "id": "wait-for-title",
+      "kind": "wait",
+      "note": "Do not send the first mirrored tap until the controlled port and native observer are live.",
+      "timeoutMs": 60000,
+      "stableSamples": 2,
+      "until": [
+        { "target": "port", "path": "mode", "equals": "start" },
+        { "target": "native", "node": { "className": "^CCScene$" } },
+        { "target": "lab", "path": "browserErrors.length", "equals": 0 }
+      ]
+    },
+    {
+      "id": "dismiss-title",
+      "kind": "tap",
+      "note": "Center-screen title action, recovered from the maintained native route.",
+      "x": 0.5,
+      "y": 0.5,
+      "nativeAtMs": 120000,
+      "holdMs": 120,
+      "settleMs": 1800
+    },
+    {
+      "id": "select-slot-one",
+      "kind": "tap",
+      "note": "First save-slot row in the 960x640 retina client surface.",
+      "x": 0.5,
+      "y": 0.325,
+      "nativeAtMs": 135000,
+      "holdMs": 120,
+      "settleMs": 4200
+    },
+    {
+      "id": "wait-for-corova",
+      "kind": "wait",
+      "timeoutMs": 120000,
+      "stableSamples": 120,
+      "pollMs": 100,
+      "note": "Require the semantic endpoint to remain stable for 12 seconds because the native blue day banner is not represented in HSCENE.",
+      "until": [
+        { "target": "port", "path": "mode", "equals": "town" },
+        { "target": "port", "path": "displayMode", "equals": "iphone" },
+        { "target": "port", "path": "world", "equals": "World_1-1" },
+        { "target": "port", "path": "currentPoi", "equals": "First_City" },
+        { "target": "port", "path": "inputBlockers.hasModal", "equals": false },
+        { "target": "native", "node": { "className": "^WorldNode$" } },
+        { "target": "native", "node": { "text": "^Guild of Corova$" } }
+      ]
+    },
+    {
+      "id": "corova-settled",
+      "kind": "checkpoint",
+      "label": "Corova settled",
+      "note": "Both runtimes reached the same source town after the same normalized input sequence.",
+      "expectations": [
+        { "target": "port", "path": "mode", "equals": "town" },
+        { "target": "port", "path": "displayMode", "equals": "iphone" },
+        { "target": "port", "path": "world", "equals": "World_1-1" },
+        { "target": "port", "path": "currentPoi", "equals": "First_City" },
+        { "target": "port", "path": "inputBlockers.hasModal", "equals": false },
+        { "target": "native", "node": { "className": "^WorldNode$" } },
+        { "target": "native", "node": { "text": "^Guild of Corova$" } },
+        { "target": "lab", "path": "browserErrors.length", "equals": 0 }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dragon Island Blue Fidelity Lab</title>
+  <link rel="stylesheet" href="/dashboard.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Fidelity Lab</h1>
+      <p>TouchHLE reference · mirrored input · web port</p>
+    </div>
+    <div class="header-actions">
+      <div class="status-strip">
+        <span id="native-status" class="status">Native</span>
+        <span id="port-status" class="status">Port</span>
+        <span id="input-status" class="status">Input idle</span>
+        <span id="rng-status" class="status">RNG unavailable</span>
+        <span id="diff-status" class="status">Diff pending</span>
+      </div>
+      <div id="session-actions" class="button-row hidden">
+        <a id="new-comparison" class="button-link" href="#">Back to setup</a>
+        <button id="end-session">End session</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="workspace">
+      <div class="toolbar">
+        <label>View
+          <select id="view-mode">
+            <option value="side">Side by side</option>
+            <option value="wipe">Wipe</option>
+            <option value="overlay">Overlay</option>
+            <option value="diff">Difference heat map</option>
+          </select>
+        </label>
+        <label id="blend-label">Blend <input id="blend" type="range" min="0" max="100" value="50"></label>
+        <label>Pixel threshold <input id="threshold" type="range" min="5" max="120" value="36"></label>
+        <label>Notice at <input id="notice-ratio" type="number" min="0.1" max="100" step="0.1" value="4">%</label>
+        <label>Stable frames <input id="stable-frames" type="number" min="1" max="60" value="5"></label>
+        <label class="toggle"><input id="auto-diff" type="checkbox"> Live pixel analysis</label>
+        <button id="refresh-frames">Refresh frames</button>
+      </div>
+
+      <div id="comparison" class="comparison side" aria-label="Mirrored game input surface">
+        <div class="pane"><h2>TouchHLE</h2><canvas id="native-canvas" width="960" height="640"></canvas></div>
+        <div class="pane">
+          <h2>Web port</h2>
+          <div id="port-live-surface" class="live-surface">
+            <video id="port-live-video" muted autoplay playsinline aria-hidden="true"></video>
+            <canvas id="port-canvas" width="960" height="640"></canvas>
+          </div>
+        </div>
+        <div class="pane composite"><h2 id="composite-title">Composite</h2><canvas id="composite-canvas" width="960" height="640"></canvas></div>
+      </div>
+      <p id="input-mode-hint" class="hint">Drag or tap either visible game surface. Coordinates are normalized and sent to both runtimes.</p>
+      <p id="viewer-cadence" class="hint cadence">Viewer stream starting · evidence/state 2 fps</p>
+      <section id="evidence-panel" class="workspace-evidence hidden">
+        <h2>Review evidence</h2>
+        <p class="evidence-help">Each checkpoint preserves the exact native and port frames used by the task verdict.</p>
+        <div id="evidence-gallery" class="evidence-gallery"></div>
+      </section>
+    </section>
+
+    <aside>
+      <section id="task-panel" class="task-panel">
+        <h2>Fidelity task</h2>
+        <div id="task-title" class="task-title">No automated task in this session</div>
+        <p id="task-purpose" class="task-purpose">Use live controls here, or start an Automated task from the setup dashboard.</p>
+        <ul id="task-review" class="task-review"></ul>
+        <button id="run-task" disabled>Run loaded task</button>
+        <pre id="task-state">Idle</pre>
+      </section>
+
+      <section class="controls">
+        <h2>Run</h2>
+        <div class="button-row">
+          <button id="record">Record macro + frames</button>
+          <button id="replay">Replay last macro</button>
+          <button id="checkpoint">Checkpoint</button>
+        </div>
+        <label>Checkpoint note <input id="checkpoint-note" type="text" placeholder="What should match here?"></label>
+      </section>
+
+      <section>
+        <h2>Differences</h2>
+        <div id="metrics" class="metrics"></div>
+        <ol id="observations" class="observations"></ol>
+        <div class="manual-observation">
+          <select id="severity"><option>notice</option><option>warning</option><option>error</option></select>
+          <input id="observation-note" type="text" placeholder="Describe a deterministic mismatch">
+          <button id="add-observation">Flag</button>
+        </div>
+      </section>
+
+      <details open>
+        <summary>Port state</summary>
+        <pre id="port-state">Waiting for render_game_to_text…</pre>
+      </details>
+      <details>
+        <summary>Native scene dump</summary>
+        <pre id="native-state">Pass --native-log and enable HSCENE dumps for semantic state.</pre>
+      </details>
+      <details>
+        <summary>Dungeon topology</summary>
+        <pre id="dungeon-topology">Enter a dungeon to accumulate native RoomNodes.</pre>
+      </details>
+      <details>
+        <summary>Browser errors</summary>
+        <pre id="browser-errors">None</pre>
+      </details>
+    </aside>
+  </main>
+  <script type="module" src="/dashboard.js"></script>
+</body>
+</html>

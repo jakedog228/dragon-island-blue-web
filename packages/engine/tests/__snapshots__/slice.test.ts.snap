@@ -1,0 +1,274 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`vertical slice: full seeded 3v3 battle (plan Task 10) > seeded battle event log matches snapshot 1`] = `
+[
+  {
+    "teams": [
+      [
+        "t0m0:FireCub",
+        "t0m1:SnowCub",
+        "t0m2:WhiteDragonling",
+      ],
+      [
+        "t1m0:Minotaur",
+        "t1m1:Spark",
+        "t1m2:UnhappyBird",
+      ],
+    ],
+    "type": "battleStarted",
+  },
+  {
+    "living": "t0m2:WhiteDragonling",
+    "time": 76,
+    "type": "turnStarted",
+  },
+  {
+    "ability": "Offensive.Attack",
+    "source": "t0m2:WhiteDragonling",
+    "targets": [
+      "t1m0:Minotaur",
+    ],
+    "type": "abilityUsed",
+  },
+  {
+    "amount": 73,
+    "element": "Air",
+    "hpAfter": 64,
+    "source": "t0m2:WhiteDragonling",
+    "target": "t1m0:Minotaur",
+    "type": "damageDealt",
+  },
+  {
+    "phase": "enemy",
+    "source": "t0m2:WhiteDragonling",
+    "targets": [
+      "t1m0:Minotaur",
+    ],
+    "type": "phaseResolved",
+  },
+  {
+    "living": "t0m1:SnowCub",
+    "time": 80,
+    "type": "turnStarted",
+  },
+  {
+    "ability": "Offensive.Attack",
+    "source": "t0m1:SnowCub",
+    "targets": [
+      "t1m1:Spark",
+    ],
+    "type": "abilityUsed",
+  },
+  {
+    "amount": 53,
+    "element": "Water",
+    "hpAfter": 94,
+    "source": "t0m1:SnowCub",
+    "target": "t1m1:Spark",
+    "type": "damageDealt",
+  },
+  {
+    "phase": "enemy",
+    "source": "t0m1:SnowCub",
+    "targets": [
+      "t1m1:Spark",
+    ],
+    "type": "phaseResolved",
+  },
+  {
+    "living": "t0m0:FireCub",
+    "time": 82,
+    "type": "turnStarted",
+  },
+  {
+    "ability": "Offensive.Attack",
+    "source": "t0m0:FireCub",
+    "targets": [
+      "t1m2:UnhappyBird",
+    ],
+    "type": "abilityUsed",
+  },
+  {
+    "amount": 54,
+    "element": "Fire",
+    "hpAfter": 123,
+    "source": "t0m0:FireCub",
+    "target": "t1m2:UnhappyBird",
+    "type": "damageDealt",
+  },
+  {
+    "phase": "enemy",
+    "source": "t0m0:FireCub",
+    "targets": [
+      "t1m2:UnhappyBird",
+    ],
+    "type": "phaseResolved",
+  },
+  {
+    "living": "t1m1:Spark",
+    "time": 85,
+    "type": "turnStarted",
+  },
+  {
+    "ability": "Offensive.Thunder.Thunder",
+    "source": "t1m1:Spark",
+    "targets": [
+      "t0m1:SnowCub",
+    ],
+    "type": "abilityUsed",
+  },
+  {
+    "amount": 82,
+    "element": "Air",
+    "hpAfter": 75,
+    "source": "t1m1:Spark",
+    "target": "t0m1:SnowCub",
+    "type": "damageDealt",
+  },
+  {
+    "phase": "enemy",
+    "source": "t1m1:Spark",
+    "targets": [
+      "t0m1:SnowCub",
+    ],
+    "type": "phaseResolved",
+  },
+  {
+    "living": "t1m2:UnhappyBird",
+    "time": 85,
+    "type": "turnStarted",
+  },
+  {
+    "ability": "Offensive.AttackAll",
+    "source": "t1m2:UnhappyBird",
+    "targets": [
+      "t0m2:WhiteDragonling",
+      "t0m0:FireCub",
+      "t0m1:SnowCub",
+    ],
+    "type": "abilityUsed",
+  },
+  {
+    "amount": 131,
+    "element": "Air",
+    "hpAfter": 53,
+    "source": "t1m2:UnhappyBird",
+    "target": "t0m2:WhiteDragonling",
+    "type": "damageDealt",
+  },
+  {
+    "amount": 157,
+    "element": "Air",
+    "hpAfter": 0,
+    "source": "t1m2:UnhappyBird",
+    "target": "t0m0:FireCub",
+    "type": "damageDealt",
+  },
+  {
+    "living": "t0m0:FireCub",
+    "type": "died",
+  },
+  {
+    "amount": 75,
+    "element": "Air",
+    "hpAfter": 0,
+    "source": "t1m2:UnhappyBird",
+    "target": "t0m1:SnowCub",
+    "type": "damageDealt",
+  },
+  {
+    "living": "t0m1:SnowCub",
+    "type": "died",
+  },
+  {
+    "phase": "enemy",
+    "source": "t1m2:UnhappyBird",
+    "targets": [
+      "t0m2:WhiteDragonling",
+      "t0m0:FireCub",
+      "t0m1:SnowCub",
+    ],
+    "type": "phaseResolved",
+  },
+  {
+    "amount": 123,
+    "cause": "sacrifice",
+    "element": "Air",
+    "hpAfter": 0,
+    "source": "t1m2:UnhappyBird",
+    "target": "t1m2:UnhappyBird",
+    "type": "damageDealt",
+  },
+  {
+    "living": "t1m2:UnhappyBird",
+    "type": "died",
+  },
+  {
+    "living": "t1m0:Minotaur",
+    "time": 93,
+    "type": "turnStarted",
+  },
+  {
+    "ability": "Offensive.DoubleAttack",
+    "source": "t1m0:Minotaur",
+    "targets": [
+      "t0m2:WhiteDragonling",
+    ],
+    "type": "abilityUsed",
+  },
+  {
+    "amount": 35,
+    "element": "Earth",
+    "hpAfter": 18,
+    "source": "t1m0:Minotaur",
+    "target": "t0m2:WhiteDragonling",
+    "type": "damageDealt",
+  },
+  {
+    "phase": "enemy",
+    "source": "t1m0:Minotaur",
+    "targets": [
+      "t0m2:WhiteDragonling",
+    ],
+    "type": "phaseResolved",
+  },
+  {
+    "living": "t1m1:Spark",
+    "time": 215,
+    "type": "turnStarted",
+  },
+  {
+    "ability": "Offensive.Thunder.Thunder",
+    "source": "t1m1:Spark",
+    "targets": [
+      "t0m2:WhiteDragonling",
+    ],
+    "type": "abilityUsed",
+  },
+  {
+    "amount": 18,
+    "element": "Air",
+    "hpAfter": 0,
+    "source": "t1m1:Spark",
+    "target": "t0m2:WhiteDragonling",
+    "type": "damageDealt",
+  },
+  {
+    "living": "t0m2:WhiteDragonling",
+    "type": "died",
+  },
+  {
+    "phase": "enemy",
+    "source": "t1m1:Spark",
+    "targets": [
+      "t0m2:WhiteDragonling",
+    ],
+    "type": "phaseResolved",
+  },
+  {
+    "time": 215,
+    "type": "battleEnded",
+    "winner": 1,
+  },
+]
+`;

@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "id": "leave-town-transition",
+  "title": "Load Corova and leave for the world map",
+  "purpose": "Exercise a longer machine scenario with two semantic boundaries and verify mirrored hit testing plus the deterministic town-to-world camera transition.",
+  "setup": [
+    "Restart both runtimes before this task and use the same copied native save in slot 1.",
+    "Use the iPhone display tier and a DUMP-only TouchHLE observer at 250 ms or faster.",
+    "Keep the TouchHLE window visible for native capture."
+  ],
+  "reviewFocus": [
+    "Review the settled Corova checkpoint before the transition.",
+    "Compare the town zoom-out, label disappearance, map camera endpoint, POI placement, hero marker, and XP chrome.",
+    "Confirm the Leave Town hit lands on both systems without per-runtime coordinate overrides."
+  ],
+  "recommendedSaveSha256": "d13f5cabe2569c370a06e8999017b892cc80e62059cf805d961b35950d138e95",
+  "rng": { "initialState": 0, "skip": 0 },
+  "steps": [
+    {
+      "id": "wait-for-title",
+      "kind": "wait",
+      "timeoutMs": 60000,
+      "stableSamples": 2,
+      "until": [
+        { "target": "port", "path": "mode", "equals": "start" },
+        { "target": "native", "node": { "className": "^CCScene$" } },
+        { "target": "lab", "path": "browserErrors.length", "equals": 0 }
+      ]
+    },
+    { "id": "dismiss-title", "kind": "tap", "x": 0.5, "y": 0.5, "nativeAtMs": 120000, "holdMs": 120, "settleMs": 1800 },
+    { "id": "select-slot-one", "kind": "tap", "x": 0.5, "y": 0.325, "nativeAtMs": 135000, "holdMs": 120, "settleMs": 4200 },
+    {
+      "id": "wait-for-corova",
+      "kind": "wait",
+      "timeoutMs": 120000,
+      "stableSamples": 120,
+      "pollMs": 100,
+      "note": "Hold the shared town endpoint for 12 seconds so the native day notification and entry animation finish before review.",
+      "until": [
+        { "target": "port", "path": "mode", "equals": "town" },
+        { "target": "port", "path": "displayMode", "equals": "iphone" },
+        { "target": "port", "path": "world", "equals": "World_1-1" },
+        { "target": "port", "path": "currentPoi", "equals": "First_City" },
+        { "target": "port", "path": "inputBlockers.hasModal", "equals": false },
+        { "target": "native", "node": { "className": "^WorldNode$" } },
+        { "target": "native", "node": { "text": "^Guild of Corova$" } }
+      ]
+    },
+    {
+      "id": "corova-before-leaving",
+      "kind": "checkpoint",
+      "label": "Corova before leaving",
+      "expectations": [
+        { "target": "port", "path": "mode", "equals": "town" },
+        { "target": "port", "path": "displayMode", "equals": "iphone" },
+        { "target": "port", "path": "world", "equals": "World_1-1" },
+        { "target": "port", "path": "currentPoi", "equals": "First_City" },
+        { "target": "port", "path": "inputBlockers.hasModal", "equals": false },
+        { "target": "native", "node": { "text": "^Guild of Corova$" } },
+        { "target": "lab", "path": "browserErrors.length", "equals": 0 }
+      ]
+    },
+    {
+      "id": "press-leave-town",
+      "kind": "tap",
+      "note": "Source Leave Town control at retina client coordinate (128,372).",
+      "x": 0.13333333333333333,
+      "y": 0.58125,
+      "nativeAtMs": 170000,
+      "holdMs": 120,
+      "settleMs": 3600
+    },
+    {
+      "id": "wait-for-world-map",
+      "kind": "wait",
+      "timeoutMs": 30000,
+      "stableSamples": 30,
+      "pollMs": 100,
+      "note": "WorldNode is reused for town and world; the hidden town label proves the zoom-out endpoint rather than merely the shared scene class.",
+      "until": [
+        { "target": "port", "path": "mode", "equals": "world" },
+        { "target": "port", "path": "displayMode", "equals": "iphone" },
+        { "target": "native", "node": { "className": "^WorldNode$" } },
+        { "target": "native", "node": { "text": "^Guild of Corova$", "visible": false } },
+        { "target": "lab", "path": "browserErrors.length", "equals": 0 }
+      ]
+    },
+    {
+      "id": "world-map-settled",
+      "kind": "checkpoint",
+      "label": "World map settled",
+      "note": "Review the stable post-town camera and POI layout in the paired images.",
+      "expectations": [
+        { "target": "port", "path": "mode", "equals": "world" },
+        { "target": "port", "path": "displayMode", "equals": "iphone" },
+        { "target": "native", "node": { "className": "^WorldNode$" } },
+        { "target": "native", "node": { "text": "^Guild of Corova$", "visible": false } },
+        { "target": "lab", "path": "browserErrors.length", "equals": 0 }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 4,
+  "id": "dev.dragonislandblue.realtime-combat",
+  "version": "1.1.1",
+  "displayName": "Realtime Combat",
+  "apiVersion": 4,
+  "mode": "offline",
+  "dependencies": {},
+  "conflicts": {},
+  "priority": 1000,
+  "loadAfter": [
+    "dev.dragonislandblue.devtools",
+    "dev.dragonislandblue.fire-cub-inferno-barrage",
+    "dev.dragonislandblue.leslie-circle-caster",
+    "dev.dragonislandblue.pirate-panic-dancer",
+    "dev.dragonislandblue.cat-berserk-dancer",
+    "dev.dragonislandblue.sukuna-domain"
+  ],
+  "entry": "scripts/main.js"
+}

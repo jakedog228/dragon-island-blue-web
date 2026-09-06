@@ -1,0 +1,161 @@
+# Dragon Island Blue deployment stack.
+#
+# Run from the repository root:
+#   docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build
+#
+# Single replica by design. FileAuthoritativeSlotStore serialises transactions in-process and
+# explicitly makes no distributed-lock claim, so a second replica against the same volume would
+# corrupt authoritative state. Horizontal scaling needs a database-backed AuthoritativeSlotStore
+# first. Do not add `deploy.replicas`.
+
+name: dib
+
+services:
+  game:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: game
+    restart: unless-stopped
+    # No `ports:`. The API is reachable only from the proxy over the internal network, which is
+    # what keeps the authoritative service off the public interface.
+    networks: [internal]
+    environment:
+      DIB_GAME_ENV: production
+      DIB_GAME_PORT: "8788"
+      DIB_GAME_BIND_HOST: 0.0.0.0
+      DIB_GAME_DATA_DIR: /var/lib/dib-game
+      DIB_GAME_EXTRACTED_DATA: /srv/extracted/data
+      DIB_GAME_HMAC_SECRET_FILE: /run/secrets/dib_game_hmac
+      # Caddy is the only route to this port and it overwrites X-Forwarded-For, so the forwarded
+      # address can be trusted for rate-limit keying.
+      DIB_GAME_TRUST_PROXY: "1"
+      DIB_GAME_LOG_LEVEL: ${DIB_GAME_LOG_LEVEL:-info}
+      # Durable copy of the log stream. stdout still carries everything; this is what survives the
+      # container recreation that every redeploy performs.
+      DIB_GAME_LOG_FILE: /var/log/dib-game/game.log
+      DIB_GAME_LOG_FILE_MAX_BYTES: ${DIB_GAME_LOG_FILE_MAX_BYTES:-33554432}
+      DIB_GAME_LOG_FILE_KEEP: ${DIB_GAME_LOG_FILE_KEEP:-5}
+      DIB_GAME_START_WORLD: ${DIB_GAME_START_WORLD:-World_1-1}
+      DIB_GAME_START_TOWN: ${DIB_GAME_START_TOWN:-First_City}
+      DIB_GAME_SHUTDOWN_GRACE_MS: "15000"
+      DIB_GAME_SESSION_RATE_PER_MINUTE: ${DIB_GAME_SESSION_RATE_PER_MINUTE:-20}
+      DIB_GAME_SESSION_RATE_BURST: ${DIB_GAME_SESSION_RATE_BURST:-10}
+      DIB_GAME_REGISTRATION_ENABLED: ${DIB_GAME_REGISTRATION_ENABLED:-true}
+      DIB_GAME_REGISTRATION_RATE_PER_MINUTE: ${DIB_GAME_REGISTRATION_RATE_PER_MINUTE:-0.2}
+      DIB_GAME_REGISTRATION_RATE_BURST: ${DIB_GAME_REGISTRATION_RATE_BURST:-1}
+      DIB_GAME_MAX_ACCOUNTS: ${DIB_GAME_MAX_ACCOUNTS:-10000}
+      DIB_GAME_SCOREBOARD_RATE_PER_MINUTE: ${DIB_GAME_SCOREBOARD_RATE_PER_MINUTE:-60}
+      DIB_GAME_SCOREBOARD_RATE_BURST: ${DIB_GAME_SCOREBOARD_RATE_BURST:-20}
+      DIB_GAME_COMMAND_RATE_PER_MINUTE: ${DIB_GAME_COMMAND_RATE_PER_MINUTE:-600}
+      DIB_GAME_COMMAND_RATE_BURST: ${DIB_GAME_COMMAND_RATE_BURST:-120}
+    volumes:
+      - game-state:/var/lib/dib-game
+      # Kept off game-state so log growth can never crowd out authoritative player data, and so the
+      # backup job's snapshot of game-state stays free of logs.
+      - game-logs:/var/log/dib-game
+      # Operator-supplied game resources. Read-only, never baked into the image.
+      - ${DIB_EXTRACTED_DATA_HOST_PATH:?set DIB_EXTRACTED_DATA_HOST_PATH to the host extracted/data directory}:/srv/extracted/data:ro
+    secrets:
+      - dib_game_hmac
+    read_only: true
+    tmpfs:
+      # The store writes `<file>.<pid>.<uuid>.tmp` beside its target inside the state volume, not
+      # in /tmp, so this only needs to cover incidental runtime scratch.
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    # SIGTERM starts the drain; give it more than the 15s grace before SIGKILL.
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: ${DIB_GAME_MEMORY_LIMIT:-1g}
+          pids: 256
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  proxy:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: proxy
+    restart: unless-stopped
+    depends_on:
+      game:
+        condition: service_healthy
+    networks: [internal, edge]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DIB_PUBLIC_HOST: ${DIB_PUBLIC_HOST:?set DIB_PUBLIC_HOST to the public hostname}
+      DIB_ACME_EMAIL: ${DIB_ACME_EMAIL:?set DIB_ACME_EMAIL for Let's Encrypt notifications}
+    volumes:
+      # Certificates and ACME account keys. Losing this volume means re-issuing certificates and
+      # burning Let's Encrypt rate limit; back it up with the same schedule as game state.
+      - caddy-data:/data
+      - caddy-config:/config
+      # Access logs. Separate from caddy-data so log growth can never threaten the certificate
+      # store, and so this volume can be pruned independently without an ACME re-issue.
+      - caddy-logs:/var/log/caddy
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  # Snapshots the authoritative state volume on a schedule. Runs in the same stack so it always
+  # sees the live volume.
+  #
+  # It sits on the default bridge, NOT on `internal`, so it has no route to the game server but does
+  # have egress -- which is what DIB_BACKUP_OFFSITE_CMD needs. If you never set an offsite command,
+  # add `network_mode: none` to take that egress away.
+  backup:
+    image: alpine:3.20
+    restart: unless-stopped
+    volumes:
+      - game-state:/data/game-state:ro
+      - ${DIB_BACKUP_HOST_PATH:?set DIB_BACKUP_HOST_PATH to the host backup directory}:/backups
+      - ./backup.sh:/usr/local/bin/dib-backup:ro
+    environment:
+      DIB_BACKUP_SOURCE: /data/game-state
+      DIB_BACKUP_DEST: /backups
+      DIB_BACKUP_INTERVAL_SECONDS: ${DIB_BACKUP_INTERVAL_SECONDS:-86400}
+      DIB_BACKUP_KEEP_DAILY: ${DIB_BACKUP_KEEP_DAILY:-7}
+      DIB_BACKUP_KEEP_WEEKLY: ${DIB_BACKUP_KEEP_WEEKLY:-4}
+    entrypoint: ["/bin/sh", "-c"]
+    # No package installation: busybox already supplies tar, gzip, sha256sum, find, date, sort, and
+    # awk, which is everything backup.sh uses. A backup service that has to reach a package mirror
+    # before it can run is a backup service that stops working the day the mirror does.
+    command:
+      - |
+        while true; do
+          /usr/local/bin/dib-backup || echo "backup run failed" >&2
+          sleep "$${DIB_BACKUP_INTERVAL_SECONDS}"
+        done
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+networks:
+  # No inter-container route to the outside; the API is reachable only from the proxy.
+  internal:
+    internal: true
+  edge: {}
+
+volumes:
+  game-state: {}
+  caddy-data: {}
+  caddy-config: {}
+  caddy-logs: {}
+  game-logs: {}
+
+secrets:
+  dib_game_hmac:
+    file: ${DIB_HMAC_SECRET_HOST_PATH:?set DIB_HMAC_SECRET_HOST_PATH to the host secret file}

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fidelity Lab setup</title>
+  <link rel="stylesheet" href="/dashboard.css">
+</head>
+<body class="setup-page">
+  <header>
+    <div>
+      <h1>Fidelity Lab</h1>
+      <p>Start a native ↔ web comparison from one place</p>
+    </div>
+    <div id="environment" class="status-strip"></div>
+  </header>
+
+  <main class="setup-shell">
+    <section class="setup-hero">
+      <div class="eyebrow">New comparison</div>
+      <h2>What do you want to compare?</h2>
+      <p>Choose a workflow, match the content and save state, then let the lab launch both runtimes.</p>
+    </section>
+
+    <form id="setup-form" class="setup-grid">
+      <fieldset class="setup-step workflow-step">
+        <legend><span>1</span> Choose a workflow</legend>
+        <label class="workflow-card selected">
+          <input type="radio" name="workflow" value="live" checked>
+          <span class="workflow-copy">
+            <strong>Live comparison</strong>
+            <small>Play manually with every dashboard tap and drag mirrored into both games.</small>
+          </span>
+          <span class="workflow-badge">Interactive</span>
+        </label>
+        <label class="workflow-card">
+          <input type="radio" name="workflow" value="task">
+          <span class="workflow-copy">
+            <strong>Automated task</strong>
+            <small>Run a reviewed scenario against both games and collect paired evidence.</small>
+          </span>
+          <span class="workflow-badge">Repeatable</span>
+        </label>
+        <label id="viewer-wait-option" class="viewer-wait">
+          <input id="wait-for-viewer-sync" type="checkbox">
+          <span class="workflow-copy">
+            <strong>Wait for both panels to sync</strong>
+            <small>Hold the faster web panel until TouchHLE's matching framebuffer is ready, then advance both panels together. This makes visible timing easier to compare, but the viewer responds more slowly.</small>
+          </span>
+          <span class="workflow-badge">Slower</span>
+        </label>
+        <label id="port-audio-option" class="viewer-wait selected">
+          <input id="port-audio" type="checkbox" checked>
+          <span class="workflow-copy">
+            <strong>Hear web port audio</strong>
+            <small>Pass the controlled web port's audio to this computer. TouchHLE remains silent.</small>
+          </span>
+          <span class="workflow-badge">Port only</span>
+        </label>
+      </fieldset>
+
+      <fieldset class="setup-step">
+        <legend><span>2</span> Match content and state</legend>
+        <label class="field-label" for="archive-choice">Game archive</label>
+        <div class="choice-row">
+          <select id="archive-choice" required></select>
+          <label class="file-button">Choose another archive<input id="archive-upload" type="file" accept=".ipa,.zip"></label>
+        </div>
+        <p class="field-help">The selected archive is loaded into both disposable runtimes.</p>
+
+        <label class="field-label" for="save-choice">Starting save</label>
+        <div class="choice-row">
+          <select id="save-choice" required></select>
+          <label class="file-button">Choose another save<input id="save-upload" type="file"></label>
+        </div>
+        <p class="field-help">The lab copies these bytes into native slot 1 and imports them into web slot 1.</p>
+
+        <label class="rights-check">
+          <input id="content-rights" type="checkbox" required>
+          <span>I have the right to use this content on this device.</span>
+        </label>
+      </fieldset>
+
+      <fieldset id="task-step" class="setup-step hidden">
+        <legend><span>3</span> Choose a task</legend>
+        <select id="task-choice"></select>
+        <article id="task-preview" class="task-preview"></article>
+      </fieldset>
+
+      <section class="launch-card">
+        <div>
+          <div class="eyebrow">Ready when you are</div>
+          <h2 id="launch-title">Start live comparison</h2>
+          <p id="launch-summary">The lab creates a disposable native copy, starts the web port, and opens the comparison workspace.</p>
+        </div>
+        <button id="start-session" class="primary-action" type="submit">Start comparison</button>
+      </section>
+    </form>
+
+    <section id="launch-progress" class="launch-progress hidden" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <div>
+        <h2>Preparing your comparison</h2>
+        <p id="launch-message">Creating a disposable native runtime…</p>
+        <p class="field-help">This normally takes less than a minute. The original TouchHLE sandbox is never modified.</p>
+      </div>
+    </section>
+
+    <section id="active-session" class="active-session hidden"></section>
+    <div id="setup-error" class="setup-error hidden" role="alert"></div>
+  </main>
+  <script type="module" src="/setup.js"></script>
+</body>
+</html>

@@ -1,0 +1,346 @@
+{
+  "basis": "Recorded initial RNG state fd0411e6 after call575; candidate progression currentWithoutCockatrice; translated source not native memory proof.",
+  "providers": [
+    {
+      "kind": "monster",
+      "shortType": "DireWolf",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "DireWolf",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Drake",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Drake",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Fairy",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Fairy",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Goblin",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Goblin",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Kappa",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Kappa",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "WhitePiranha",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "WhitePiranha",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Cockatrice",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Cockatrice",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "GiantAnt",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "GiantAnt",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "MerHunter",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "MerHunter",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "DevilWorm",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "DevilWorm",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Assassin",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "Assassin",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "DreamEater",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "monster",
+      "shortType": "DreamEater",
+      "level": 1,
+      "prizeMonster": false
+    },
+    {
+      "kind": "gold",
+      "amount": 50
+    },
+    {
+      "kind": "gold",
+      "amount": 50
+    },
+    {
+      "kind": "gold",
+      "amount": 50
+    },
+    {
+      "kind": "gold",
+      "amount": 50
+    },
+    {
+      "kind": "gold",
+      "amount": 150
+    },
+    {
+      "kind": "gold",
+      "amount": 150
+    },
+    {
+      "kind": "silver",
+      "amount": 500
+    },
+    {
+      "kind": "silver",
+      "amount": 500
+    },
+    {
+      "kind": "silver",
+      "amount": 1500
+    },
+    {
+      "kind": "silver",
+      "amount": 1500
+    },
+    {
+      "kind": "recipe",
+      "combineName": "Carnoraptor"
+    },
+    {
+      "kind": "item",
+      "definitionPath": "Usables.CardSilver",
+      "level": 2
+    },
+    {
+      "kind": "item",
+      "definitionPath": "Usables.CardSilver",
+      "level": 2
+    },
+    {
+      "kind": "item",
+      "definitionPath": "Usables.CardGold",
+      "level": 3
+    },
+    {
+      "kind": "item",
+      "definitionPath": "Usables.CardGold",
+      "level": 3
+    },
+    {
+      "kind": "gem",
+      "level": 8,
+      "quality": 0,
+      "slot": 0,
+      "enabledStats": [
+        "Attack"
+      ]
+    },
+    {
+      "kind": "gem",
+      "level": 8,
+      "quality": 0,
+      "slot": 0,
+      "enabledStats": [
+        "MaxHP"
+      ]
+    },
+    {
+      "kind": "gem",
+      "level": 8,
+      "quality": 0,
+      "slot": 0,
+      "enabledStats": [
+        "MaxHP"
+      ]
+    },
+    {
+      "kind": "gem",
+      "level": 8,
+      "quality": 0,
+      "slot": 0,
+      "enabledStats": [
+        "Magic"
+      ]
+    },
+    {
+      "kind": "gem",
+      "level": 8,
+      "quality": 1,
+      "slot": 0,
+      "enabledStats": [
+        "Magic",
+        "MaxHP"
+      ]
+    },
+    {
+      "kind": "gem",
+      "level": 8,
+      "quality": 1,
+      "slot": 0,
+      "enabledStats": [
+        "Resist",
+        "Attack"
+      ]
+    }
+  ],
+  "reelProviderIndices": [
+    29,
+    2,
+    14,
+    5,
+    39,
+    4,
+    10,
+    25,
+    30,
+    33,
+    7,
+    41,
+    6,
+    17,
+    0,
+    19,
+    42,
+    23,
+    35,
+    9,
+    15,
+    38,
+    26,
+    32,
+    34,
+    31,
+    16,
+    3,
+    22,
+    44,
+    21,
+    36,
+    27,
+    43,
+    11,
+    13,
+    8,
+    40,
+    28,
+    37,
+    12,
+    18,
+    24,
+    20,
+    1
+  ],
+  "previews": [
+    "Drake",
+    "DireWolf"
+  ],
+  "poolDrawEnd": 32,
+  "shuffleDrawEnd": 77,
+  "previewDrawEnd": 79,
+  "stateAfterPreviews": 2129791261,
+  "casinoDrawEnd": 80,
+  "stateBeforeRelease": 3320277077,
+  "releaseU32": 894851139,
+  "friction": 2.8250091075897217,
+  "registered": {
+    "EvilEye": 1,
+    "GiantWasp": 8,
+    "MerWarrior": 6,
+    "Sludge": 7,
+    "Stinger": 2,
+    "Wolf": 1,
+    "GoldDragonling": 8,
+    "GiantTurtle": 3,
+    "GoldBabyDragon": 6,
+    "Penguin": 4,
+    "FireCub": 7,
+    "BatSquirrel": 6,
+    "Bitewing": 8
+  },
+  "threshold": 3,
+  "nativeCallOffset": 575,
+  "recordedShuffleMatches": true
+}
