@@ -2,10 +2,10 @@
 
 <img src="apps/web/app-icon-512.png" alt="Dragon Island Blue Web Engine icon" width="128" height="128">
 
-This is a playable TypeScript/PixiJS reimplementation of the discontinued pre-iOS 11 game *Dragon Island Blue*. This work does not host or require any copyrighted material from the original game, and simply provides a flexible framework that reproduces mechanics for preservation. 
+This is a playable TypeScript/PixiJS reimplementation of the discontinued pre-iOS 11 game *Dragon Island Blue*, **supporting play on all modern devices**. This work does not host or require any copyrighted material from the original game, and simply provides a flexible framework that reproduces mechanics for preservation. 
 
 > [!NOTE]
-> **Project status:** All mechanics from the original game have been fully reimplemented, and a full RNG-perfect playthrough of the game is (theoretically) possible. If you notice any deviations from the source or would like to contribute, feel free to reach out!
+> **Project status:** All mechanics from the original game have been fully reimplemented, and a full RNG-perfect playthrough of the game is possible. If you notice any deviations from the source or would like to contribute, feel free to reach out!
 
 The mobile app was designed to support the 480×320 iPhone and 512×384 iPad screens. We attempt to retain both of these screen dimensions ported and upscaled to modern devices, although iPad mode is less-thoroughly tested due to mechanical limitations. See [current status](docs/STATUS.md) for limits, and [keyboard controls](docs/keyboard-controls.md) for some default QoL keyboard shortcuts for computer users.
 
@@ -18,7 +18,7 @@ pnpm install
 pnpm --filter @dib/web dev
 ```
 
-Open the printed URL, choose a compatible `.ipa` or `.zip`, attest that you have the right to use it, and choose **Offline** to play locally. Learn more about expected asset formats in our [Modding Guide](./apps/web/modding.html).
+Open the printed URL, choose a compatible `.ipa` or `.zip`, attest that you have the right to use it, and choose **Offline** to play locally. Learn more about expected asset formats in our [Modding Guide](https://dib.opq.sh/modding.html).
 
 Assets are stored locally on the browser and are never uploaded or copied into the web build. After an initial load, some browsers may remember these asset bundles in a local cache for faster startup on reload. Assets used in this way never leave your device.
 
@@ -27,9 +27,14 @@ Game saves are stored in the same format used by the original game, and can be l
 > Note: Do not use this software with content that you do not have a legal right to use. 
 
 
+## Adding to Home Screen
+
+This web app supports PWA, which means you can add it directly to the home screen of any device with a modern web browser. This also has the added benefit of telling your device not to erase save data while clearing old cache data. [Here is a guide](https://www.cdc.gov/niosh/mining/tools/installpwa.html) to doing this on iOS, Android, and Windows/Mac.
+
+
 ## Modding
 
-Fully reimplementing Dragon Island Blue's engine allows a much more legible interface for modding. Our engine supports injectable `.dibmod` bundles which can contain JS and extra assets that are loaded directly into the tab's current runtime, allowing full access to change just about all in-game behaviors. Learn how to create DIB mods in our [Modding Guide](./apps/web/modding.html).
+Fully reimplementing Dragon Island Blue's engine allows a much more legible interface for modding. Our engine supports injectable `.dibmod` bundles which can contain JS and extra assets that are loaded directly into the tab's current runtime, allowing full access to change just about all in-game behaviors. Learn how to create DIB mods in our [Modding Guide](https://dib.opq.sh/modding.html#code-mods).
 
 Only load mods you trust: mods are injected immediately and can read, write, and transfer most data in your tab's current runtime. Additionally, compatability issues may arise when using multiple mods, or reusing the same save for multiple different mods. Save frequently. Use of mods disables access to the Online Mode.
 
