@@ -296,7 +296,7 @@
       .save-health__action[hidden] { display: none; }
       .save-health__action:disabled { opacity: .5; cursor: not-allowed; }
       .content-gate__guide { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--gate-border-soft); color: var(--gate-muted); font-size: 13px; }
-      .content-gate--has-file .content-gate__guide { display: none; }
+      .content-gate--has-file .content-gate__guide:not([data-offline-shell]) { display: none; }
       .content-gate__guide a { color: var(--gate-secondary-text); font-weight: 700; text-underline-offset: 3px; }
       .content-gate__guide a:hover { color: var(--gate-accent-text); }
       .content-gate__guide a:focus-visible { border-radius: 3px; outline: 3px solid var(--gate-leaf); outline-offset: 3px; }

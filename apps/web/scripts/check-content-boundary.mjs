@@ -54,6 +54,25 @@ try {
 }
 
 const errors = [];
+// The worker must describe every emitted engine file with its final-byte integrity. This catches
+// late build plugins changing HTML after precaching, and prevents offline-only missing chunks.
+const worker = await readFile(join(dist, "sw.js"), "utf8");
+const config = JSON.parse(worker.match(/const \{ revision, entries \} = (\{[^\n]+\});/)?.[1] ?? "null");
+if (!config || !Array.isArray(config.entries)) {
+  errors.push("sw.js: missing generated offline manifest");
+} else {
+  const expected = new Set(files.map((path) => relative(dist, path).replaceAll("\\", "/")));
+  expected.delete("sw.js");
+  for (const entry of config.entries) {
+    if (!expected.delete(entry.path)) {
+      errors.push(`sw.js: unexpected or duplicate precache path ${entry.path}`);
+      continue;
+    }
+    const hash = createHash("sha256").update(await readFile(join(dist, entry.path))).digest("base64");
+    if (entry.integrity !== `sha256-${hash}`) errors.push(`sw.js: stale integrity for ${entry.path}`);
+  }
+  for (const path of expected) errors.push(`sw.js: missing precache entry ${path}`);
+}
 for (const path of files) {
   const rel = relative(dist, path).replaceAll("\\", "/");
   const extension = extname(path).toLowerCase();

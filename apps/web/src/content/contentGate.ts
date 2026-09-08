@@ -1,4 +1,5 @@
 import { probeOnlineServer, type OnlineServerStatus } from "../authority/serverAvailability.js";
+import { installOfflineShellStatus } from "../platform/offlineShell.js";
 import { importContentArchive, type ImportedContentPackage } from "./archivePackage.js";
 import { fingerprintContentPackage, type ContentFingerprint } from "./contentFingerprint.js";
 import {
@@ -337,12 +338,16 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
           <p class="content-gate__finish-hint">Choose an archive to continue.</p>
         </section>
         <p class="content-gate__status" aria-live="polite"></p>
+        <p class="content-gate__guide" data-offline-shell aria-live="polite"></p>
         <p class="content-gate__guide">
           Build asset archives and Offline code mods with the <a href="./modding.html">modding guide</a>.
         </p>
       </section>`;
     installContentGateThemeToggle(panel);
     host.appendChild(panel);
+    const disposeOfflineShellStatus = installOfflineShellStatus(
+      requiredElement<HTMLElement>(panel, "[data-offline-shell]"),
+    );
 
     const fullscreenButton = requiredElement<HTMLButtonElement>(panel, "[data-fullscreen-action]");
     if (offerFullscreen) {
@@ -2239,6 +2244,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
           closeSelectionDialog();
           const firstLoadScreen = await prepareSourceLoadingScreen(acquired.content);
           await fadeOutContentGate(panel);
+          disposeOfflineShellStatus();
           firstLoadScreen.mount(host);
           landingBackdrop?.dismiss();
           landingBackdrop = undefined;

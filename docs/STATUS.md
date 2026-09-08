@@ -130,3 +130,8 @@ orientation handling, and install/fullscreen support. See `docs/keyboard-control
   mapping stay aligned after rotation. The **Fullscreen** action appears only where the browser can
   act or explain iPhone Home Screen installation; installed/no-capability no-ops are omitted.
   iPhone WebKit can still retain system status/home UI, depending on the browser and installation mode.
+  Production builds cache a complete, integrity-checked engine version for offline startup,
+  show readiness in the launcher, and defer updates until game windows close. Imported archives
+  retain their separate local-cache/File API path. Authorized Chromium cold-start, archive
+  recovery, save/battle and worker-update checks passed; physical iOS airplane-mode verification
+  remains pending. See [offline setup and proof limits](offline-pwa.md).

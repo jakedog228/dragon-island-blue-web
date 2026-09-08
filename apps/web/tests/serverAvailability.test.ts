@@ -5,6 +5,13 @@ import { onlinePlayAvailability } from "../src/content/onlineModBoundary.js";
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("optional Official server", () => {
+  it("does not contact the authority when the browser is offline", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    vi.stubGlobal("navigator", { onLine: false });
+    expect(await probeOnlineServer()).toBe("unavailable");
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it.each([
     new Response("Not found", { status: 404 }),
     new Response("<html>static host</html>"),

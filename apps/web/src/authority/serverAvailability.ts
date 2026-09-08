@@ -2,6 +2,7 @@ export type OnlineServerStatus = "checking" | "available" | "unavailable";
 
 /** A missing API (including a static host's HTML fallback) must never block Offline boot. */
 export async function probeOnlineServer(): Promise<OnlineServerStatus> {
+  if (globalThis.navigator?.onLine === false) return "unavailable";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3000);
   try {

@@ -71,7 +71,8 @@ describe("platform fullscreen shell", () => {
     ]);
     expect(guidance?.warning).toContain("open this page in Safari");
     expect(guidance?.warning).toContain("separate offline saves and settings");
-    expect(guidance?.warning).toContain("chosen again each time");
+    expect(guidance?.warning).toContain("wait for offline startup to be ready");
+    expect(guidance?.warning).toContain("downloaded in Files");
   });
 
   it("recognizes current and desktop-UA Apple mobile presentations without naming browsers", () => {

@@ -22,6 +22,7 @@ if (archive === undefined) {
 }
 
 const url = process.env.DIB_WEB_URL ?? "http://localhost:5173";
+const offlinePwa = process.env.DIB_OFFLINE_PWA_JOURNEY === "1";
 const outputDirectory = path.resolve(
   process.env.DIB_OFFLINE_JOURNEY_OUTPUT ??
     path.join(repositoryRoot, "output/offline-new-game-journey"),
@@ -54,12 +55,14 @@ const screenshot = async (page, name) => {
 };
 
 try {
+  await (async () => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.stack ?? error}`));
   page.on("console", (message) => {
-    if (message.type() === "error" && !message.text().includes("favicon")) {
+    if (message.type() === "error" && !message.text().includes("favicon") &&
+        !(offlinePwa && message.location().url.includes("/api/game/readiness"))) {
       errors.push(`console: ${message.text()}`);
     }
   });
@@ -399,6 +402,13 @@ try {
 
   // Phase 1: real landing page -> empty source slot -> NewGame plot/starter -> first Corova save.
   await page.goto(url, { waitUntil: "domcontentloaded" });
+  if (offlinePwa) {
+    await page.locator('[data-offline-shell="ready"]').waitFor({ timeout: 120_000 });
+    await context.setOffline(true);
+    const response = await page.reload({ waitUntil: "domcontentloaded" });
+    assert(response?.fromServiceWorker(), "Offline journey must boot from the installed worker");
+    console.log("offline-new-game-journey: networking disabled for gameplay and save reload");
+  }
   await bootOfflineThroughGate("01-initial-gate", { expectUnselectedMode: true });
   let snapshot = await waitFor(
     (value) => value.mode === "start" && value.startup?.phase === "title",
@@ -539,6 +549,20 @@ try {
       envelope.state?.quests?.dialogsSeen?.includes("LeslieSaved"),
     "Field 1 victory and LeslieSaved did not checkpoint",
   );
+
+  // The opt-in PWA variant specifically proves startup, real input, durable save/reload and
+  // battle settlement with networking disabled. The full default journey retains all later
+  // Guild/building assertions; its Guild-unlock failure also reproduces on deployed 554af294ff54.
+  if (offlinePwa) {
+    assert.equal(await page.evaluate(() => navigator.onLine), false);
+    assert.equal(errors.length, 0, errors.join("\n"));
+    await screenshot(page, "08-offline-battle-checkpoint.png");
+    fs.writeFileSync(path.join(outputDirectory, "offline-pwa-gameplay.json"), JSON.stringify({
+      firstBattle, state: snapshot, offline: true, savedAndReloadedSlot: "slot-1",
+    }, null, 2));
+    console.log("offline-pwa-gameplay: PASS (new game, starter, town checkpoint, physical save selection/reload, tutorial, battle input, victory checkpoint; networking disabled)");
+    return;
+  }
 
   await clickPoi("1-1_Turtorial_Hut_1");
   await waitFor(
@@ -805,6 +829,7 @@ try {
   );
   console.log(`offline-new-game-journey: PASS ${JSON.stringify(result)}`);
   await context.close();
+  })();
 } finally {
   await browser.close();
 }

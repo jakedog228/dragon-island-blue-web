@@ -27,6 +27,8 @@
     "scenario:content-gate-handoff": "node apps/web/tests/browser/content-gate-handoff.playwright.mjs",
     "scenario:content-gate-memory": "node apps/web/tests/browser/content-gate-memory.playwright.mjs",
     "scenario:fullscreen-shell": "node apps/web/tests/browser/fullscreen-shell.playwright.mjs",
+    "scenario:offline-pwa": "node apps/web/tests/browser/offline-pwa.playwright.mjs",
+    "scenario:offline-pwa-lifecycle": "node apps/web/tests/browser/offline-pwa-lifecycle.playwright.mjs",
     "scenario:mobile-viewport": "node apps/web/tests/browser/mobile-viewport.playwright.mjs",
     "scenario:official-dungeon": "node apps/web/tests/browser/official-dungeon-restore.playwright.mjs",
     "scenario:official-dungeon-presentation": "node apps/web/tests/browser/official-dungeon-presentation.playwright.mjs",

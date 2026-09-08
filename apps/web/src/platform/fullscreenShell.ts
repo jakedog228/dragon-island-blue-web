@@ -90,7 +90,8 @@ export function fullscreenGuidance(result: FullscreenActionResult): FullscreenGu
       warning:
         "If Add to Home Screen is missing, open this page in Safari and install it there. " +
         "The installed app has separate offline saves and settings, so export any browser-local " +
-        "saves first. Asset archives are chosen again each time the app starts.",
+        "saves first. Open the installed app while connected and wait for offline startup to be ready. " +
+        "Play Offline once there to remember game content, and keep your IPA/ZIP downloaded in Files.",
     };
   }
   if (result.kind === "unavailable-guidance") {

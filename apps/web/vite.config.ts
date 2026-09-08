@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { defineConfig, type Plugin, type PreviewServer, type ViteDevServer } from "vite";
+import { offlineShell } from "./build/offlineShell.js";
 
 const webRoot = import.meta.dirname;
 const repositoryRoot = resolve(webRoot, "../..");
@@ -14,7 +15,7 @@ const localDownloadPaths = new Map<string, string>();
 
 export default defineConfig(({ command }) => ({
   publicDir: false,
-  plugins: [webAppShellResources(), assetArchiveResources(), ...(command === "serve" ? [developmentCsp()] : [])],
+  plugins: [webAppShellResources(), assetArchiveResources(), offlineShell(), ...(command === "serve" ? [developmentCsp()] : [])],
   server: {
     proxy: {
       "/api/game": {
