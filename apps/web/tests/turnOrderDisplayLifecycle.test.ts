@@ -8,6 +8,7 @@ import {
   type TurnOrderProvider,
 } from "../src/battle/turnOrderDisplay.js";
 import { turnOrderEntryY } from "../src/battle/displayShared.js";
+import { battlePortraitFrame, battleSpriteKey } from "../src/battle/encounter.js";
 
 vi.hoisted(() => {
   Object.defineProperty(globalThis, "navigator", {
@@ -115,6 +116,41 @@ async function harness(initial = ["fireCub", "gnoll", "snowCub"]): Promise<Harne
 }
 
 describe("TurnOrderDisplay battle-scene lifecycle", () => {
+  it.each([
+    { name: "Arkanis", shortType: "FireDragon", spriteFile: "MegaDragon.png", portrait: "FireDragon_icon.png" },
+    { name: "Quetzalcoatl", shortType: "LightDragon", spriteFile: "GreenDragon.png", portrait: "LightDragon_icon.png" },
+    { name: "scenario alias", shortType: "ScenarioDragon", originalShortType: "LightDragon", spriteFile: "LightDragon.png", portrait: "LightDragon_icon.png" },
+  ])("initializes $name using the species portrait, independently of field artwork", async (boss) => {
+    // World_4-1/4-2 author special field art with no corresponding MonsterPortraits frame.
+    // Exercise the real column initializer: a missing portrait rejects before battle input opens.
+    const setup = { ...boss, rendererData: { class: "CCSprite", spriteFile: boss.spriteFile } };
+    expect(battleSpriteKey(setup)).toBe(boss.spriteFile.replace(".png", "-hd"));
+    const ticker = new DisplayTicker();
+    const library = assets();
+    const baseAtlas = library.atlas.bind(library);
+    library.atlas = vi.fn(async (name: string) => name === "MonsterPortraits-hd"
+      ? { textures: { [boss.portrait]: Texture.EMPTY } } as Awaited<ReturnType<AssetLibrary["atlas"]>>
+      : baseAtlas(name));
+    const display = new TurnOrderDisplay({
+      assets: library,
+      ticker: ticker as unknown as Ticker,
+      provider: {
+        order: () => [boss.name],
+        delayOf: () => 0,
+        infoOf: () => ({ name: boss.name, portraitFrame: battlePortraitFrame(setup), hp: 100, maxHp: 100, team: 1 }),
+      },
+    });
+    try {
+      const initialized = display.initialize();
+      const assertion = expect(initialized).resolves.toBeUndefined();
+      await advance(ticker, frames(500) + 30);
+      await assertion;
+      expect(display.liveEntryState.map((entry) => entry.id)).toEqual([boss.name]);
+    } finally {
+      display.destroy({ children: true });
+    }
+  });
+
   it("uses the source 55pt origin rect and nearest-center arbitration in overlapping entries", () => {
     const entries = [
       { id: "front", team: 0 as const, x: 12, y: 34 },

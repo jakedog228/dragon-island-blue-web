@@ -4,7 +4,7 @@ import { SAVE_SLOT_IDS } from "@dib/save-protocol";
 export const GAME_PROTOCOL_VERSION = "game-protocol-v1" as const;
 export const PRESENTATION_EVENT_VERSION = "presentation-events-v1" as const;
 /** Immutable identity of the currently installed Official authority. */
-export const OFFICIAL_GAME_SIMULATION_VERSION = "official-game-v23" as const;
+export const OFFICIAL_GAME_SIMULATION_VERSION = "official-game-v24" as const;
 /** Historical Official authority retained only for explicit v11 parsing/migration. */
 export const OFFICIAL_GAME_V11_SIMULATION_VERSION = "official-game-v11" as const;
 /**
@@ -33,8 +33,10 @@ export const OFFICIAL_GAME_V20_SIMULATION_VERSION = "official-game-v20" as const
 export const OFFICIAL_GAME_V21_SIMULATION_VERSION = "official-game-v21" as const;
 /** Historical v22 authority retained unchanged for explicit parsing and migration. */
 export const OFFICIAL_GAME_V22_SIMULATION_VERSION = "official-game-v22" as const;
-/** Current authority: source Egg RNG sequence and release arithmetic. */
-export const OFFICIAL_GAME_V23_SIMULATION_VERSION = OFFICIAL_GAME_SIMULATION_VERSION;
+/** Historical authority: source Egg RNG sequence and release arithmetic. */
+export const OFFICIAL_GAME_V23_SIMULATION_VERSION = "official-game-v23" as const;
+/** Current authority: archive-neutral fixed encounter identity for reconnect. */
+export const OFFICIAL_GAME_V24_SIMULATION_VERSION = OFFICIAL_GAME_SIMULATION_VERSION;
 
 /**
  * The wire vocabulary: every command type an envelope is *allowed to name*. Membership here is not
@@ -2124,6 +2126,56 @@ export type OfficialGameProjectionBodyV23 = Omit<
   readonly __officialGameV23: true;
 };
 
+/** Archive-neutral fixed-encounter identity. No renderer or asset reference is admitted. */
+export const FixedBattleEncounterV1Schema = z.object({
+  source: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("world"), tableKey: boundedId }).strict(),
+    z.object({ kind: z.literal("dungeon"), encounterId: boundedId }).strict(),
+  ]),
+  members: z.array(z.object({
+    type: boundedId,
+    level: positiveInteger,
+    extraLivingArguments: z.object({
+      boss: z.boolean().optional(),
+      capturable: z.boolean().optional(),
+      allowCapture: z.boolean().optional(),
+      displayName: boundedId.optional(),
+    }).strict().optional(),
+  }).strict()).min(1).max(32),
+}).strict();
+export type FixedBattleEncounterV1 = z.infer<typeof FixedBattleEncounterV1Schema>;
+
+/** v24 retains mechanics and adds an exact archive-local encounter restoration boundary. */
+const officialGameProjectionV24Shape = {
+  ...officialGameProjectionV23Shape,
+  simulationVersion: z.literal(OFFICIAL_GAME_V24_SIMULATION_VERSION),
+  battle: battleViewV16.extend({ fixedEncounter: FixedBattleEncounterV1Schema.nullable() }).optional(),
+} as const;
+export const OfficialGameProjectionV24Schema = z.object(officialGameProjectionV24Shape)
+  .strict().superRefine((value, context) => {
+    validateProjectionDecisionIdentity(value, context);
+    const handoff = value.dungeonBattleReturn;
+    if (handoff !== undefined && (value.location.kind !== "dungeon" ||
+      value.dungeon === undefined || value.location.dungeonId !== handoff.dungeonId ||
+      value.location.floor !== handoff.floor || value.location.roomId !== handoff.roomId)) {
+      context.addIssue({ code: "custom", path: ["dungeonBattleReturn"],
+        message: "dungeon battle return must identify the projected dungeon location" });
+    }
+    const battle = value.battle;
+    const fixed = battle?.fixedEncounter;
+    if (battle !== undefined && fixed != null &&
+      (fixed.source.kind !== battle.scene.kind || fixed.members.length !== battle.teams[1].length ||
+       fixed.members.some((member, index) => member.type !== battle.teams[1][index]?.shortType ||
+         member.level !== battle.teams[1][index]?.level))) {
+      context.addIssue({ code: "custom", path: ["battle", "fixedEncounter"],
+        message: "fixed encounter must identify the committed enemy construction roster" });
+    }
+  });
+export type OfficialGameProjectionV24 = z.infer<typeof OfficialGameProjectionV24Schema>;
+export type OfficialGameProjectionBodyV24 = Omit<OfficialGameProjectionV24,
+  "slotId" | "revision" | "updatedAt" | "logicPackId" | "simulationVersion" | "trustTier"
+> & { readonly __officialGameV24: true };
+
 const eventBase = {
   seq: positiveInteger,
 };
@@ -2393,6 +2445,12 @@ export const OfficialGameCommandResultV23Schema = z.object({
   projection: OfficialGameProjectionV23Schema,
 }).strict().superRefine(validateCommandResultCursor);
 export type OfficialGameCommandResultV23 = z.infer<typeof OfficialGameCommandResultV23Schema>;
+
+export const OfficialGameCommandResultV24Schema = z.object({
+  ...gameCommandResultShape,
+  projection: OfficialGameProjectionV24Schema,
+}).strict().superRefine(validateCommandResultCursor);
+export type OfficialGameCommandResultV24 = z.infer<typeof OfficialGameCommandResultV24Schema>;
 
 export const GameErrorCodeV1Schema = z.enum([
   "AUTH_REQUIRED",

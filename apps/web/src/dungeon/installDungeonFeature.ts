@@ -1,3 +1,4 @@
+import { restoreOfficialDungeonRun } from "../authority/battleAppearance.js";
 import { Graphics, type Container } from "pixi.js";
 import type { DungeonZoneChange } from "@dib/gamedata/dungeon";
 import { loadChatDefinition, sourceTutorialTopic } from "@dib/gamedata/browser";
@@ -750,7 +751,7 @@ export class DungeonFeatureController<ShellMode extends string> {
     return Object.freeze({
       hasAuthoritativeRun: true,
       run: (() => {
-        const prepared = DungeonRuntimeController.restore(context, snapshot);
+        const prepared = restoreOfficialDungeonRun(context, snapshot);
         // Transient presentation state is copied while the replacement is detached. The commit
         // phase below must not call a mutating helper after the first live aggregate swap.
         if (this.run !== undefined) prepared.inheritTransientPresentationState(this.run);

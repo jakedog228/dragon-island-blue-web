@@ -1,5 +1,12 @@
 # Dragon Island Blue status
 
+## Boss battle fixes (2026-09-16)
+
+Arkanis and Quetzalcoatl now initialize with species portraits and their special field art.
+Automatic turns preserve the selected ability slot for the correct effects and sounds.
+Official v24 restores boss names and artwork locally on reconnect, including dungeon survivors,
+while preserving v23 mechanics and historical schemas. See [regression checks](boss-presentation-regressions.md).
+
 ## Current system map
 
 The project is a broad playable local reimplementation, not an emulator.  It imports an
@@ -50,7 +57,7 @@ no client-authored state snapshots. Tokens are self-service: `POST /api/game/acc
 per client address per five minutes with a username and a server-owned public-scoreboard
 preference (editable in-game under Options → Scores), and `pnpm game:cli invite` still issues
 them directly. The raw token is never stored either way. The shipped stack (`apps/game-server/src/cli.ts` installs the
-v23 descriptor over its immutable historical delegates) advertises 47 command types covering selected world, dungeon,
+v24 descriptor over its immutable historical delegates) advertises 47 command types covering selected world, dungeon,
 player, economy, Store, Arena, Tournament, quest, and Egg-hatch operations; anything else throws
 `CAPABILITY_UNSUPPORTED`. That is the count when operator data supplies every optional system —
 `dungeon.*`, `world.usePortal`, `tournament.*`, and `collection.claim` drop out of the advertised

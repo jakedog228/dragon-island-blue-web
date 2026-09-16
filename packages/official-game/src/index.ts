@@ -1,3 +1,5 @@
+import { officialEncounterResources, withoutEncounterRenderers } from "./encounterPresentation.js";
+export { officialEncounterResources, withoutEncounterRenderers } from "./encounterPresentation.js";
 import {
   loadDungeonData,
   loadCollectionCatalog,
@@ -76,6 +78,7 @@ import {
   OFFICIAL_GAME_V21_SIMULATION_VERSION,
   OFFICIAL_GAME_V22_SIMULATION_VERSION,
   OFFICIAL_GAME_V23_SIMULATION_VERSION,
+  OFFICIAL_GAME_V24_SIMULATION_VERSION,
   OFFICIAL_EGG_POOL_MAX_ENTRIES,
   CollectionClaimsV1Schema,
   CurrentLogicPackDescriptorV1Schema,
@@ -94,6 +97,7 @@ import {
   OfficialGameProjectionV21Schema,
   OfficialGameProjectionV22Schema,
   OfficialGameProjectionV23Schema,
+  OfficialGameProjectionV24Schema,
   SlotProjectionV1Schema,
   CurrentGameCommandV1Schema,
   type GameCommandV1,
@@ -114,6 +118,7 @@ import {
   type OfficialGameProjectionBodyV21,
   type OfficialGameProjectionBodyV22,
   type OfficialGameProjectionBodyV23,
+  type OfficialGameProjectionBodyV24,
   type OfficialGameProjectionV13,
   type OfficialGameProjectionV14,
   type OfficialGameProjectionV15,
@@ -125,6 +130,7 @@ import {
   type OfficialGameProjectionV21,
   type OfficialGameProjectionV22,
   type OfficialGameProjectionV23,
+  type OfficialGameProjectionV24,
   type OfficialGameProjectionV12,
   type OfficialDefeatDecisionV1,
   type OfficialDungeonBattleReturnV1,
@@ -9658,6 +9664,172 @@ export class OfficialGameV23Reducer implements GameCommandReducer<
   }
 }
 
+/** v24 preserves mechanics and projects archive-neutral fixed encounter identities. */
+export type OfficialGameStateV24 = OfficialGameStateV23;
+
+export function parseOfficialGameStateV24(
+  data: GameData,
+  quests: QuestCatalog,
+  value: unknown,
+  context: OfficialGameStateParseContext = {},
+): OfficialGameStateV24 {
+  if (canonicalJsonValue(value) !== canonicalJsonValue(withoutEncounterRenderers(value))) {
+    throw new Error("official v24 state contains encounter renderer data");
+  }
+  return parseOfficialGameStateV23(data, quests, value, {
+    ...context,
+    ...(context.dungeonResources === undefined ? {} : {
+      dungeonResources: officialEncounterResources(context.dungeonResources),
+    }),
+  });
+}
+
+export function cloneOfficialGameStateV24(
+  data: GameData,
+  quests: QuestCatalog,
+  state: unknown,
+  context: OfficialGameStateParseContext = {},
+): OfficialGameStateV24 {
+  return parseOfficialGameStateV24(data, quests, structuredClone(state), context);
+}
+
+export function parseOfficialGameProjectionV24(
+  value: unknown,
+): OfficialGameProjectionBodyV24 {
+  assertJsonSafeTree(value, "official v24 projection");
+  assertPlainObject(value, "official v24 projection");
+  for (const key of ["slotId", "revision", "updatedAt", "logicPackId", "simulationVersion", "trustTier"]) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      throw new Error(`official v24 projection body contains envelope field ${key}`);
+    }
+  }
+  const parsed = OfficialGameProjectionV24Schema.parse({
+    slotId: "slot-1",
+    revision: 1,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    logicPackId: `logic-v1:${"0".repeat(64)}`,
+    simulationVersion: OFFICIAL_GAME_V24_SIMULATION_VERSION,
+    trustTier: "official",
+    ...(value as Record<string, unknown>),
+  });
+  return structuredClone(
+    projectionBody(parsed as unknown as OfficialGameProjectionV24),
+  ) as unknown as OfficialGameProjectionBodyV24;
+}
+
+export function projectOfficialGameStateV24(
+  body: OfficialGameProjectionBodyV23,
+  state: OfficialGameStateV24,
+): OfficialGameProjectionBodyV24 {
+  const battle = state.battle;
+  let fixedEncounter = null;
+  if (battle?.encounter.kind === "world" && battle.encounter.generated.kind === "fixed") {
+    fixedEncounter = { source: { kind: "world", tableKey: battle.encounter.generated.tableKey },
+      members: battle.encounter.generated.monsters };
+  } else if (battle?.encounter.kind === "dungeon" && battle.encounter.encounter.kind === "fixed") {
+    fixedEncounter = { source: { kind: "dungeon", encounterId: battle.encounter.encounter.id },
+      members: battle.encounter.encounter.monsters };
+  }
+  return parseOfficialGameProjectionV24({ ...body,
+    ...(body.battle === undefined ? {} : { battle: { ...body.battle, fixedEncounter } }),
+  });
+}
+
+/** Preserve mechanics while removing legacy archive renderers from all retained encounters. */
+export function migrateOfficialGameV23ToV24(options: {
+  readonly data: GameData;
+  readonly quests: QuestCatalog;
+  readonly state: unknown;
+  readonly context?: OfficialGameStateParseContext;
+}): OfficialGameStateV24 {
+  return cloneOfficialGameStateV24(
+    options.data,
+    options.quests,
+    withoutEncounterRenderers(options.state),
+    options.context ?? {},
+  );
+}
+
+export function createOfficialGameV24LogicPackDescriptor(
+  logicPackId: LogicPackDescriptorV1["logicPackId"],
+  support: OfficialGameV12SupportReport,
+): LogicPackDescriptorV1 {
+  const v23 = createOfficialGameV23LogicPackDescriptor(logicPackId, support);
+  return Object.freeze(CurrentLogicPackDescriptorV1Schema.parse({
+    ...v23,
+    simulationVersion: OFFICIAL_GAME_V24_SIMULATION_VERSION,
+    capabilities: { ...v23.capabilities, commandTypes: [...v23.capabilities.commandTypes] },
+  }));
+}
+
+export class OfficialGameV24Reducer implements GameCommandReducer<
+  OfficialGameStateV24,
+  OfficialGameProjectionBodyV24
+> {
+  constructor(
+    private readonly v23: OfficialGameV23Reducer,
+    private readonly v23Pack: LogicPackDescriptorV1,
+  ) {
+    if (v23Pack.simulationVersion !== OFFICIAL_GAME_V23_SIMULATION_VERSION) {
+      throw new Error("OfficialGameV24Reducer requires the bound official-game-v23 delegate pack");
+    }
+  }
+
+  private requireV24Pack(pack: LogicPackDescriptorV1): void {
+    if (pack.simulationVersion !== OFFICIAL_GAME_V24_SIMULATION_VERSION) {
+      throw new GameServiceError(
+        "PACK_UNAVAILABLE",
+        "OfficialGameV24Reducer requires the official-game-v24 simulation pack",
+      );
+    }
+    if (pack.logicPackId !== this.v23Pack.logicPackId) {
+      throw new GameServiceError(
+        "PACK_UNAVAILABLE",
+        "official v24 pack does not share its bound v23 rules identity",
+      );
+    }
+  }
+
+  validatePersistedRecord(
+    record: AuthoritativeRecordValidationInput<OfficialGameStateV24, OfficialGameProjectionBodyV24>,
+  ): void {
+    try {
+      const expected = this.projectPersistedState(record.state);
+      const actual = projectionBody(record.projection);
+      if (canonicalJsonValue(expected) !== canonicalJsonValue(actual)) {
+        throw new Error("official v24 persisted projection disagrees with its restored state");
+      }
+      parseOfficialGameProjectionV24(actual);
+      if (record.projection.simulationVersion !== OFFICIAL_GAME_V24_SIMULATION_VERSION) {
+        throw new Error("official v24 projection has the wrong simulation version");
+      }
+    } catch (error) {
+      if (error instanceof GameServiceError) throw error;
+      throw new GameServiceError(
+        "STATE_CORRUPT",
+        error instanceof Error ? error.message : "official v24 persisted record is invalid",
+      );
+    }
+  }
+
+  projectPersistedState(state: OfficialGameStateV24): OfficialGameProjectionBodyV24 {
+    return projectOfficialGameStateV24(this.v23.projectPersistedState(state), state);
+  }
+
+  apply(
+    context: CommandReducerContext<OfficialGameStateV24>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV24, OfficialGameProjectionBodyV24> {
+    this.requireV24Pack(context.pack);
+    const result = this.v23.apply({ ...context, pack: this.v23Pack }, command);
+    return {
+      ...result,
+      state: result.state,
+      projection: projectOfficialGameStateV24(result.projection, result.state),
+    };
+  }
+}
+
 function replaceOfficialV12State(
   prior: OfficialGameStateV12,
   pendingEgg: OfficialEggContinuation | undefined,
@@ -10735,7 +10907,8 @@ function projectionBody<
     | OfficialGameProjectionV20
     | OfficialGameProjectionV21
     | OfficialGameProjectionV22
-    | OfficialGameProjectionV23,
+    | OfficialGameProjectionV23
+    | OfficialGameProjectionV24,
 >(
   projection: P,
 ): Omit<P, "slotId" | "revision" | "updatedAt" | "logicPackId" | "simulationVersion" | "trustTier"> {

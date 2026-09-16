@@ -1333,3 +1333,25 @@ describe("BattleNode turn-order admission order", () => {
     expect(h.turnOrder.notifyBattleTimePassed).not.toHaveBeenCalled();
   });
 });
+
+
+describe("automatic turn instance presentation", () => {
+  it.each([0, 1] as const)("forwards the selected job slot for team %i AI", async (team) => {
+    const lifecycle = { disposed: false };
+    const resolved = { actorId: "dragon", abilityPath: "Offensive.Attack", slot: "usable4", tier: 4, events: [] };
+    const playTurn = vi.fn(async () => { lifecycle.disposed = true; });
+    const harness = {
+      lifecycle, statusText: { hasText: false, waitForAcknowledgment: async () => undefined, clearStatusText: vi.fn() },
+      session: { events: [], advanceForPresentation: () => ({ type: "awaitingEnemy", actorId: "dragon", forcedLooseTurn: false }),
+        teamOf: () => team, submitEnemyAction: () => resolved },
+      applyStatusOverlayEvents: vi.fn(), setPresentationState: vi.fn(), awaitTimeDelay: async () => undefined,
+      turnOrder: { initialize: async () => undefined },
+      friendlyDisplay: { notifyPlayerTurnStarted: vi.fn(), popForward: async () => undefined },
+      startPresentationTask: vi.fn(), playTurn,
+    };
+    const loop = (BattleNode.prototype as unknown as { loop(this: object): Promise<void> }).loop;
+    await loop.call(harness);
+    expect(playTurn).toHaveBeenCalledWith([], "dragon", "Offensive.Attack", 4,
+      team === 0 ? "none" : "enemyPulse", "usable4");
+  });
+});

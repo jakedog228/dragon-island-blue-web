@@ -6,6 +6,7 @@ const corpusTests = [
   "tests/abilityAnimationCensus.test.ts",
   "tests/abilityInfo.test.ts",
   "tests/abilityRendererDispatch.test.ts",
+  "tests/battleAppearance.test.ts",
   "tests/blackMarketNotReadyPopup.test.ts",
   "tests/characterProgressionModel.test.ts",
   "tests/dungeonCorpus.test.ts",

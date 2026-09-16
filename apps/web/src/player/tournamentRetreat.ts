@@ -3,6 +3,7 @@ import {
   OFFICIAL_GAME_V21_SIMULATION_VERSION,
   OFFICIAL_GAME_V22_SIMULATION_VERSION,
   OFFICIAL_GAME_V23_SIMULATION_VERSION,
+  OFFICIAL_GAME_V24_SIMULATION_VERSION,
 } from "@dib/game-protocol";
 
 /**
@@ -55,7 +56,8 @@ export async function runOfficialTournamentSaveMeReconnect(options: {
       options.simulationVersion !== OFFICIAL_GAME_V20_SIMULATION_VERSION &&
       options.simulationVersion !== OFFICIAL_GAME_V21_SIMULATION_VERSION &&
       options.simulationVersion !== OFFICIAL_GAME_V22_SIMULATION_VERSION &&
-      options.simulationVersion !== OFFICIAL_GAME_V23_SIMULATION_VERSION
+      options.simulationVersion !== OFFICIAL_GAME_V23_SIMULATION_VERSION &&
+      options.simulationVersion !== OFFICIAL_GAME_V24_SIMULATION_VERSION
     ) ||
     sceneKind !== "tournament"
   ) {

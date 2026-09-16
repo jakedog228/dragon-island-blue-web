@@ -1,3 +1,4 @@
+import { officialReconnectEnemyTeam } from "./authority/battleAppearance.js";
 // Keep Pixi's deterministic renderer implementations installed before any renderer construction.
 // Full-trust Offline mods now deliberately allow same-realm evaluation; this import still avoids
 // swapping Pixi implementations depending on whether a profile happens to be selected.
@@ -3910,7 +3911,10 @@ async function boot(options: BootOptions = {}): Promise<void> {
           : { breederXpBonus: reconnectBattle.breederXpBonus }),
         ...(reconnectWinChat === undefined ? {} : { winChat: reconnectWinChat }),
         playerTeam: replay.teams[0].map((member) => ({ ...member })),
-        enemyTeam: replay.teams[1].map((member) => ({ ...member })),
+        enemyTeam: officialReconnectEnemyTeam(reconnectBattle, replay.teams[1], {
+          world: (worldId) => worldData?.name === worldId ? worldData : undefined,
+          dungeon: reconnectDungeonDefinition,
+        }, officialSlot?.coordinator.projection.dungeon?.run.current.route.floor),
       }, { owner: "reconnect", authority: "official" });
       await preloadWorldEncounter(reconnectEncounter);
       const rng = replayableRng(reconnectBattle.randomDraws);

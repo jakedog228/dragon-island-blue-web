@@ -3,6 +3,11 @@
 Runbook for standing up `apps/game-server` (the token-gated authoritative service) and `apps/web`
 (the browser client) behind TLS on a single host.
 
+The current release uses `official-game-v24`. Deploy matching web and server revisions.
+The CLI migration preserves the newest prior state, including v23 active battles, and adds
+archive-neutral fixed encounter identity for local artwork restoration. Older schemas and
+receipts remain immutable; no player upload or resource transfer is needed.
+
 ---
 
 ## Topology

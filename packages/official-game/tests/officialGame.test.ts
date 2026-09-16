@@ -77,6 +77,7 @@ import {
   createOfficialGameV21LogicPackDescriptor,
   createOfficialGameV22LogicPackDescriptor,
   createOfficialGameV23LogicPackDescriptor,
+  createOfficialGameV24LogicPackDescriptor,
   createOfficialGameV12Support,
   deriveOfficialDungeonTerminalSurvivors,
   OfficialGameV12Aggregate,
@@ -92,6 +93,7 @@ import {
   OfficialGameV21Reducer,
   OfficialGameV22Reducer,
   OfficialGameV23Reducer,
+  OfficialGameV24Reducer,
   OfficialGameReducer,
   allocateOfficialContinuationIdentity,
   assertOfficialGameV12CommandAdmitted,
@@ -108,6 +110,10 @@ import {
   migrateOfficialGameV20ToV21,
   migrateOfficialGameV21ToV22,
   migrateOfficialGameV22ToV23,
+  migrateOfficialGameV23ToV24,
+  parseOfficialGameStateV24,
+  officialEncounterResources,
+  withoutEncounterRenderers,
   parseOfficialGameProjectionV12,
   parseOfficialGameStateV11,
   parseOfficialGameStateV1,
@@ -11054,6 +11060,14 @@ describe("Task 6 immutable v11 to v12 migration", () => {
  * this is the server half.
  */
 describe("authoritative content boundary", () => {
+  const neutralWorlds = withoutEncounterRenderers(allWorlds);
+  const neutralOptions = { data, world: neutralWorlds.find((w) => w.name === world.name)!,
+    worlds: neutralWorlds, resources: officialEncounterResources(source), quests, startTownId: "First_City" };
+  const neutralSupport = validateOfficialGameSupport(neutralOptions);
+  const neutralLegacy = new OfficialGameReducer({ ...neutralOptions, support: neutralSupport, random: () => 0 });
+  const neutralV12Support = createOfficialGameV12Support({ support: neutralSupport,
+    collectionCatalog: validateOfficialCollectionCatalog(completeCollectionCatalog, data, neutralSupport) });
+
   function v12StateFor(active: OfficialGameStateV1): OfficialGameStateV12 {
     return parseOfficialGameStateV12(data, quests, {
       ...active,
@@ -11069,6 +11083,82 @@ describe("authoritative content boundary", () => {
   function v13Reducer(): OfficialGameV13Reducer {
     return new OfficialGameV13Reducer(v12Reducer(), completeV12Pack);
   }
+
+  it.each([
+    { label: "world", active: sourceWorldActiveBattle },
+    { label: "arena", active: sourceArenaActiveBattle },
+    { label: "dungeon", active: () => officialDungeonBattleFixture(100, "fixed").started.state },
+  ])("v24 restores $label encounter identity without changing v23 state or projection", ({ active }) => {
+    const prior = new OfficialGameV23Reducer(v22Reducer(), completeV22Pack);
+    const current = new OfficialGameV24Reducer(prior, completeV23Pack);
+    const original = v12StateFor(active());
+    const state = migrateOfficialGameV23ToV24({ data, quests, state: original,
+      context: { dungeonResources: source } });
+    expect(state).toEqual(original);
+    const before = prior.projectPersistedState(state);
+    const after = current.projectPersistedState(state);
+    expect(before.battle).not.toHaveProperty("fixedEncounter");
+    expect(after.battle).toBeDefined();
+    expect(after.battle!.fixedEncounter).toEqual(state.battle!.encounter.kind === "world"
+      ? { source: { kind: "world", tableKey: state.battle!.encounter.generated.tableKey }, members: state.battle!.encounter.generated.monsters }
+      : state.battle!.encounter.kind === "dungeon"
+        ? { source: { kind: "dungeon", encounterId: state.battle!.encounter.encounter.id }, members: state.battle!.encounter.encounter.monsters }
+        : null);
+    const { fixedEncounter: _fixed, ...oldBattle } = after.battle!;
+    expect({ ...after, battle: oldBattle }).toEqual(before);
+    expect(findPresentationLeaks(after)).toEqual([]);
+    expect(prior.projectPersistedState(state)).toEqual(before);
+    expect(createOfficialGameV24LogicPackDescriptor(completeV23Pack.logicPackId, completeV12Support).simulationVersion).toBe("official-game-v24");
+  });
+
+  it.each(["Arkanis", "Quetzalcoatl"])("v24 restores real %s without persisting renderer dictionaries", (name) => {
+    const bossWorld = allWorlds.find((world) => world.pointsOfInterest.some((poi) =>
+      poi.randomPopulators.some((p) => p.fixedEncounters.some((e) =>
+        e.monsters.some((m) => m.extraLivingArguments?.displayName === name)))))!;
+    const poi = bossWorld.pointsOfInterest.find((poi) => poi.randomPopulators.some((p) =>
+      p.fixedEncounters.some((e) => e.monsters.some((m) => m.extraLivingArguments?.displayName === name))))!;
+    const created = reduceWith(completeReducer, undefined, { type: "slot.create", starterElement: "Water" });
+    const party = new WorldTripParty(data, [member("boss-test", "LightDragon", 150)], 11);
+    const original = v12StateFor(reduceWith(completeReducer, {
+      ...created.state, party: party.stateSnapshot(),
+      profile: new PlayerProfile({ ...sourceNewGameProfileDefaults("BlueBabyDragon"),
+        monsterPartyLevels: [150], tutorialFlags: [...completeSupport.tutorialFlags] }, party).stateSnapshot(),
+      location: { kind: "world", worldId: bossWorld.name, poiId: poi.name },
+      world: { ...created.state.world!, worldId: bossWorld.name, currentPoiId: poi.name },
+    }, { type: "world.navigate", targetPoiId: poi.name }).state);
+    expect(JSON.stringify(original)).toContain('"rendererData"');
+    const migrated = migrateOfficialGameV23ToV24({ data, quests, state: original });
+    expect(migrated).toEqual(withoutEncounterRenderers(original));
+    const current = new OfficialGameV24Reducer(new OfficialGameV23Reducer(v22Reducer(neutralLegacy, neutralV12Support), completeV22Pack), completeV23Pack);
+    const projection = current.projectPersistedState(migrated);
+    expect(projection.battle!.fixedEncounter!.members[0]!.extraLivingArguments!.displayName).toBe(name);
+    expect(findPresentationLeaks({ state: migrated, projection })).toEqual([]);
+  });
+
+  it.each([
+    ["Dungeon_15.plist", 100], ["Dungeon_15b.plist", 220],
+  ] as const)("v24 removes Fafnir renderers from persisted %s floor %s and restores strictly", (sourceFile, floor) => {
+    const original = v12StateFor(officialDungeonBattleFixture(150, "fixed", undefined, {
+      dungeonFile: "Dungeon_15.plist", dungeonRoute: { typeName: "Cave", sourceFile, floor },
+      shortTypes: ["LightDragon", "FireDragon", "BoneDragon"],
+    }).started.state);
+    expect(JSON.stringify(original)).toContain('"rendererData"');
+    const migrated = migrateOfficialGameV23ToV24({ data, quests, state: original,
+      context: { dungeonResources: source } });
+    expect(migrated).toEqual(withoutEncounterRenderers(original));
+    expect(findPresentationLeaks(migrated)).toEqual([]);
+    const current = new OfficialGameV24Reducer(new OfficialGameV23Reducer(v22Reducer(neutralLegacy, neutralV12Support), completeV22Pack), completeV23Pack);
+    const projection = current.projectPersistedState(migrated);
+    expect(projection.battle!.fixedEncounter!.members[0]!.extraLivingArguments!.displayName).toBe("Fafnir");
+    expect(findPresentationLeaks(projection)).toEqual([]);
+    expect(parseOfficialGameStateV24(data, quests, migrated, {
+      dungeonResources: officialEncounterResources(source),
+    })).toEqual(migrated);
+    expect(() => parseOfficialGameStateV24(data, quests, original, {
+      dungeonResources: source,
+    })).toThrow("encounter renderer data");
+    expect(JSON.stringify(original)).toContain('"rendererData"');
+  });
 
   it("v16 projects an active world battle's semantic win chat without its portrait", () => {
     const sourceState = sourceWorldActiveBattle();

@@ -1239,7 +1239,7 @@ function buildEncounterData(
     const { fixed, completionKey } = accepted;
     const monsters = Object.freeze(fixed.monsters.map((spec) => Object.freeze({
       type: resolveMonsterType(spec.type, context.monsterTypes, rng),
-      level: fixedMonsterLevel(challenge, populator.levelScalor, spec.levelScalor),
+      level: dungeonFixedMonsterLevel(challenge, populator.levelScalor, spec.levelScalor),
       ...(spec.extraLivingArguments === undefined ? {} : {
         extraLivingArguments: cloneJsonSafeRecord(
           spec.extraLivingArguments,
@@ -1425,7 +1425,7 @@ function monsterLevel(
   return variance >= 2 ? Math.max(1, base - variance + rng.intBelow(variance * 2)) : base;
 }
 
-function fixedMonsterLevel(
+export function dungeonFixedMonsterLevel(
   challenge: number,
   populatorScalor: number,
   monsterScalor: number,

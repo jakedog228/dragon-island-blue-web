@@ -1189,6 +1189,7 @@ export class BattleNode {
           resolved.abilityPath,
           resolved.tier,
           earlyFriendlyPopForward && motion === "friendlyPopForward" ? "none" : motion,
+          resolved.slot,
         );
         if (this.battleEscaped) {
           await this.onBattleRetreated();

@@ -15,6 +15,7 @@ import {
   OfficialGameCommandResultV21Schema,
   OfficialGameCommandResultV22Schema,
   OfficialGameCommandResultV23Schema,
+  OfficialGameCommandResultV24Schema,
   OfficialGameProjectionV12Schema,
   OfficialGameProjectionV13Schema,
   OfficialGameProjectionV14Schema,
@@ -27,6 +28,7 @@ import {
   OfficialGameProjectionV21Schema,
   OfficialGameProjectionV22Schema,
   OfficialGameProjectionV23Schema,
+  OfficialGameProjectionV24Schema,
   OFFICIAL_GAME_V12_SIMULATION_VERSION,
   LogicPackDescriptorV1Schema,
   SlotProjectionV1Schema,
@@ -46,6 +48,7 @@ import {
   OFFICIAL_GAME_V21_SIMULATION_VERSION,
   OFFICIAL_GAME_V22_SIMULATION_VERSION,
   OFFICIAL_GAME_V23_SIMULATION_VERSION,
+  OFFICIAL_GAME_V24_SIMULATION_VERSION,
   type OfficialGameCommandResultV12,
   type OfficialGameCommandResultV13,
   type OfficialGameCommandResultV14,
@@ -58,6 +61,7 @@ import {
   type OfficialGameCommandResultV21,
   type OfficialGameCommandResultV22,
   type OfficialGameCommandResultV23,
+  type OfficialGameCommandResultV24,
   type OfficialGameProjectionBodyV12,
   type OfficialGameProjectionBodyV13,
   type OfficialGameProjectionBodyV14,
@@ -70,6 +74,7 @@ import {
   type OfficialGameProjectionBodyV21,
   type OfficialGameProjectionBodyV22,
   type OfficialGameProjectionBodyV23,
+  type OfficialGameProjectionBodyV24,
   type OfficialGameProjectionV12,
   type OfficialGameProjectionV13,
   type OfficialGameProjectionV14,
@@ -82,6 +87,7 @@ import {
   type OfficialGameProjectionV21,
   type OfficialGameProjectionV22,
   type OfficialGameProjectionV23,
+  type OfficialGameProjectionV24,
   type SlotProjectionV1,
   type UnsequencedPresentationEventV1,
 } from "@dib/game-protocol";
@@ -104,11 +110,14 @@ export type ProjectionBody =
   | OfficialGameProjectionBodyV20
   | OfficialGameProjectionBodyV21
   | OfficialGameProjectionBodyV22
-  | OfficialGameProjectionBodyV23;
+  | OfficialGameProjectionBodyV23
+  | OfficialGameProjectionBodyV24;
 // v13+ bodies share their core shape; their envelope version is added only after reduction. Keep
 // their correlated wire as a union while selecting the exact parser from the installed pack.
 export type ProjectionForBody<P extends ProjectionBody> = P extends OfficialGameProjectionBodyV13
-  ? P extends OfficialGameProjectionBodyV23
+  ? P extends OfficialGameProjectionBodyV24
+    ? OfficialGameProjectionV24
+    : P extends OfficialGameProjectionBodyV23
     ? OfficialGameProjectionV23
     : P extends OfficialGameProjectionBodyV22
     ? OfficialGameProjectionV22
@@ -123,7 +132,9 @@ export type ProjectionForBody<P extends ProjectionBody> = P extends OfficialGame
     ? OfficialGameProjectionV12
     : SlotProjectionV1;
 export type CommandResultForBody<P extends ProjectionBody> = P extends OfficialGameProjectionBodyV13
-  ? P extends OfficialGameProjectionBodyV23
+  ? P extends OfficialGameProjectionBodyV24
+    ? OfficialGameCommandResultV24
+    : P extends OfficialGameProjectionBodyV23
     ? OfficialGameCommandResultV23
     : P extends OfficialGameProjectionBodyV22
     ? OfficialGameCommandResultV22
@@ -322,6 +333,7 @@ export class AuthoritativeGameService<S, P extends ProjectionBody = ProjectionBo
       && pack.simulationVersion !== OFFICIAL_GAME_V21_SIMULATION_VERSION
       && pack.simulationVersion !== OFFICIAL_GAME_V22_SIMULATION_VERSION
       && pack.simulationVersion !== OFFICIAL_GAME_V23_SIMULATION_VERSION
+      && pack.simulationVersion !== OFFICIAL_GAME_V24_SIMULATION_VERSION
     ) {
       throw new GameServiceError(
         "PACK_UNAVAILABLE",
@@ -581,6 +593,10 @@ export class AuthoritativeGameService<S, P extends ProjectionBody = ProjectionBo
         const parsed = OfficialGameProjectionV23Schema.parse(value);
         return parsed as ProjectionForBody<P>;
       }
+      if (this.pack.simulationVersion === OFFICIAL_GAME_V24_SIMULATION_VERSION) {
+        const parsed = OfficialGameProjectionV24Schema.parse(value);
+        return parsed as ProjectionForBody<P>;
+      }
       if (this.pack.simulationVersion === OFFICIAL_GAME_V22_SIMULATION_VERSION) {
         const parsed = OfficialGameProjectionV22Schema.parse(value);
         return parsed as ProjectionForBody<P>;
@@ -640,6 +656,10 @@ export class AuthoritativeGameService<S, P extends ProjectionBody = ProjectionBo
     try {
       if (this.pack.simulationVersion === OFFICIAL_GAME_V23_SIMULATION_VERSION) {
         const parsed = OfficialGameCommandResultV23Schema.parse(value);
+        return parsed as CommandResultForBody<P>;
+      }
+      if (this.pack.simulationVersion === OFFICIAL_GAME_V24_SIMULATION_VERSION) {
+        const parsed = OfficialGameCommandResultV24Schema.parse(value);
         return parsed as CommandResultForBody<P>;
       }
       if (this.pack.simulationVersion === OFFICIAL_GAME_V22_SIMULATION_VERSION) {

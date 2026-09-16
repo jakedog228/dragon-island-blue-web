@@ -7,6 +7,22 @@ function recordOf(v: unknown): Record<string, unknown> {
   return v !== null && typeof v === "object" ? (v as Record<string, unknown>) : {};
 }
 
+function instanceForUse(gd: GameData, shortType: string, use: { slot?: string; abilityPath: string }) {
+  const refs = gd.jobAbilitiesOrEmpty(shortType);
+  if (use.slot !== undefined) {
+    const ref = refs.find((candidate) => candidate.slot === use.slot);
+    if (ref === undefined || ref.type !== use.abilityPath) {
+      throw new Error(`Invalid ability instance ${shortType}.${use.slot}: ${use.abilityPath}`);
+    }
+    return ref;
+  }
+  const matches = refs.filter((ref) => ref.type === use.abilityPath);
+  if (matches.length > 1) {
+    throw new Error(`Ambiguous ability instance ${shortType}: ${use.abilityPath}; slot required`);
+  }
+  return matches[0];
+}
+
 /** The soundTable's tier rule mirrors pickTier: highest authored key <= tier, else lowest. */
 export function sfxForTier(soundTable: Record<string, unknown>, tier: number | undefined): string | undefined {
   const keys = Object.keys(soundTable).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
@@ -30,10 +46,7 @@ export function soundTableForUse(
   shortType: string,
   use: { slot?: string; abilityPath: string },
 ): Record<string, unknown> {
-  const refs = gd.jobAbilitiesOrEmpty(shortType);
-  const ref =
-    (use.slot !== undefined ? refs.find((r) => r.slot === use.slot) : undefined) ??
-    refs.find((r) => r.type === use.abilityPath);
+  const ref = instanceForUse(gd, shortType, use);
   const argTable = ref?.arguments["soundTable"];
   return recordOf(argTable ?? gd.ability(use.abilityPath).raw["soundTable"]);
 }
@@ -55,10 +68,7 @@ export function attackTypeForUse(
   shortType: string,
   use: { slot?: string; abilityPath: string },
 ): string | undefined {
-  const refs = gd.jobAbilitiesOrEmpty(shortType);
-  const ref =
-    (use.slot !== undefined ? refs.find((r) => r.slot === use.slot) : undefined) ??
-    refs.find((r) => r.type === use.abilityPath);
+  const ref = instanceForUse(gd, shortType, use);
   if (!ref) return undefined;
   const common = recordOf(ref.arguments["commonComponentArguments"]);
   const attackType = common["attackType"];

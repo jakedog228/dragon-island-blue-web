@@ -23,6 +23,7 @@ import {
   OFFICIAL_GAME_V20_SIMULATION_VERSION,
   OFFICIAL_GAME_V21_SIMULATION_VERSION,
   OFFICIAL_GAME_V22_SIMULATION_VERSION,
+  OFFICIAL_GAME_V23_SIMULATION_VERSION,
   OfficialGameCommandResultV12Schema,
   OfficialGameCommandResultV13Schema,
   OfficialGameCommandResultV14Schema,
@@ -35,6 +36,7 @@ import {
   OfficialGameCommandResultV21Schema,
   OfficialGameCommandResultV22Schema,
   OfficialGameCommandResultV23Schema,
+  OfficialGameCommandResultV24Schema,
   OfficialGameProjectionV12Schema,
   OfficialGameProjectionV13Schema,
   OfficialGameProjectionV14Schema,
@@ -47,8 +49,9 @@ import {
   OfficialGameProjectionV21Schema,
   OfficialGameProjectionV22Schema,
   OfficialGameProjectionV23Schema,
+  OfficialGameProjectionV24Schema,
   SlotProjectionV1Schema,
-  type OfficialGameProjectionBodyV23,
+  type OfficialGameProjectionBodyV24,
 } from "@dib/game-protocol";
 import {
   OfficialGameV12Reducer,
@@ -61,6 +64,7 @@ import {
   OfficialGameV21Reducer,
   OfficialGameV22Reducer,
   OfficialGameV23Reducer,
+  OfficialGameV24Reducer,
   createOfficialGameV12LogicPackDescriptor,
   createOfficialGameV15LogicPackDescriptor,
   createOfficialGameV16LogicPackDescriptor,
@@ -71,6 +75,7 @@ import {
   createOfficialGameV21LogicPackDescriptor,
   createOfficialGameV22LogicPackDescriptor,
   createOfficialGameV23LogicPackDescriptor,
+  createOfficialGameV24LogicPackDescriptor,
   createOfficialGameV12Support,
   migrateOfficialGameV11ToV12,
   migrateOfficialGameV12ToV13,
@@ -84,11 +89,13 @@ import {
   migrateOfficialGameV20ToV21,
   migrateOfficialGameV21ToV22,
   migrateOfficialGameV22ToV23,
+  migrateOfficialGameV23ToV24,
   OfficialGameReducer,
-  parseOfficialGameStateV23,
+  parseOfficialGameStateV24,
+  officialEncounterResources,
   validateOfficialCollectionCatalog,
   validateOfficialGameSupport,
-  type OfficialGameStateV23,
+  type OfficialGameStateV24,
 } from "@dib/official-game";
 import {
   ConfigurationError,
@@ -163,7 +170,7 @@ async function serve(): Promise<void> {
   const identity = await compileExtractedLogicPackIdentityV1(extractedData);
   const data = loadGameData(extractedData);
   const worldName = config.startWorld;
-  const mechanicalSource: WorldResourceSource = {
+  const legacySource: WorldResourceSource = {
     has: (path) => path.endsWith(".plist")
       ? existsSync(resolve(extractedData, `${path.slice(0, -".plist".length)}.json`)) ||
         /-hd\.plist$/.test(path)
@@ -176,6 +183,8 @@ async function serve(): Promise<void> {
       )) as unknown;
     },
   };
+  // Keep original dictionaries for historical validation; only current rules retain neutral tuples.
+  const mechanicalSource = officialEncounterResources(legacySource);
   const world = loadWorldData(
     mechanicalSource,
     worldName,
@@ -210,7 +219,7 @@ async function serve(): Promise<void> {
     support,
     collectionCatalog: collectionProof,
   });
-  // The historical delegate descriptors are internal rules identities. Only the current v23
+  // The historical delegate descriptors are internal rules identities. Only the current v24
   // `pack` is advertised, persisted, or sent to a player.
   const v12Pack = createOfficialGameV12LogicPackDescriptor(identity.logicPackId, v12Support);
   const v15Pack = createOfficialGameV15LogicPackDescriptor(identity.logicPackId, v12Support);
@@ -221,7 +230,8 @@ async function serve(): Promise<void> {
   const v20Pack = createOfficialGameV20LogicPackDescriptor(identity.logicPackId, v12Support);
   const v21Pack = createOfficialGameV21LogicPackDescriptor(identity.logicPackId, v12Support);
   const v22Pack = createOfficialGameV22LogicPackDescriptor(identity.logicPackId, v12Support);
-  const pack = createOfficialGameV23LogicPackDescriptor(identity.logicPackId, v12Support);
+  const v23Pack = createOfficialGameV23LogicPackDescriptor(identity.logicPackId, v12Support);
+  const pack = createOfficialGameV24LogicPackDescriptor(identity.logicPackId, v12Support);
   const legacyReducer = new OfficialGameReducer({
     data,
     world,
@@ -243,11 +253,15 @@ async function serve(): Promise<void> {
   const v20Reducer = new OfficialGameV20Reducer(v19Reducer, v19Pack);
   const v21Reducer = new OfficialGameV21Reducer(v20Reducer, v20Pack);
   const v22Reducer = new OfficialGameV22Reducer(v21Reducer, v21Pack);
-  const reducer = new OfficialGameV23Reducer(v22Reducer, v22Pack);
-  const migrationContext = { dungeonResources: mechanicalSource } as const;
-  const migrateV22StateToCurrent = (state: unknown) => migrateOfficialGameV22ToV23({
+  const v23Reducer = new OfficialGameV23Reducer(v22Reducer, v22Pack);
+  const reducer = new OfficialGameV24Reducer(v23Reducer, v23Pack);
+  const migrationContext = { dungeonResources: legacySource } as const;
+  const migrateV23StateToCurrent = (state: unknown) => migrateOfficialGameV23ToV24({
     data, quests, state, context: migrationContext,
   });
+  const migrateV22StateToCurrent = (state: unknown) => migrateV23StateToCurrent(migrateOfficialGameV22ToV23({
+    data, quests, state, context: migrationContext,
+  }));
   const migrateV21StateToCurrent = (state: unknown) => migrateV22StateToCurrent(
     migrateOfficialGameV21ToV22({ data, quests, state, context: migrationContext }),
   );
@@ -268,17 +282,17 @@ async function serve(): Promise<void> {
   );
   // Bound to its own name rather than constructed inline: the scoreboard reads persisted
   // projections directly, because the service's slot listing deliberately summarises without them.
-  const store = new FileAuthoritativeSlotStore<OfficialGameStateV23, OfficialGameProjectionBodyV23>(
+  const store = new FileAuthoritativeSlotStore<OfficialGameStateV24, OfficialGameProjectionBodyV24>(
     {
       dataDirectory,
       logicPackId: pack.logicPackId,
       simulationVersion: pack.simulationVersion,
       worldId: world.name,
-      parseState: (value) => parseOfficialGameStateV23(data, quests, value, {
+      parseState: (value) => parseOfficialGameStateV24(data, quests, value, {
         dungeonResources: mechanicalSource,
       }),
-      parseProjection: (value) => OfficialGameProjectionV23Schema.parse(value),
-      parseCommandResult: (value) => OfficialGameCommandResultV23Schema.parse(value),
+      parseProjection: (value) => OfficialGameProjectionV24Schema.parse(value),
+      parseCommandResult: (value) => OfficialGameCommandResultV24Schema.parse(value),
       validateRecord: (record) => reducer.validatePersistedRecord(record),
       // Immutable source namespaces are retained after each upgrade and the store selects the
       // first source that exists. Keep this literal easy to review chronologically, then consult it
@@ -287,7 +301,7 @@ async function serve(): Promise<void> {
         legacySimulationMigration({
           sourceSimulationVersion: OFFICIAL_GAME_V11_SIMULATION_VERSION,
           // Each source declares the shape it was actually written in. The current-namespace
-          // parsers above are v23 and reject every earlier projection, so reusing them here would
+          // parsers above are v24 and reject every earlier projection, so reusing them here would
           // strand the very accounts the migration exists to carry forward.
           parseSourceProjection: (value) => SlotProjectionV1Schema.parse(value),
           parseSourceCommandResult: (value) => GameCommandResultV1Schema.parse(value),
@@ -300,15 +314,15 @@ async function serve(): Promise<void> {
                 quests,
                 state,
                 projection,
-                context: { dungeonResources: mechanicalSource },
+                context: { dungeonResources: legacySource },
               }),
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const migratedV14 = migrateOfficialGameV13ToV14({
               data,
               quests,
               state: migratedV13,
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const migratedV15 = migrateOfficialGameV14ToV15({
               data,
@@ -316,13 +330,13 @@ async function serve(): Promise<void> {
               state: migratedV14,
               updatedAt,
               ...(lastLocationCommand === undefined ? {} : { lastLocationCommand }),
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const migratedState = migrateOfficialGameV15ToV16({
               data,
               quests,
               state: migratedV15,
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const currentState = migrateV16StateToCurrent(migratedState);
             return {
@@ -340,13 +354,13 @@ async function serve(): Promise<void> {
               data,
               quests,
               state,
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const migratedV14 = migrateOfficialGameV13ToV14({
               data,
               quests,
               state: migratedV13,
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const migratedV15 = migrateOfficialGameV14ToV15({
               data,
@@ -354,13 +368,13 @@ async function serve(): Promise<void> {
               state: migratedV14,
               updatedAt,
               ...(lastLocationCommand === undefined ? {} : { lastLocationCommand }),
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const migratedState = migrateOfficialGameV15ToV16({
               data,
               quests,
               state: migratedV15,
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const currentState = migrateV16StateToCurrent(migratedState);
             return {
@@ -378,7 +392,7 @@ async function serve(): Promise<void> {
               data,
               quests,
               state,
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const migratedV15 = migrateOfficialGameV14ToV15({
               data,
@@ -386,13 +400,13 @@ async function serve(): Promise<void> {
               state: migratedV14,
               updatedAt,
               ...(lastLocationCommand === undefined ? {} : { lastLocationCommand }),
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const migratedState = migrateOfficialGameV15ToV16({
               data,
               quests,
               state: migratedV15,
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const currentState = migrateV16StateToCurrent(migratedState);
             return {
@@ -412,13 +426,13 @@ async function serve(): Promise<void> {
               state,
               updatedAt,
               ...(lastLocationCommand === undefined ? {} : { lastLocationCommand }),
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const migratedState = migrateOfficialGameV15ToV16({
               data,
               quests,
               state: migratedV15,
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const currentState = migrateV16StateToCurrent(migratedState);
             return {
@@ -436,7 +450,7 @@ async function serve(): Promise<void> {
               data,
               quests,
               state,
-              context: { dungeonResources: mechanicalSource },
+              context: { dungeonResources: legacySource },
             });
             const currentState = migrateV16StateToCurrent(migratedState);
             return {
@@ -529,10 +543,19 @@ async function serve(): Promise<void> {
             };
           },
         }),
+        legacySimulationMigration({
+          sourceSimulationVersion: OFFICIAL_GAME_V23_SIMULATION_VERSION,
+          parseSourceProjection: (value) => OfficialGameProjectionV23Schema.parse(value),
+          parseSourceCommandResult: (value) => OfficialGameCommandResultV23Schema.parse(value),
+          migrate: ({ state }) => {
+            const migratedState = migrateV23StateToCurrent(state);
+            return { state: migratedState, projection: reducer.projectPersistedState(migratedState) };
+          },
+        }),
       ].reverse(),
     },
   );
-  const service = new AuthoritativeGameService<OfficialGameStateV23, OfficialGameProjectionBodyV23>({
+  const service = new AuthoritativeGameService<OfficialGameStateV24, OfficialGameProjectionBodyV24>({
     pack,
     reducer,
     validateRecord: (record) => reducer.validatePersistedRecord(record),

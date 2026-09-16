@@ -3,7 +3,7 @@ import {
   GAME_PROTOCOL_VERSION,
   OFFICIAL_GAME_SIMULATION_VERSION,
   OFFICIAL_GAME_V18_SIMULATION_VERSION,
-  OFFICIAL_GAME_V23_SIMULATION_VERSION,
+  OFFICIAL_GAME_V24_SIMULATION_VERSION,
   PRESENTATION_EVENT_VERSION,
   type LogicPackDescriptorV1,
 } from "@dib/game-protocol";
@@ -35,20 +35,20 @@ const pack: LogicPackDescriptorV1 = {
 };
 
 /** The installed simulation the running `pnpm game:dev` server actually serves. */
-const v23Pack: LogicPackDescriptorV1 = {
+const v24Pack: LogicPackDescriptorV1 = {
   ...pack,
-  simulationVersion: OFFICIAL_GAME_V23_SIMULATION_VERSION,
+  simulationVersion: OFFICIAL_GAME_V24_SIMULATION_VERSION,
   capabilities: { ...pack.capabilities, commandTypes: ["slot.create", "world.navigate"] },
 };
 
-/** A committed v23 projection exactly as the authoritative service emits it on the wire. */
-function v23Projection(revision: number, poi = "Town"): Record<string, unknown> {
+/** A committed v24 projection exactly as the authoritative service emits it on the wire. */
+function v24Projection(revision: number, poi = "Town"): Record<string, unknown> {
   return {
     slotId: "slot-1",
     revision,
     updatedAt: "2026-08-01T00:00:00.000Z",
     logicPackId,
-    simulationVersion: OFFICIAL_GAME_V23_SIMULATION_VERSION,
+    simulationVersion: OFFICIAL_GAME_V24_SIMULATION_VERSION,
     trustTier: "official",
     player: {
       heroLevel: 1,
@@ -92,13 +92,13 @@ function stubCurrentSession(handler: (url: string, init: RequestInit) => Respons
         selectedEventVersion: PRESENTATION_EVENT_VERSION,
         token: "signed-session-token-long-enough",
         expiresAt: "2026-08-29T00:00:00.000Z",
-        pack: v23Pack,
+        pack: v24Pack,
         slots: [{
           slotId: "slot-1",
           revision: 1,
           updatedAt: "2026-08-01T00:00:00.000Z",
           logicPackId,
-          simulationVersion: OFFICIAL_GAME_V23_SIMULATION_VERSION,
+          simulationVersion: OFFICIAL_GAME_V24_SIMULATION_VERSION,
           trustTier: "official",
           activeDomain: "world",
         }],
@@ -191,7 +191,7 @@ describe("RemoteGameAuthority", () => {
       code: "PACK_UNAVAILABLE",
       retryable: false,
       message: expect.stringMatching(
-        /server is running official-game-v18.*requires official-game-v23.*same checkout.*pnpm game:dev.*reload/,
+        /server is running official-game-v18.*requires official-game-v24.*same checkout.*pnpm game:dev.*reload/,
       ),
     });
   });
@@ -208,10 +208,10 @@ describe("RemoteGameAuthority", () => {
     })).rejects.toThrow(/Official online is unavailable \(HTTP 500\).*pnpm game:dev/);
   });
 
-  it("bootstraps the installed v23 projection including its Collection claims sibling", async () => {
+  it("bootstraps the installed v24 projection including its Collection claims sibling", async () => {
     stubCurrentSession((url) => {
       expect(url).toBe("/api/game/slots/slot-1/bootstrap");
-      return jsonResponse(v23Projection(1));
+      return jsonResponse(v24Projection(1));
     });
 
     const authority = await RemoteGameAuthority.authenticate({
@@ -228,7 +228,7 @@ describe("RemoteGameAuthority", () => {
     });
   });
 
-  it("accepts a committed v23 command receipt", async () => {
+  it("accepts a committed v24 command receipt", async () => {
     stubCurrentSession((url, init) => {
       expect(url).toBe("/api/game/slots/slot-1/commands");
       expect(init.method).toBe("POST");
@@ -247,7 +247,7 @@ describe("RemoteGameAuthority", () => {
           movement: "walk",
           randomDraws: [],
         }],
-        projection: v23Projection(2, "Forest"),
+        projection: v24Projection(2, "Forest"),
         idempotentReplay: false,
       });
     });
@@ -274,8 +274,8 @@ describe("RemoteGameAuthority", () => {
     });
   });
 
-  it("rejects a v23 projection that omits its required Collection claims", async () => {
-    const { collectionClaims: _omitted, ...withoutClaims } = v23Projection(1);
+  it("rejects a v24 projection that omits its required Collection claims", async () => {
+    const { collectionClaims: _omitted, ...withoutClaims } = v24Projection(1);
     stubCurrentSession(() => jsonResponse(withoutClaims));
 
     const authority = await RemoteGameAuthority.authenticate({

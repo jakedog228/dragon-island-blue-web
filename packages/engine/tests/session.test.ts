@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { loadGameData } from "@dib/gamedata";
+import { mulberry32 } from "../src/rng.js";
 import { BattleSession } from "../src/session.js";
 import { baseStatRaw } from "../src/stats.js";
 import type { Rng } from "../src/rng.js";
@@ -584,4 +585,27 @@ describe("BattleSession - native Hero spirit side command", () => {
     expect(s.targetableIdsOf(0)).toEqual(["t0m0:FireCub", second.id]);
     expect(s.queueOrder()).not.toContain(first.id);
   });
+});
+
+
+it.each(["LightDragon", "FireDragon"])("automatic %s keeps exact duplicate-path slot through both session APIs", (shortType) => {
+  const slots = new Set<string>();
+  for (let seed = 0; seed < 64; seed++) {
+    const teams: ConstructorParameters<typeof BattleSession>[1] = [[{ shortType: "SnowCub", level: 150 }],
+      [{ shortType, level: 150, flatStatBonuses: { Speed: 10000 } }]];
+    const staged = new BattleSession(gd, teams, mulberry32(seed));
+    const direct = new BattleSession(gd, teams, mulberry32(seed));
+    expect(staged.advanceForPresentation().type).toBe("awaitingEnemy");
+    const step = staged.submitEnemyAction();
+    expect(step).toEqual(direct.advance());
+    expect(step.slot).toBeDefined();
+    const ref = gd.jobAbilitiesOrEmpty(shortType).find((candidate) => candidate.slot === step.slot)!;
+    expect(ref.type).toBe(step.abilityPath);
+    slots.add(step.slot!);
+    // Presentation metadata must not alter committed battle event bytes.
+    expect(staged.events).toEqual(direct.events);
+    expect(step.events.find((event) => event.type === "abilityUsed")).not.toHaveProperty("slot");
+  }
+  expect(slots).toContain("usable4");
+  expect(slots).toContain("usable1");
 });

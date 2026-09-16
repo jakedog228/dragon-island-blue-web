@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { GameData, loadGameData, resolveDataDir } from "@dib/gamedata";
 import type { AnimationsData } from "@dib/renderer/animations";
-import { computePreloadPlan, sfxForTier, soundTableForUse } from "../src/battle/preloadPlan.js";
+import { attackTypeForUse, computePreloadPlan, sfxForTier, soundTableForUse } from "../src/battle/preloadPlan.js";
 import type { MeleeAttacksData } from "../src/battle/abilityRendererMath.js";
 
 const gd = loadGameData();
@@ -245,5 +245,30 @@ describe("computePreloadPlan — point-particle builders", () => {
 
     expect(computePreloadPlan(synthetic, anims, meleeAttacks, ["ParticleMonster"]).particles)
       .toEqual(["Cast.plist", "FrostGlobal.plist", "Frost.plist"]);
+  });
+});
+
+
+describe("exact automatic move presentation", () => {
+  it.each([["LightDragon", "MetalCut"], ["FireDragon", "DoubleBlackHardClaw"]])(
+    "%s usable4 retains its own melee effect", (shortType, expected) => {
+      expect(attackTypeForUse(gd, shortType!, { slot: "usable4", abilityPath: "Offensive.Attack" })).toBe(expected);
+      expect(() => attackTypeForUse(gd, shortType!, { abilityPath: "Offensive.Attack" })).toThrow(/Ambiguous/);
+      expect(() => soundTableForUse(gd, shortType!, { abilityPath: "Offensive.Attack" })).toThrow(/Ambiguous/);
+    });
+  it("validates slot/path identity instead of silently choosing a different move", () => {
+    expect(() => attackTypeForUse(gd, "LightDragon", { slot: "usable99", abilityPath: "Offensive.Attack" })).toThrow(/Invalid/);
+    expect(() => soundTableForUse(gd, "LightDragon", { slot: "usable4", abilityPath: "Utility.Delay" })).toThrow(/Invalid/);
+    expect(attackTypeForUse(gd, "LightDragon", { abilityPath: "Utility.LooseTurn" })).toBeUndefined();
+  });
+  it("resolves every shipped slot's authored attack and replacement sound table", () => {
+    for (const monster of gd.allMonsters()) for (const ref of gd.jobAbilitiesOrEmpty(monster.shortType)) {
+      if (!/^usable\d+$/.test(ref.slot)) continue;
+      const common = ref.arguments.commonComponentArguments as { attackType?: string } | undefined;
+      const use = { slot: ref.slot, abilityPath: ref.type };
+      expect(attackTypeForUse(gd, monster.shortType, use)).toBe(common?.attackType);
+      expect(soundTableForUse(gd, monster.shortType, use)).toEqual(
+        ref.arguments.soundTable ?? gd.ability(ref.type).raw.soundTable ?? {});
+    }
   });
 });

@@ -553,11 +553,11 @@ describe("AuthoritativeGameService", () => {
   it("rejects every unknown simulation version before store or reducer effects", async () => {
     const store = new InMemoryAuthoritativeSlotStore<TestState>();
     let applications = 0;
-    // Deliberately one past the installed authority: v23 is installed, so v24 is genuinely
+    // Deliberately one past the installed authority: v24 is installed, so v25 is genuinely
     // unknown until its layer actually exists.
     const unknownPack: LogicPackDescriptorV1 = {
       ...pack,
-      simulationVersion: "official-game-v24",
+      simulationVersion: "official-game-v25",
     };
     expect(() => new AuthoritativeGameService({
       pack: unknownPack,

@@ -86,6 +86,8 @@ export interface AiWorld {
 
 export interface AiDecision {
   ability: AbilityDef;
+  /** Exact job instance; dictionary paths are shared by distinct moves. */
+  slot?: string;
   /** The job-ability-ref's own `arguments` dict (merged into `AbilityUse.args` by the caller). */
   args: Record<string, unknown>;
   enemyTargets: string[];
@@ -318,5 +320,5 @@ export function assignAbility(actorId: string, world: AiWorld, gameData: GameDat
   // battle.md §4b: adjustAbilityArgumentsForLiving: (the taunt redirect, `redirectEnemyTargets`)
   // runs AFTER target-building, as part of the queAbility: call — BattleCore.resolveTurn applies
   // it to this decision's enemyTargets before performing, for AI and player decisions alike.
-  return { ability: chosen.ability, args: chosen.ref.arguments, enemyTargets, friendlyTargets, rngDraws };
+  return { ability: chosen.ability, slot: chosen.ref.slot, args: chosen.ref.arguments, enemyTargets, friendlyTargets, rngDraws };
 }

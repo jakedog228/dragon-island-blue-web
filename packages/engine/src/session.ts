@@ -48,7 +48,7 @@ export interface ScriptedPlayerActionStart {
 }
 
 export type SessionStep =
-  | { type: "enemyTurnResolved"; actorId: string; abilityPath: string; tier: number | undefined; events: BattleEvent[] }
+  | { type: "enemyTurnResolved"; actorId: string; abilityPath: string; slot?: string; tier: number | undefined; events: BattleEvent[] }
   | { type: "awaitingPlayer"; actorId: string; choices: PlayerChoice[] }
   | { type: "ended"; report: BattleReport };
 
@@ -383,6 +383,7 @@ export class BattleSession {
       type: "enemyTurnResolved",
       actorId,
       abilityPath: decided.ability.path,
+      ...(decided.slot === undefined ? {} : { slot: decided.slot }),
       tier,
       events: this.core.events.slice(before),
     };

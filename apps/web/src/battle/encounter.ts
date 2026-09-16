@@ -47,20 +47,13 @@ export function battleSpriteKey(
   return `${setup.shortType}-hd`;
 }
 
-/** Portrait atlases remain keyed by the renderable monster type even when a fixed encounter
- * supplies a different Living name or an internal mechanical alias. Native rendererData's
- * spriteFile is the authoritative presentation identity for that instance. */
+/** `-[TurnOrderDisplay addNodeForMonster:] @ 0xef460` formats Monster.name + "_icon.png".
+ * A fixed boss's rendererData overrides its field art only: MegaDragon/GreenDragon have no
+ * portrait frames. Scenario aliases retain the original species explicitly. */
 export function battlePortraitFrame(
-  setup: Pick<BattleTeamMemberSetup, "shortType" | "rendererData">,
+  setup: Pick<BattleTeamMemberSetup, "shortType" | "originalShortType" | "rendererData">,
 ): string {
-  if (setup.rendererData !== null && typeof setup.rendererData === "object") {
-    const spriteFile = (setup.rendererData as Record<string, unknown>)["spriteFile"];
-    if (typeof spriteFile === "string" && /\.png$/i.test(spriteFile)) {
-      const fileName = spriteFile.split(/[\\/]/).at(-1)!;
-      return `${fileName.slice(0, -4)}_icon.png`;
-    }
-  }
-  return `${setup.shortType}_icon.png`;
+  return `${battleOriginalShortType(setup)}_icon.png`;
 }
 
 /** Data required to construct one battle. Later encounter/map loading should build this shape
