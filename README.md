@@ -4,12 +4,20 @@
 
 This is a playable TypeScript/PixiJS reimplementation of the discontinued pre-iOS 11 game *Dragon Island Blue*, **supporting play on all modern devices**. This work does not host or require any copyrighted material from the original game, and simply provides a flexible framework that reproduces mechanics for preservation. 
 
+> @https://youtu.be/z-vxxU3Jofw
+
+https://github.com/user-attachments/assets/692e8fe1-696b-4fe7-978a-463f86be39f3
+
 > [!NOTE]
 > **Project status:** All mechanics from the original game have been fully reimplemented, and a full RNG-perfect playthrough of the game is possible. If you notice any deviations from the source or would like to contribute, feel free to reach out!
 
 The mobile app was designed to support the 480×320 iPhone and 512×384 iPad screens. We attempt to retain both of these screen dimensions ported and upscaled to modern devices, although iPad mode is less-thoroughly tested due to mechanical limitations. See [current status](docs/STATUS.md) for limits, and [keyboard controls](docs/keyboard-controls.md) for some default QoL keyboard shortcuts for computer users.
 
 ## Quick start
+
+> @https://youtu.be/nFXEssnd2BY
+
+https://github.com/user-attachments/assets/c60aea2a-e59b-44a9-b095-434480ed1075
 
 Requires: Node ≥ 20.11 with [pnpm](https://pnpm.io).
 
