@@ -25,6 +25,12 @@ Trail only. The authorized cosmetic-only demo was recorded and inspected (192 se
 native results, matching transcripts and unchanged campaigns); the standalone Offline/Offline scenario also passes, including Escape, surrender cancellation,
 confirmation and return to Arena. See `docs/pvp.md`.
 
+Combat input correction: damage floaters and animation effects no longer participate
+in pointer hit testing. A lingering damage number could cover a ready ability card and swallow
+its click, reproduced after both players summoned at 844x390. The shared renderer fix covers
+campaign and PvP controls/targets; real Pixi hit-test regressions and phone/tablet browser checks
+verify input through still-visible effects.
+
 PvP adapter infrastructure remains in the engine for development, but gameplay-adapter admission
 and UI are disabled. Echo Strike and Turn Counter are dormant fixtures, not PvP demo material.
 See `docs/pvp-adapter-api.md` for the historical API.

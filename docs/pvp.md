@@ -16,7 +16,10 @@ runtime game resources still come from the user's local archive.
 Status (2026-10-06): PvP permits reviewed cosmetic mods only, removes the match menu during
 combat, and uses native surrender/result popups. The authorized cosmetic-only demo was recorded
 and inspected: host victory after 31 commands, 192 seconds, matching transcripts and unchanged
-campaigns. The standalone browser scenarios remain unrun for this change. No deployment has been performed.
+campaigns. The subsequent local stability pass covers native Offline/Official matches, retries,
+client reopen, spirits and reserve promotion. The 844x390 post-spirit ability hit-test failure
+found in that pass is fixed (2026-10-07): decorative damage/effect nodes no longer intercept
+battle input. This stability pass does not operate the deployed service.
 
 The goal is an official selectable mod adding invite-code multiplayer to the tournament UI
 in both Offline and Official play. Both players bring their parties and the server owns
@@ -199,6 +202,23 @@ the gameplay-mod admission rejection check (before invite/join). Other switches 
 `DIB_PVP_SPIRITS=1` (balanced Offline parties, full energy and unlocked spirits; checks both native
 spirit menus plus friendly/opponent field and queue membership), and `DIB_PVP_LOST_RESPONSE=1` (committed but
 unreadable response/retry). `DIB_PVP_OUTPUT` keeps each run's screenshots and JSON separate.
+
+Additional stability switches (all opt-in):
+
+- `DIB_PVP_RECONNECT=1` closes the guest page after two moves, opens a new page with the same
+  storage, enters through the content/title/Arena UI, and checks the recovered match ID, revision
+  and complete transcript before continuing.
+- `DIB_PVP_POLL_OUTAGE=1` corrupts at least three consecutive guest match-read responses,
+  checks that committed state is retained, then restores responses and requires automatic recovery.
+- `DIB_PVP_DELAYED_INPUT=1` delays command requests by 750 ms and repeats the target click while
+  the write is pending. Each move must still advance exactly one revision.
+- `DIB_PVP_LOBBY_CYCLES=3` creates and cancels three invites before joining the actual match
+  (accepted range 0–10).
+
+Every run writes `result.json`; successful matches also write `match.json`. The scenario compares
+both clients' complete battle transcripts after every move and at settlement, and checks campaign
+preservation and native result dismissal. A gameplay-mod rejection permits only its expected
+409 console message from `/api/pvp/matches/current`; other browser errors still fail the run.
 
 ## Demo video
 

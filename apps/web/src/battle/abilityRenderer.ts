@@ -230,6 +230,10 @@ export class AbilityRenderer {
     this.audio = opts.audio;
     this.effectLayer = opts.effectLayer;
     this.effectLayer.sortableChildren = true;
+    // Damage labels and effect sprites can outlive a turn and overlap the next panel or picker.
+    // Pixi's passive descendants still participate in a static scene's hit test: an effect hit
+    // resolves to the scene and masks controls underneath. This entire layer is presentation only.
+    this.effectLayer.eventMode = "none";
     this.ticker = opts.ticker;
     this.particleRandom = opts.particleRandom ?? Math.random;
     this.monsterNameOf = opts.monsterNameOf ?? ((shortType) => shortType);

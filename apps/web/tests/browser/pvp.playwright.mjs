@@ -20,6 +20,14 @@ const incompatible = process.env.DIB_PVP_EXPECT_INCOMPATIBLE === "1";
 const spirits = process.env.DIB_PVP_SPIRITS === "1";
 const fullBattle = process.env.DIB_PVP_FULL_BATTLE === "1";
 const lostResponse = process.env.DIB_PVP_LOST_RESPONSE === "1";
+const reconnect = process.env.DIB_PVP_RECONNECT === "1";
+const pollOutage = process.env.DIB_PVP_POLL_OUTAGE === "1";
+const delayedInput = process.env.DIB_PVP_DELAYED_INPUT === "1";
+const lobbyCycles = Number(process.env.DIB_PVP_LOBBY_CYCLES ?? 0);
+assert.ok(Number.isInteger(lobbyCycles) && lobbyCycles >= 0 && lobbyCycles <= 10);
+const evidence = { displayMode, reconnect, pollOutage, delayedInput, lostResponse, spirits,
+  fullBattle, lobbyCycles, turns: 0, failedPolls: 0, commandRequests: 0, expectedRejections: 0,
+  sources: tokens.map(token => token ? "official" : "offline") };
 const browsers = [];
 const read = async (page) => { await page.bringToFront(); return page.evaluate(() => JSON.parse(window.render_game_to_text())); };
 const pageScreenshot = (page, name) => page.screenshot({ path: path.join(output, name) });
@@ -71,12 +79,12 @@ async function openArena(page) {
   await page.waitForTimeout(150); await advance(page);
   await page.screenshot({ path: path.join(output, "lobby.png") });
 }
-async function launch(index) {
+async function launch(index, retainedContext) {
   console.log(`Launching player ${index + 1}`);
   // Use separate storage contexts; explicitly foreground each client before driving it.
   const browser = browsers[0] ?? await chromium.launch({ channel: "chromium", headless: process.env.DIB_HEADED !== "1", args: ["--mute-audio", "--disable-features=CalculateNativeWinOcclusion", "--disable-gpu-vsync", "--disable-frame-rate-limit"] });
   if (!browsers.length) browsers.push(browser);
-  const context = await browser.newContext({ viewport: {
+  const context = retainedContext ?? await browser.newContext({ viewport: {
     width: Number(process.env.DIB_PVP_VIEWPORT_WIDTH ?? 1280), height: Number(process.env.DIB_PVP_VIEWPORT_HEIGHT ?? 800),
   } });
   const page = await context.newPage();
@@ -85,7 +93,14 @@ async function launch(index) {
   await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
   page.setDefaultTimeout(15000);
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => { if (message.type() === "error" && !message.text().includes("favicon")) errors.push(message.text()); });
+  page.on("console", (message) => {
+    if (message.type() !== "error" || message.text().includes("favicon")) return;
+    if (incompatible && mods[index] && message.location().url === `${url}/api/pvp/matches/current` &&
+      message.text() === "Failed to load resource: the server responded with a status of 409 (Conflict)") {
+      evidence.expectedRejections++; return;
+    }
+    errors.push(message.text());
+  });
   await page.addInitScript(({ displayMode, roster, index, spirits }) => {
     window.advanceTime = () => Promise.resolve(); window.__DIB_TEST_WORLD_DEMO__ = true;
     window.__DIB_TEST_WORLD_SEED__ = 0x504c4159; window.__DIB_TEST_FINISHED_QUEST_COUNT__ = 15;
@@ -103,11 +118,13 @@ async function launch(index) {
   }, { displayMode, index, spirits: spirits && !tokens[index], roster: !tokens[index] && process.env.DIB_PVP_ROSTER === "1" });
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
   console.log(`Player ${index + 1}: content gate`);
-  await page.locator(".content-gate__mod-manager").click();
-  const manager = page.getByRole("dialog", { name: "Mod Manager" });
-  await manager.getByRole("tab", { name: /Installed/ }).click();
-  await manager.getByRole("switch", { name: "Multiplayer PvP", exact: true }).click();
-  await manager.getByRole("button", { name: "Apply", exact: true }).click();
+  if (!retainedContext) {
+    await page.locator(".content-gate__mod-manager").click();
+    const manager = page.getByRole("dialog", { name: "Mod Manager" });
+    await manager.getByRole("tab", { name: /Installed/ }).click();
+    await manager.getByRole("switch", { name: "Multiplayer PvP", exact: true }).click();
+    await manager.getByRole("button", { name: "Apply", exact: true }).click();
+  }
   if (tokens[index]) {
     await page.locator('input[name="asset-archive"]').setInputFiles(archive);
     await page.getByLabel("Online (Beta)", { exact: true }).check();
@@ -139,6 +156,10 @@ async function launch(index) {
   await advance(page, 12000); await openArena(page);
   // A retained active match resumes directly; surrender through the native confirmation.
   const retained = (await read(page)).overlay.pvp.match;
+  if (retainedContext) {
+    assert.equal(retained?.status, "active", "Reopening must recover the active match");
+    return { context, page };
+  }
   if (retained?.status === "active") {
     await wait(page, s => ["awaitingPlayerChoice", "awaitingOpponent"].includes(s.overlay?.pvp?.board?.presentation?.state), "resumed decision");
     await page.keyboard.press("Escape"); await advance(page, 300); await click(page, "popupButton:Yes");
@@ -163,8 +184,17 @@ try {
     assert.match(detail, /cosmetic|gameplay/i); assert.match(detail, /disable/i);
     await pageScreenshot(rejected, "incompatibility.png");
     assert.equal((await read(rejected)).overlay.pvp.match, null);
+    assert.ok(evidence.expectedRejections > 0, "The server must reject the gameplay setup");
     console.log(`Gameplay mods refused before entering PvP; inspect ${output}`);
   } else {
+  for (let cycle = 0; cycle < lobbyCycles; cycle++) {
+    await pages[0].getByRole("button", { name: "Create invite", exact: true }).click();
+    await wait(pages[0], s => s.overlay.pvp.match?.status === "waiting" && !s.overlay.pvp.busy, "Cancelable invite");
+    await pages[0].getByRole("button", { name: "Cancel invite", exact: true }).click();
+    await wait(pages[0], s => s.overlay.pvp.match?.status === "cancelled" && !s.overlay.pvp.busy, "Invite cancelled");
+    await pages[0].getByRole("button", { name: "New match", exact: true }).click();
+    await wait(pages[0], s => !s.overlay.pvp.match && !s.overlay.pvp.busy, "Lobby reusable");
+  }
   await pages[0].bringToFront();
   await pages[0].getByRole("button", { name: "Create invite", exact: true }).click();
   console.log("Invite requested");
@@ -187,19 +217,37 @@ try {
   let match = (await read(pages[0])).overlay.pvp.match;
   assert.deepEqual(match.players.map((p) => p.source), tokens.map((token) => token ? "official" : "offline"));
   for (const [index, page] of pages.entries()) {
-    await wait(page, (s) => !s.overlay.pvp.board?.rendering, "Initial board ready"); await advance(page);
+    await wait(page, (s) => s.overlay.pvp.board && !s.overlay.pvp.board.rendering &&
+      ["awaitingPlayerChoice", "awaitingOpponent"].includes(s.overlay.pvp.board.presentation.state), "Initial board ready");
+    await advance(page);
     assert.equal((await read(page)).overlay.pvp.board.renderer, "BattleNode");
     await page.screenshot({ path: path.join(output, `initial-${index}.png`) });
   }
   let interceptedBody; const commandRequests = [];
-  if (lostResponse) for (const page of pages) await page.route("**/api/pvp/matches/*/commands", async (route) => {
+  for (const { context } of players) await context.route("**/api/pvp/matches/*/commands", async (route) => {
+    evidence.commandRequests++;
     commandRequests.push(route.request().postData());
-    if (interceptedBody) { await route.continue(); return; }
+    if (delayedInput) await new Promise(resolve => setTimeout(resolve, 750));
+    if (!lostResponse || interceptedBody) { await route.continue(); return; }
     interceptedBody = route.request().postData();
     const response = await route.fetch(); assert.equal(response.status(), 200);
     // The server committed, but the client cannot parse the returned body. Retry must reuse it.
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
+  if (pollOutage) {
+    const recovering = pages[1], before = (await read(recovering)).overlay.pvp.match;
+    const pattern = `**/api/pvp/matches/${before.matchId}`;
+    await recovering.route(pattern, async route => {
+      evidence.failedPolls++;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await wait(recovering, s => evidence.failedPolls >= 3 && !!s.overlay.pvp.error, "Three failed polls");
+    assert.deepEqual((await read(recovering)).overlay.pvp.match.battle, before.battle,
+      "Failed polls must preserve the committed battle");
+    await pageScreenshot(recovering, "poll-outage.png");
+    await recovering.unroute(pattern);
+    await wait(recovering, s => !s.overlay.pvp.error && s.overlay.pvp.match.revision === before.revision, "Polling recovered automatically");
+  }
   const spiritTeams = new Set();
   for (let turn = 0; turn < (fullBattle ? 100 : 3) && match.status === "active"; turn++) {
     console.log(`Turn ${turn + 1}, player ${match.turn + 1}`);
@@ -207,9 +255,12 @@ try {
     await wait(active, (s) => s.overlay?.pvp?.board?.revision === match.revision && nativePvpReady(s), "Turn controls");
     if (spirits && !tokens[match.turn] && !spiritTeams.has(match.turn)) {
       const team = match.turn, before = match.revision;
+      await active.evaluate(() => window.__PIXI_APP__.render());
       const hero = (await read(active)).overlay.pvp.board.spirit.panelHero.point;
       const heroClient = await nativePvpPoint(active, hero); await active.mouse.click(heroClient.x, heroClient.y);
       const opened = await wait(active, state => state.overlay.pvp.board.spirit.menu, "native spirit menu");
+      await advance(active, 300);
+      await active.evaluate(() => window.__PIXI_APP__.render());
       const menu = opened.overlay.pvp.board.spirit.menu;
       const option = menu.buttons.find(button => button.enabled && menu.columns[button.column][button.row].kind === "spirit");
       assert.ok(option, "Native spirit menu omitted an available spirit");
@@ -222,11 +273,59 @@ try {
         const board = state.overlay.pvp.board, id = board.summonIds[board.you === team ? 0 : 1];
         return id && board.monsters.some(monster => monster.id === id && (monster.visible || (board.you === team && board.panelVisible))) && board.displayedQueue.includes(id);
       }, "spirit visible in native field and queue");
-      await pageScreenshot(pages[team === 0 ? 1 : 0], `opponent-spirit-${team}.png`);
-      await wait(active, nativePvpReady, "native controls after spirit");
+      const opponent = pages[team === 0 ? 1 : 0];
+      await advance(opponent, 1200);
+      await pageScreenshot(opponent, `opponent-spirit-${team}.png`);
+      await wait(active, state => nativePvpReady(state) && !state.overlay.pvp.board.activePopup &&
+        !state.overlay.pvp.board.spirit.selectionPending && !state.overlay.pvp.board.spirit.menuOpening,
+        "native controls after completed spirit presentation");
+      fs.writeFileSync(path.join(output, `after-spirit-${team}.json`), JSON.stringify(await read(active), null, 2));
+    }
+    if (spirits) {
+      await active.evaluate(() => window.__PIXI_APP__.render());
+      const board = (await read(active)).overlay.pvp.board;
+      const point = await nativePvpPoint(active, board.abilityButtons.find(button => button.slot === 1).center);
+      const hit = await active.evaluate(point => {
+        const app = window.__PIXI_APP__, box = app.canvas.getBoundingClientRect();
+        const location = { x: (point.x - box.x) * app.screen.width / box.width,
+          y: (point.y - box.y) * app.screen.height / box.height };
+        const boundary = app.renderer.events.rootBoundary;
+        let node = boundary.hitTest(location.x, location.y);
+        const ancestry = []; for (; node; node = node.parent) ancestry.push(node.label || node.constructor.name);
+        const stack = [app.stage], buttons = [], sceneHits = [];
+        while (stack.length) {
+          const candidate = stack.pop();
+          if (candidate.label === "battleScene") {
+            const trace = node => {
+              const result = boundary.hitTestRecursive(node, "static", location, boundary.hitTestFn, boundary.hitPruneFn);
+              if (!result) return null;
+              return { label: node.label, text: node.text, z: node.zIndex, eventMode: node.eventMode,
+                target: result.map(p => p.label), children: (node.children ?? []).map(trace).filter(Boolean) };
+            };
+            sceneHits.push(trace(candidate));
+          }
+          if (candidate.label === "ability:1") {
+            const parents = [];
+            for (let p = candidate; p; p = p.parent) parents.push({ label: p.label, eventMode: p.eventMode,
+              interactiveChildren: p.interactiveChildren, visible: p.visible, renderable: p.renderable, alpha: p.alpha,
+              measurable: p.measurable, hitPruned: boundary.hitPruneFn(p, location),
+              localPoint: p.worldTransform.applyInverse(location) });
+            buttons.push({ bounds: candidate.getBounds(), parents });
+          }
+          if (candidate.children) stack.push(...candidate.children);
+        }
+        return { ancestry, buttons, sceneHits };
+      }, point);
+      fs.writeFileSync(path.join(output, `ability-hit-${turn}.json`), JSON.stringify({ point, hit, board }, null, 2));
+      assert.ok(hit.ancestry.includes("ability:1"), "Visible native ability centre must hit ability:1");
     }
     await click(active, "pvp:usable1");
     await pickNativePvpTargets(active, read, wait, click);
+    if (delayedInput) {
+      // Repeat the last real canvas click while the original command is in flight.
+      await active.mouse.down(); await active.mouse.up();
+      await active.mouse.down(); await active.mouse.up();
+    }
     if (lostResponse && turn === 0) {
       await wait(active, s => s.overlay.pvp.match.revision > match.revision && !s.overlay.pvp.error, "Automatic retry recovered");
       assert.equal(commandRequests[1], interceptedBody);
@@ -234,14 +333,30 @@ try {
       await pageScreenshot(active, "retry.png");
     }
     await wait(active, (s) => s.overlay.pvp.match.revision > match.revision, "Committed move");
+    assert.equal((await read(active)).overlay.pvp.match.revision, match.revision + 1,
+      "One player action must commit exactly one revision, including retries and repeated clicks");
     match = (await read(active)).overlay.pvp.match;
+    evidence.turns++;
     for (const page of pages) await wait(page, (s) => s.overlay.pvp.match.revision === match.revision, "Both clients agree");
+    assert.deepEqual((await read(pages[0])).overlay.pvp.match.battle, (await read(pages[1])).overlay.pvp.match.battle);
+    if (reconnect && turn === 1 && match.status === "active") {
+      await pages[1].close();
+      players[1] = await launch(1, players[1].context); pages[1] = players[1].page;
+      const recovered = (await read(pages[1])).overlay.pvp.match;
+      assert.equal(recovered.matchId, match.matchId); assert.equal(recovered.revision, match.revision);
+      assert.deepEqual(recovered.battle, match.battle, "Cold reopen must preserve transcript and random draws");
+      await wait(pages[1], s => s.overlay.pvp.board?.renderer === "BattleNode" &&
+        ["awaitingPlayerChoice", "awaitingOpponent"].includes(s.overlay.pvp.board.presentation.state) && !s.overlay.pvp.board.rendering,
+        "Reconnected native battle");
+      await pageScreenshot(pages[1], "reconnected.png"); evidence.reconnected = true;
+    }
   }
   for (const [index, page] of pages.entries()) {
     await advance(page, 1250); await page.screenshot({ path: path.join(output, `battle-${index}.png`) });
     fs.writeFileSync(path.join(output, `state-${index}.json`), JSON.stringify(await read(page), null, 2));
   }
   assert.deepEqual((await read(pages[0])).overlay.pvp.match.battle, (await read(pages[1])).overlay.pvp.match.battle);
+  if (spirits) assert.equal(spiritTeams.size, tokens.filter(token => !token).length, "Every Offline player must summon");
   if (fullBattle) { assert.equal(match.status, "ended"); assert.equal(match.endReason, "defeat"); }
   else {
   const surrendering = pages[match.turn];
@@ -258,7 +373,9 @@ try {
   for (const page of pages) await wait(page, s => s.overlay?.pvp?.match?.status === "ended", "Terminal result");
   assert.equal((await read(pages[0])).overlay.pvp.match.winner, match.turn === 0 ? 1 : 0);
   }
-  await wait(pages[0], (s) => !s.overlay.pvp.board, "Result render"); await advance(pages[0]);
+  await wait(pages[0], (s) => !s.overlay.pvp.board, "Result render");
+  await wait(pages[0], async () => pixiLabelVisible(pages[0], "popupButton:Ok"), "Result popup mounted");
+  await advance(pages[0], 400);
   // Let Chromium composite the modal backdrop over the final manually rendered canvas.
   await pages[0].waitForTimeout(150); await advance(pages[0]);
   await pages[0].screenshot({ path: path.join(output, "result.png") });
@@ -266,6 +383,11 @@ try {
     const s = await read(page);
     assert.deepEqual({ player: s.player, party: s.party }, campaigns[index], "PvP must preserve the campaign");
   }
+  const finalMatch = (await read(pages[0])).overlay.pvp.match;
+  assert.deepEqual(finalMatch.battle, (await read(pages[1])).overlay.pvp.match.battle);
+  Object.assign(evidence, { finalRevision: finalMatch.revision, commands: finalMatch.battle.commands.length,
+    endReason: finalMatch.endReason, winner: finalMatch.winner, summonedTeams: [...spiritTeams], campaignUnchanged: true });
+  fs.writeFileSync(path.join(output, "match.json"), JSON.stringify(finalMatch, null, 2));
   for (const page of pages) {
     await wait(page, s => !s.overlay.pvp.board, "Native result popup");
     assert.equal(await page.getByRole("dialog", { name: "Multiplayer PvP" }).isVisible(), false);
@@ -274,8 +396,13 @@ try {
   }
   assert.deepEqual(errors, []); console.log(`PvP ${tokens.map((token) => token ? "Official" : "Offline").join("/")} passed; inspect ${output}`);
   }
+  assert.deepEqual(errors, []);
+  if (reconnect && !incompatible) assert.equal(evidence.reconnected, true);
+  fs.writeFileSync(path.join(output, "result.json"), JSON.stringify({ ...evidence, passed: true, errors }, null, 2));
 } catch (error) {
   console.error(error);
+  fs.writeFileSync(path.join(output, "result.json"), JSON.stringify({ ...evidence, passed: false,
+    failure: error instanceof Error ? error.message : String(error), errors }, null, 2));
   for (const [index, context] of browsers.flatMap((browser) => browser.contexts()).entries()) {
     const page = context.pages()[0];
     if (!page) continue;
