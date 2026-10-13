@@ -7,11 +7,13 @@
   "scripts": {
     "build": "node build.mjs",
     "dev": "tsx watch src/cli.ts",
+    "catalog": "tsx src/cli.ts catalog",
     "start": "node dist/dib-game-server.mjs serve",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@dib/mod-kernel": "workspace:*",
     "@dib/gamedata": "workspace:*",
     "@dib/game-protocol": "workspace:*",
     "@dib/game-service": "workspace:*",

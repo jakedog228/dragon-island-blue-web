@@ -64,13 +64,10 @@ try {
   }
   await archiveInput.setInputFiles(archive);
   await page.locator('input[name="mod-archives"]').setInputFiles(mod);
-  await page.locator(".content-gate__mods-label").filter({ hasText: "1 Offline Mod selected" })
+  await page.locator(".content-gate__mods-label").filter({ hasText: "1 mod enabled" })
     .waitFor({ state: "visible" });
-  assert.equal(
-    await page.locator(".content-gate__mods-status").textContent(),
-    "fire-cub-inferno-barrage.dibmod",
-    "landing dashboard did not retain the single selected package",
-  );
+  await page.locator(".content-gate__mods-status").filter({ hasText: "Inferno: Incomplete Movesets" })
+    .waitFor({ state: "visible" });
   await page.locator(".content-gate__mods-warning").waitFor({ state: "visible" });
   await page.getByRole("radio", { name: "Offline", exact: true }).check();
   try {

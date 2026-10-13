@@ -1,0 +1,9 @@
+{
+  "title": "Wand Pointer Trail",
+  "summary": "A sparkle trail follows every press and drag. Made for streams and recordings.",
+  "description": "Draws a sparkle trail wherever you press, drag or hold on the game. Built for streams and recordings.\n\nAdds a Trail slider to the Options popup to scale particle size and density. It never claims game input.",
+  "tags": [
+    "Presentation",
+    "Streaming"
+  ]
+}

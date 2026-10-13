@@ -18,6 +18,7 @@ export default defineConfig(({ command }) => ({
   plugins: [webAppShellResources(), assetArchiveResources(), offlineShell(), ...(command === "serve" ? [developmentCsp()] : [])],
   server: {
     proxy: {
+      "/api/community": { target: gameProxyTarget, changeOrigin: false },
       "/api/game": {
         target: gameProxyTarget,
         configure(proxy) {
@@ -36,6 +37,7 @@ export default defineConfig(({ command }) => ({
       input: {
         main: resolve(webRoot, "index.html"),
         moddingGuide: resolve(webRoot, "modding.html"),
+        community: resolve(webRoot, "community.html"),
       },
     },
   },
@@ -205,7 +207,10 @@ function developmentCsp(): Plugin {
     transformIndexHtml(html) {
       return html
         .replace("connect-src 'self' blob: data:", "connect-src 'self' blob: data: ws:")
-        .replace("connect-src 'none'", "connect-src 'self' ws:");
+        .replace("connect-src 'none'", "connect-src 'self' ws:")
+        // The dev server injects imported CSS as <style> elements; builds emit a stylesheet file,
+        // so the author portal's production policy stays `style-src 'self'`.
+        .replace("style-src 'self';", "style-src 'self' 'unsafe-inline';");
     },
   };
 }

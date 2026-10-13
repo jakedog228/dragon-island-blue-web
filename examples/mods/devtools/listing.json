@@ -1,0 +1,9 @@
+{
+  "title": "Devtools",
+  "summary": "Testing toggles in the master menu: no battle delays, 3x speed, free shops and go-anywhere travel.",
+  "description": "Adds a Devtools action to the master menu with toggles for testing and speedrunning your own content.\n\nModules start disabled: remove battle delays, run the game at 3x, walk to any overworld location and revealed dungeon room, make shop goods free, and force fixed or quest encounters for the current session. Battle outcomes and rewards still save normally.",
+  "tags": [
+    "Developer",
+    "Utility"
+  ]
+}

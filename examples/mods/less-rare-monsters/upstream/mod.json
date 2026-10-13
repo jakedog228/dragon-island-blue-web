@@ -1,0 +1,398 @@
+{
+  "name": "Less Rare Monsters",
+  "description": "Adjusts select rare monster spawn weights to produce higher, rebalanced encounter rates",
+  "author": "Wolfgang Kern",
+  "version": "2.0.0",
+  "operations": [
+    {
+      "op": "plist_set",
+      "file": "World_1-1.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "1-1_Turtorial_Hut_2"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "BlueBabyDragon"
+          }
+        },
+        "chance"
+      ],
+      "value": 6
+    },
+    {
+      "op": "plist_set",
+      "file": "World_1-1.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "Breeder_Hut_2"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "Cherub"
+          }
+        },
+        "chance"
+      ],
+      "value": 5
+    },
+    {
+      "op": "plist_set",
+      "file": "World_1-3.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "1-3_Forest_1"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "RedDragonling"
+          }
+        },
+        "chance"
+      ],
+      "value": 6
+    },
+    {
+      "op": "plist_set",
+      "file": "World_2-1.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "2-1_Forest_1"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "MetalSludge"
+          }
+        },
+        "chance"
+      ],
+      "value": 15
+    },
+    {
+      "op": "plist_set",
+      "file": "World_2-1.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "2-1_Forest_2"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "MetalSludge"
+          }
+        },
+        "chance"
+      ],
+      "value": 15
+    },
+    {
+      "op": "plist_set",
+      "file": "World_2-1.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "2-1_Forest_4"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "MetalSludge"
+          }
+        },
+        "chance"
+      ],
+      "value": 9
+    },
+    {
+      "op": "plist_set",
+      "file": "World_2-3.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "2-3_Field_5"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "Kappa"
+          }
+        },
+        "chance"
+      ],
+      "value": 11
+    },
+    {
+      "op": "plist_set",
+      "file": "World_2-3.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "2-3_Forest_1"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "MetalSludge"
+          }
+        },
+        "chance"
+      ],
+      "value": 2
+    },
+    {
+      "op": "plist_set",
+      "file": "World_2-4.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "2-4_Field_1"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "Kappa"
+          }
+        },
+        "chance"
+      ],
+      "value": 9
+    },
+    {
+      "op": "plist_set",
+      "file": "World_3-1.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "3-1_Field_3"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "GoldDragon"
+          }
+        },
+        "chance"
+      ],
+      "value": 7
+    },
+    {
+      "op": "plist_set",
+      "file": "World_3-1.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "3-1_Field_4"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "MetalSludge"
+          }
+        },
+        "chance"
+      ],
+      "value": 15
+    },
+    {
+      "op": "plist_set",
+      "file": "World_3-1.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "3-1_Field_5"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "MetalSludge"
+          }
+        },
+        "chance"
+      ],
+      "value": 15
+    },
+    {
+      "op": "plist_set",
+      "file": "World_3-1.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "3-1_Field_6"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "MetalSludge"
+          }
+        },
+        "chance"
+      ],
+      "value": 15
+    },
+    {
+      "op": "plist_set",
+      "file": "World_3-1.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "3-1_Forest_1"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "MetalSludge"
+          }
+        },
+        "chance"
+      ],
+      "value": 15
+    },
+    {
+      "op": "plist_set",
+      "file": "World_3-3.plist",
+      "path": [
+        "pointsOfInterest",
+        {
+          "match": {
+            "arguments.instanceName": "3-3_Forest_4"
+          }
+        },
+        "arguments",
+        "encounters",
+        "table",
+        "1",
+        "monsterPopulator",
+        "arguments",
+        "types",
+        {
+          "match": {
+            "type": "WhiteDragon"
+          }
+        },
+        "chance"
+      ],
+      "value": 6
+    }
+  ]
+}

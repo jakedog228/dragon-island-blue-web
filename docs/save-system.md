@@ -1,6 +1,6 @@
 # Player state, save slots, and authenticated persistence
 
-Last updated: 2026-08-02
+Last updated: 2026-10-05
 
 ## Supported modes
 
@@ -8,7 +8,7 @@ Dragon Island Blue supports two persistence modes:
 
 | Mode | Authority | Persistence |
 | --- | --- | --- |
-| Offline | Browser | Content-namespaced browser storage |
+| Offline | Browser | Paged, named browser-local saves |
 | Online | `apps/game-server` | Command-derived authoritative slots |
 
 The former client-authored `/api/saves` snapshot service has been retired. Official online never
@@ -60,39 +60,49 @@ root is `PlayerGameStateSnapshot` (`apps/web/src/player/gameState.ts`):
 - `quests`: optional Guild/story state containing objective progress, dialogs, fixed-encounter
   completion keys, and received battle-reward keys.
 
-Browser-local slots use content-fingerprint-namespaced `localStorage` records and a strict snapshot
-parser, defensive copy boundary, serialized checkpoints, optimistic revisions, and stale
-write/delete conflicts. The compressed last-used archive may live in a separate disposable
-IndexedDB cache. Cache writes stop at the origin-pressure threshold, and a quota-blocked slot write
-clears that cache and retries once before reporting failure; no automatic pressure response deletes
-a live or rollback save record.
+Offline settings presents one ordered library in pages of three. The selected page supplies the
+existing in-game three-slot picker; Online retains its own three authoritative slots. Players can
+add pages, jump directly between pages, and click a save's name to edit it in place. Enter or
+the checkmark saves the name; Escape or cancel discards the edit. **Manage** opens the move,
+undo and delete controls. **Move save** applies the chosen destination; intervening slots shift.
+Names affect
+only the settings list and export filename. Imports adopt the filename and carry unknown mod
+history because the native file does not contain that information.
 
-The current fingerprint scope is `dib-identity-plists-v7`; it includes every present root
-`Collection.plist` so goal IDs, monster vectors, and rewards are bound to local durable claims.
-The exact v6 projection excludes only that file; the existing v5/v4/v3/v2/v1 lineage remains
-byte-for-byte unchanged. Lookup is current-first, then v6 through v1. A historical slot is eligible
-only when player runtime schema 1 implies no claims or schema 2 has
-`claimedCollectionGoalIds: []`. Any historical record with a claim remains occupied but disabled:
-it is not decoded, does not trigger the all-empty shortcut, and is preserved from implicit cleanup.
-Eligible state remains in place until its first successful v7 write, which removes only eligible
-historical live/rollback keys for that slot. These digests are local save namespaces only; they are
-not trusted logic-pack identities.
+`OfflineSaveLibrary` stores an index at `dib.offlineSaves.v1`: stable record addresses, labels,
+last-used ordered mod digests/names/versions, last content identity, and the selected page.
+New records use UUID-backed `offline-library:` namespaces beneath the existing `dib-save-v1`
+prefix. The snapshot parser, defensive copies, ordered writes, revision conflict checks and
+one-generation undo remain in `BrowserSaveConnection`. Sessions capture their record address,
+so moving a slot in another tab cannot redirect an ongoing autosave.
+
+Migration indexes every old `dib-save-v1:<namespace>:slot-1/2/3` group, including previously
+hidden profiles and v1-v6 content identities, preserving original slot positions and gaps.
+It does not rewrite, promote, deduplicate, delete or move live/rollback bytes. Existing profile
+metadata supplies the best available previous mod selection; missing metadata is shown as
+unknown. Unreadable records remain visible without blocking other slots. An invalid index or
+failed index write fails explicitly and preserves saves. Reopening also discovers saves written
+by older clients. The old content-bound helper retains its historical eligibility rules for
+legacy callers; production Offline paging uses explicit stable addresses instead.
+
+Changing mods, their order or effective content no longer selects a different set of saves.
+Each occupied slot warns if the selected ordered package digests differ from its last played
+selection, if previous mods are unknown, or if its content identity differs. Warnings stay compact; **View setup** expands a bounded comparison with added, removed and
+updated mods in load order. Warnings are advisory: the player is responsible for compatibility. Browsing, exporting and switching pages do not change
+history; actual play does. Imports and rollback reset history to unknown. Missing optional items,
+recipes and spirits retain the existing restore behavior, while essential missing data fails loudly.
+Deleting a save removes its live and retained rollback record after confirmation; its position and
+label remain available for a new game. A rollback becomes the next undo point as before.
+
+The compressed last-used archive lives in a separate disposable IndexedDB cache. A quota-blocked
+slot write clears that cache and retries once before reporting failure; automatic pressure handling
+never deletes save records. Native export remains the independent backup.
 
 Local Collection parses the v7-bound `Collection.plist` catalog and persists one-shot
 `claimedCollectionGoalIds`. Official v12+ stores claims as a strict aggregate sibling and accepts
 only semantic `collection.claim`; v14 is the current simulation. Fixed `egg` and `monsterEgg`
 Collection rewards route through the owned local or authoritative hatch continuation, while
 supported rewards preserve claim-before-generation.
-
-Offline mod ZIP hashes are not durable-state identities. The browser binds effective
-mechanics-bearing data overlays, while the gate records the exact mod profile and warns before a
-different code/profile selection opens saves in the same namespace. For deliberately incompatible
-experiments, Profiles can clone an individual foreign slot into the current namespace without
-touching its source or overwriting an occupied destination. Restore ignores unavailable optional
-inventory items, learned recipes for absent species, and absent spirits; essential missing party or
-world state remains fail-loud, and the warning makes clear that later writes can damage the clone.
-The same Profiles list can permanently delete one named slot after native confirmation; deletion
-also removes that slot's retained rollback revision but leaves its content cache and sibling slots.
 
 The current player-profile snapshot is schema v8. In addition to the v6 inventory/skill/Tournament
 surface, v7 corrected `hero.totalHighestLevels` to collapse evolution chains and v8 added Infinite
@@ -105,17 +115,15 @@ unequipping, skill changes, Tournament round results, and prize claims checkpoin
 aggregate listener as party/economy changes.
 
 The containing `PlayerRuntimeStateSnapshot` is schema 2 and stores sorted, one-shot
-`claimedCollectionGoalIds` separately from the profile. The v1-v6 no-claims eligibility rule
-still governs the browser's historical storage namespaces (`player/contentEligibility.ts`); the
-storage prefix, outer game-state schema, and Official protocol were unchanged by the v7 local
-identity; later profile-schema migrations are independent of that fingerprint lineage.
+`claimedCollectionGoalIds` separately from the profile. Profile-schema migrations remain
+independent of the Offline list and historical fingerprint lineage.
 
 ## Save files
 
 Export and import use the original game's own save file, not a port-specific envelope. A file is
-the plain `bplist00` dictionary `-[UserSavedData saveToFile] @ 0x92798` writes, named `savefile0`,
-`savefile1` or `savefile2` after `+[UserSavedData saveFileForSlot:] @ 0x91e60`. An export therefore
-drops straight into a TouchHLE sandbox's
+the plain `bplist00` dictionary the original game writes. Offline exports use
+the save's assigned name; Online uses `savefile0`, `savefile1` or `savefile2`. Rename a named export
+to one of those source filenames before placing it in a TouchHLE sandbox's
 `touchHLE_sandbox/jp.ne.goo.game.dragonislandblue/Documents/`, and a save made there imports here.
 The exact captured-save regression corpus is intentionally opt-in because that directory is live,
 operator-owned game state: set `DIB_NATIVE_SAVE_FIXTURES=1` only with the original three-save fixture

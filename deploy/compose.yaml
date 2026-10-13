@@ -25,6 +25,9 @@ services:
       DIB_GAME_PORT: "8788"
       DIB_GAME_BIND_HOST: 0.0.0.0
       DIB_GAME_DATA_DIR: /var/lib/dib-game
+      DIB_COMMUNITY_ORIGIN: https://${DIB_COMMUNITY_HOST:-community.example.com}
+      DIB_GAME_PUBLIC_ORIGIN: https://${DIB_PUBLIC_HOST:?set DIB_PUBLIC_HOST}
+      DIB_COMMUNITY_DATA_DIR: /var/lib/dib-community
       DIB_GAME_EXTRACTED_DATA: /srv/extracted/data
       DIB_GAME_HMAC_SECRET_FILE: /run/secrets/dib_game_hmac
       # Caddy is the only route to this port and it overwrites X-Forwarded-For, so the forwarded
@@ -51,6 +54,7 @@ services:
       DIB_GAME_COMMAND_RATE_BURST: ${DIB_GAME_COMMAND_RATE_BURST:-120}
     volumes:
       - game-state:/var/lib/dib-game
+      - community-state:/var/lib/dib-community
       # Kept off game-state so log growth can never crowd out authoritative player data, and so the
       # backup job's snapshot of game-state stays free of logs.
       - game-logs:/var/log/dib-game
@@ -93,6 +97,7 @@ services:
       - "443:443/udp"
     environment:
       DIB_PUBLIC_HOST: ${DIB_PUBLIC_HOST:?set DIB_PUBLIC_HOST to the public hostname}
+      DIB_COMMUNITY_HOST: ${DIB_COMMUNITY_HOST:-community.example.com}
       DIB_ACME_EMAIL: ${DIB_ACME_EMAIL:?set DIB_ACME_EMAIL for Let's Encrypt notifications}
     volumes:
       # Certificates and ACME account keys. Losing this volume means re-issuing certificates and
@@ -150,6 +155,7 @@ networks:
   edge: {}
 
 volumes:
+  community-state: {}
   game-state: {}
   caddy-data: {}
   caddy-config: {}

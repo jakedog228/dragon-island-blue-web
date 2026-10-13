@@ -1,5 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { CommunityHttp } from "./community.js";
+import { createCatalogOnlyServer } from "./devCatalog.js";
+import { ModCatalog } from "./modCatalog.js";
+import { loadOfficialMods } from "./officialMods.js";
 import {
   loadGameData,
   loadCollectionCatalog,
@@ -588,7 +592,16 @@ async function serve(): Promise<void> {
     cacheTtlMs: SCOREBOARD_CACHE_SECONDS * 1000,
     logger,
   });
+  // Fail startup on a malformed shipped package rather than serving a partial Official catalog.
+  const officialMods = config.officialModsDirectory ? await loadOfficialMods(config.officialModsDirectory) : [];
   const server = createGameServer({
+    // Official mods alone enable public catalog reads; uploads additionally need the author origin.
+    ...(config.communityOrigin || officialMods.length > 0 ? { community: new CommunityHttp({
+      directory: config.communityDirectory, accountDirectory: dataDirectory,
+      hmacSecret: config.hmacSecret, authorOrigin: config.communityOrigin,
+      registrationEnabled: config.registrationEnabled, maxAccounts: config.maxAccounts,
+      trustProxy: config.trustProxy, official: officialMods,
+    }) } : {}),
     hmacSecret: secret,
     services: [service],
     accounts,
@@ -634,6 +647,40 @@ async function serve(): Promise<void> {
     scoreboardCacheSeconds: SCOREBOARD_CACHE_SECONDS,
     allowedOriginCount: config.allowedOrigins.length,
     trustProxy: config.trustProxy,
+  });
+}
+
+/**
+ * `catalog`: development only. Serves the Official mods from a directory of `.dibmod` files
+ * (default `examples/mods/dist/official`, written by `pnpm mods:examples`) without the authoritative API,
+ * so Offline development can browse and install mods. Production publishes official mods through
+ * `serve` with DIB_OFFICIAL_MODS_DIR instead.
+ */
+async function serveCatalog(): Promise<void> {
+  if (process.env["DIB_GAME_ENV"] === "production") {
+    throw new Error("catalog is a development command. Production serves official mods from `serve` with DIB_OFFICIAL_MODS_DIR.");
+  }
+  const configured = process.env["DIB_OFFICIAL_MODS_DIR"];
+  const directory = configured ? resolve(configured)
+    : REPOSITORY_ROOT === undefined ? undefined : resolve(REPOSITORY_ROOT, "examples/mods/dist/official");
+  if (directory === undefined || !existsSync(directory)) {
+    throw new Error(`No official mods directory at ${directory ?? "(unset)"}. Run pnpm mods:examples or set DIB_OFFICIAL_MODS_DIR.`);
+  }
+  const port = Number(process.env["DIB_GAME_PORT"] ?? "8788");
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("DIB_GAME_PORT must be a TCP port.");
+  const host = process.env["DIB_GAME_BIND_HOST"] ?? "127.0.0.1";
+  // Same default location `serve` uses, read-only here: listings published through a local
+  // author-portal session still show up, and a missing directory is simply an empty catalog.
+  const dataDirectory = process.env["DIB_GAME_DATA_DIR"] ?? resolve(REPOSITORY_ROOT ?? ".", ".dib-game-data");
+  const communityDirectory = resolve(process.env["DIB_COMMUNITY_DATA_DIR"] ?? resolve(dataDirectory, "community"));
+  // Fail on a malformed package exactly as `serve` does rather than listing a partial catalog.
+  const official = await loadOfficialMods(directory);
+  const logger = createLogger();
+  await startGameServer({ server: createCatalogOnlyServer({ official, communityDirectory }), port, host, logger });
+  logger.info("development mod catalog listening (no Online play)", {
+    address: `http://${host}:${port}`,
+    officialModsDirectory: directory,
+    officialModCount: official.length,
   });
 }
 
@@ -691,12 +738,28 @@ const [command, ...rest] = process.argv.slice(2);
 const run = async (): Promise<void> => {
   switch (command ?? "serve") {
     case "serve": return serve();
+    case "catalog": return serveCatalog();
     case "invite": return invite(rest);
     case "invite:list": return inviteList();
     case "invite:revoke": return inviteRevoke(rest[0]);
+    case "mods:hide":
+    case "mods:restore": {
+      if (!rest[0]) throw new Error(`usage: ${command} <listing-id>`);
+      const config = loadGameServerConfig(configOptions);
+      await new ModCatalog(config.communityDirectory).moderate(rest[0], command === "mods:hide");
+      process.stdout.write(command === "mods:hide" ? "Listing hidden; author cannot republish.\n" : "Publishing allowed again; listing remains unpublished.\n");
+      return;
+    }
+    case "mods:backup": {
+      if (!rest[0]) throw new Error("usage: mods:backup <new-destination-directory>");
+      const config = loadGameServerConfig(configOptions);
+      await new ModCatalog(config.communityDirectory).backup(rest[0]);
+      process.stdout.write("Community snapshot complete. Back up invites.json and the HMAC secret separately.\n");
+      return;
+    }
     default:
       throw new Error(
-        `unknown command "${command}" (expected serve, invite, invite:list, invite:revoke)`,
+        `unknown command "${command}" (expected serve, catalog, invite, invite:list, invite:revoke, mods:hide, mods:restore, mods:backup)`,
       );
   }
 };

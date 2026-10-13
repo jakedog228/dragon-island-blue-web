@@ -45,7 +45,7 @@ try {
   await page.goto(webUrl, { waitUntil: "domcontentloaded" });
   await page.locator('input[name="asset-archive"]').setInputFiles(archive);
   await page.locator('input[name="mod-archives"]').setInputFiles(mod);
-  await page.locator(".content-gate__mods-label").filter({ hasText: "1 Offline Mod selected" })
+  await page.locator(".content-gate__mods-label").filter({ hasText: "1 mod enabled" })
     .waitFor({ timeout: 120_000 });
   await page.getByRole("radio", { name: "Offline", exact: true }).check();
   await page.locator(
@@ -156,94 +156,32 @@ try {
   assert.equal(restored.rightsDisabled, false);
   assert.equal(restored.playDisabled, false);
   assert.equal(restored.label, `Remembered asset archive: ${path.basename(archive)}`);
-  assert.equal(restored.modLabel, "1 Offline Mod selected");
-  assert.equal(restored.modStatus, path.basename(mod));
+  assert.equal(restored.modLabel, "1 mod enabled");
+  assert.equal(restored.modStatus, "Devtools");
 
-  await page.getByRole("button", { name: "Load order and conflicts" }).click();
-  const loadOrderText = await page.locator('[aria-labelledby="selection-dialog-title"]')
-    .innerText();
-  const shortSize = (bytes) => {
-    if (bytes < 1024) return `${bytes} B`;
-    const units = ["KB", "MB", "GB", "TB"];
-    const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)) - 1, units.length - 1);
-    const value = bytes / (1024 ** (unitIndex + 1));
-    return `${value.toFixed(value < 10 ? 1 : 0).replace(/\.0$/, "")} ${units[unitIndex]}`;
-  };
-  assert.match(loadOrderText, new RegExp(shortSize(fs.statSync(archive).size).replace(".", "\\.")));
-  assert.match(loadOrderText, new RegExp(shortSize(fs.statSync(mod).size).replace(".", "\\.")));
-  await page.getByRole("button", { name: "Close Load order" }).click();
-
-  // Profile rows are save-backed. Add a disposable index row after the real save probe has
-  // finished, then prove both remembered sizes render in the profile modal without feeding this
-  // placeholder to BrowserSaveConnection.
-  const profileNamespace = firstSessionMemory.profiles?.[0]?.namespace;
-  assert.equal(typeof profileNamespace, "string");
-  await page.evaluate((namespace) => {
-    localStorage.setItem(`dib-save-v1:${namespace}:slot-1`, JSON.stringify({ revision: 1 }));
-  }, profileNamespace);
-  const foreignNamespace = `SHA-256:dib-identity-plists-v7:${"f".repeat(64)}`;
-  await page.evaluate((namespace) => {
-    localStorage.setItem(`dib-save-v1:${namespace}:slot-2`, JSON.stringify({
-      revision: 1,
-      updatedAt: "2026-09-03T12:00:00.000Z",
-      state: {
-        schemaVersion: 1,
-        player: {
-          schemaVersion: 1,
-          profile: { schemaVersion: 1 },
-          party: { kind: "standalone-levels", levels: [1] },
-        },
-      },
-    }));
-  }, foreignNamespace);
-  await page.getByRole("button", { name: "Saved profiles" }).click();
-  await page.locator(".content-gate__profile-content-state")
-    .filter({ hasText: `cached · ${shortSize(fs.statSync(mod).size)}` })
+  // Load order and conflicts live in the Mod Manager, beside the restored selection.
+  await page.locator(".content-gate__mod-manager").click();
+  const manager = page.getByRole("dialog", { name: "Mod Manager" });
+  await manager.getByRole("tab", { name: /Load order/ }).click();
+  await manager.locator(".ml-order__row").filter({ hasText: "Devtools" })
     .waitFor({ timeout: 120_000 });
-  const profileText = await page.locator('[aria-labelledby="profiles-dialog-title"]')
-    .innerText();
-  const foreignProfile = page.locator(".content-gate__profile")
-    .filter({ hasText: "Unidentified content" });
-  page.once("dialog", (dialog) => dialog.accept());
-  await foreignProfile.getByRole("button", { name: "Try here" }).click();
-  await page.locator(".content-gate__status")
-    .filter({ hasText: "slot-2 was cloned for a risky compatibility attempt" })
-    .waitFor({ timeout: 120_000 });
-  const cloneKeys = await page.evaluate(({ source, target }) => ({
-    source: localStorage.getItem(`dib-save-v1:${source}:slot-2`),
-    target: localStorage.getItem(`dib-save-v1:${target}:slot-2`),
-  }), { source: foreignNamespace, target: profileNamespace });
-  assert.notEqual(cloneKeys.source, null, "risky compatibility clone removed its source");
-  assert.notEqual(cloneKeys.target, null, "risky compatibility clone did not create its destination");
-  page.once("dialog", (dialog) => dialog.dismiss());
-  await foreignProfile.getByRole("button", { name: "Delete" }).click();
-  assert.notEqual(
-    await page.evaluate((namespace) => localStorage.getItem(`dib-save-v1:${namespace}:slot-2`), foreignNamespace),
-    null,
-    "cancelling native save deletion removed the slot",
-  );
-  page.once("dialog", (dialog) => dialog.accept());
-  await foreignProfile.getByRole("button", { name: "Delete" }).click();
-  await page.locator(".content-gate__status")
-    .filter({ hasText: "slot-2 was permanently deleted" })
-    .waitFor({ timeout: 120_000 });
-  assert.equal(
-    await page.evaluate((namespace) => localStorage.getItem(`dib-save-v1:${namespace}:slot-2`), foreignNamespace),
-    null,
-    "confirmed native save deletion retained the slot",
-  );
-  assert.notEqual(
-    await page.evaluate((namespace) => localStorage.getItem(`dib-save-v1:${namespace}:slot-2`), profileNamespace),
-    null,
-    "deleting the source profile also deleted the cloned destination",
-  );
-  assert.match(profileText, new RegExp(`cached · ${shortSize(fs.statSync(archive).size).replace(".", "\\.")}`));
-  assert.match(profileText, new RegExp(`cached · ${shortSize(fs.statSync(mod).size).replace(".", "\\.")}`));
-  await page.evaluate((namespace) => {
-    localStorage.removeItem(`dib-save-v1:${namespace}:slot-1`);
-    localStorage.removeItem(`dib-save-v1:${namespace}:slot-2`);
-  }, profileNamespace);
-  await page.getByRole("button", { name: "Close Profiles" }).click();
+  assert.match(await manager.locator(".ml-main").innerText(), /1 enabled mod, activated top to bottom/);
+  await manager.getByRole("button", { name: "Close", exact: true }).click();
+  await manager.waitFor({ state: "detached", timeout: 120_000 });
+  // Saves now live in Offline settings; Profiles is no longer a separate gate button.
+  assert.equal(await page.getByRole("button", { name: "Saved profiles" }).count(), 0);
+  await page.getByRole("button", { name: "Offline settings", exact: true }).click();
+  const saves = page.getByRole("dialog", { name: "Offline settings", exact: true });
+  await saves.getByRole("navigation", { name: "Offline save pages" }).waitFor();
+  assert.match(await saves.innerText(), /Page 1 of 1/);
+  await saves.getByRole("button", { name: "Add page", exact: true }).click();
+  await saves.getByRole("navigation").filter({ hasText: "Page 2 of 2" }).waitFor();
+  await saves.getByRole("button", { name: "Rename Slot 1", exact: true }).click();
+  const name = saves.getByRole("textbox", { name: "Name for Slot 1", exact: true });
+  await name.fill("Expedition B");
+  await name.press("Enter");
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("dib.offlineSaves.v1")).entries[3].name), "Expedition B");
+  await saves.getByRole("button", { name: "Close save settings" }).click();
 
   await page.screenshot({
     path: path.join(outputDirectory, "restored-mobile.png"),
@@ -251,9 +189,13 @@ try {
     timeout: 120_000,
   });
 
-  // Clearing an activated profile must survive the clean-tab reload that Online requires. The
-  // package remains cached for the save-linked Profiles surface; only automatic selection stops.
-  await page.getByRole("button", { name: "Clear mods" }).click();
+  // Disabling every mod of an activated profile must survive the clean-tab reload that Online
+  // requires. The package remains cached in the Mod Manager; only automatic
+  // selection stops.
+  await page.locator(".content-gate__mod-manager").click();
+  const clearing = page.getByRole("dialog", { name: "Mod Manager" });
+  await clearing.getByRole("button", { name: "Disable all" }).click();
+  await clearing.getByRole("button", { name: "Apply & reload" }).click();
   await page.locator(".content-gate__status")
     .filter({ hasText: "Restored the last asset archive from this device." })
     .waitFor({ timeout: 120_000 });
@@ -270,7 +212,7 @@ try {
       onlineDisabled: online instanceof HTMLInputElement ? online.disabled : undefined,
     };
   });
-  assert.equal(clearedReload.modLabel, "Optional Offline Mods (.dibmod)");
+  assert.equal(clearedReload.modLabel, "Optional Offline mods");
   assert.equal(clearedReload.onlineDisabled, false);
   await page.screenshot({
     path: path.join(outputDirectory, "cleared-profile-clean-reload.png"),

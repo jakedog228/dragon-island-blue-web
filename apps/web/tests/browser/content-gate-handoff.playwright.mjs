@@ -213,7 +213,7 @@ try {
     await localSaveStatus.waitFor({ state: "visible", timeout: 120_000 });
     assert.match(
       (await localSaveStatus.textContent()) ?? "",
-      /gear icon to import existing save files|save slots? (?:was|were) detected/i,
+      /Page \d+ of \d+: \d+ saved games/i,
       `${variant.label}: Offline did not report browser-save detection`,
     );
     assert(

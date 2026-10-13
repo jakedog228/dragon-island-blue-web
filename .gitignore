@@ -27,3 +27,6 @@ __pycache__/
 /*savefile*
 .DS_Store
 Thumbs.db
+
+# Mod catalog screenshots render the original game's art; they stay local.
+examples/mods/screenshots/

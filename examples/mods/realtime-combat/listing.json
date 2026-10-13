@@ -1,0 +1,10 @@
+{
+  "title": "Realtime Combat (WIP)",
+  "summary": "Work in progress: battles run on a realtime clock, with immediate enemy actions and overlapping animations.",
+  "description": "Work in progress. This overhaul is still being built and tested, so expect rough edges, balance problems and occasional broken battles.\n\nTurns battles into a realtime clock at 50 time units per second, with immediate enemy actions and overlapping animations. Statuses advance on the same clock. Load it after character mods; see its README for co-load details.",
+  "tags": [
+    "Work in progress",
+    "Battle",
+    "Overhaul"
+  ]
+}

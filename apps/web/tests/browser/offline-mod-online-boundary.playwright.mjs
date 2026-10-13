@@ -46,9 +46,12 @@ try {
   // The ready local-save probe proves the full-trust profile finished activating in this tab.
   await page.locator('[data-local-save-status].content-gate__mode-detail-status--success')
     .waitFor({ state: "visible", timeout: 120_000 });
-  await page.getByRole("button", { name: "Clear mods" }).click();
+  await page.locator(".content-gate__mod-manager").click();
+  const manager = page.getByRole("dialog", { name: "Mod Manager" });
+  await manager.getByRole("button", { name: "Disable all" }).click();
+  await manager.getByRole("button", { name: "Apply & reload" }).click();
   await page.locator(".content-gate__mods-label")
-    .filter({ hasText: "Optional Offline Mods (.dibmod)" })
+    .filter({ hasText: "Optional Offline mods" })
     .waitFor({ state: "visible", timeout: 120_000 });
   assert.equal(
     await page.locator('[data-mode-row="official"]').getAttribute("aria-disabled"),

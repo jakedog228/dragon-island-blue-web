@@ -516,3 +516,20 @@ before you raise the ceiling.
 
 **Permission errors after a restore.** The server runs as uid 1000. A restore performed as root
 leaves root-owned files: `chown -R 1000:1000` the state directory.
+
+## Community mod hosting
+
+The new author portal requires a separate `DIB_COMMUNITY_HOST` DNS name pointing at this VM;
+set it in `deploy/.env` before deploying. Compose derives `DIB_COMMUNITY_ORIGIN` and
+`DIB_GAME_PUBLIC_ORIGIN`, which must differ, and mounts a separate `community-state` volume.
+The existing scheduled `game-state` backup does not include that volume. Use the consistent
+`mods:backup` CLI and archive completed snapshots as described in [the mod-library runbook](mod-library.md).
+That runbook also covers quota/free-space limits, restore, `mods:hide` takedowns and author
+session isolation. The existing Azure release helper remains the deployment path. This addition
+does not authorize or document an already-completed production deployment.
+
+Official mods are optional and off by default: set `DIB_OFFICIAL_MODS_DIR` on the `game` service
+to a read-only mount of reviewed `.dibmod` files (with optional `<name>.listing.json` sidecars).
+The image does not bundle any mods. The server refuses to start if a package or sidecar in that
+directory is invalid, so check the directory before redeploying. See "Official mods" in
+[the mod-library runbook](mod-library.md).

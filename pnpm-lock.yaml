@@ -32,6 +32,9 @@ importers:
       '@dib/logic-pack':
         specifier: workspace:*
         version: link:../../packages/logic-pack
+      '@dib/mod-kernel':
+        specifier: workspace:*
+        version: link:../../packages/mod-kernel
       '@dib/official-game':
         specifier: workspace:*
         version: link:../../packages/official-game

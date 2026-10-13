@@ -179,7 +179,7 @@ describe("Asset Archive landing and developer documentation", () => {
     );
     expect(gate).toContain("Choose game content to unlock play modes.");
     expect(gate).toContain("All assets stay on this device.");
-    expect(gate).toContain("Click the gear icon to import existing save files.");
+    expect(gate).toContain("Manage pages in Offline settings.");
     expect(sourceLoading).toContain(
       "revealFrame = globalThis.requestAnimationFrame(() => {\n" +
       "        revealFrame = globalThis.requestAnimationFrame(() => {",

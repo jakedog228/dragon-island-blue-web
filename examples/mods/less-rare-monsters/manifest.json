@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 4,
+  "id": "io.github.wolfgang-james-kern.less-rare-monsters",
+  "version": "2.0.0",
+  "displayName": "Less Rare Monsters",
+  "apiVersion": 4,
+  "mode": "offline",
+  "dependencies": {},
+  "entry": "scripts/main.js"
+}

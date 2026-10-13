@@ -48,6 +48,14 @@
 	}
 
 	# --- Authoritative API -----------------------------------------------------------------------
+	# Public catalog only on the mod-executing game origin. Author endpoints are not proxied here.
+	@communityPrivate not path /api/community/info /api/community/mods /api/community/mods/* /api/community/authors/*
+	handle /api/community/* {
+		respond @communityPrivate "Open the author site to manage mods." 403
+		reverse_proxy game:8788 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
 	handle /api/game/* {
 		reverse_proxy game:8788 {
 			header_up X-Forwarded-For {remote_host}
@@ -92,5 +100,35 @@
 	# are deliberately absent here: they are operator-owned content, published separately if at all.
 	handle /downloads/* {
 		respond "This download is not published on this host." 404
+	}
+}
+
+# The author origin never serves the game document, service worker, or uploaded executable files.
+{$DIB_COMMUNITY_HOST:community.example.com} {
+	encode zstd gzip
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Cross-Origin-Opener-Policy same-origin
+		-Server
+	}
+	handle /api/community/* {
+		reverse_proxy game:8788 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	handle /assets/* {
+		root * /srv/web
+		file_server
+	}
+	@portal path / /community.html
+	handle @portal {
+		root * /srv/web
+		rewrite * /community.html
+		file_server
+	}
+	handle {
+		respond "Not found" 404
 	}
 }

@@ -45,6 +45,7 @@ export class BrowserSaveConnection implements SaveSlotStore {
     private readonly legacyNamespaces: readonly string[] = [],
     private readonly releaseDisposableStorage: ReleaseDisposableBrowserStorage =
       NO_DISPOSABLE_STORAGE,
+    private readonly visibleSlots: readonly SaveSlotId[] = SAVE_SLOT_IDS,
   ) {
     this.refreshSummaries();
   }
@@ -84,6 +85,16 @@ export class BrowserSaveConnection implements SaveSlotStore {
       const summary = this.summaries.get(slotId);
       return summary === undefined ? [] : [summary];
     });
+  }
+
+  /** Stable single-record access for the paged Offline library, including legacy namespaces. */
+  static forStoredSlot(
+    namespace: string,
+    slotId: SaveSlotId,
+    storage: StorageLike,
+    releaseDisposableStorage: ReleaseDisposableBrowserStorage = NO_DISPOSABLE_STORAGE,
+  ): BrowserSaveConnection {
+    return new BrowserSaveConnection(storage, namespace, [], releaseDisposableStorage, [slotId]);
   }
 
   summary(slotId: SaveSlotId): SaveSlotSummary | undefined {
@@ -269,7 +280,7 @@ export class BrowserSaveConnection implements SaveSlotStore {
 
   private refreshSummaries(): void {
     this.summaries.clear();
-    for (const slotId of SAVE_SLOT_IDS) {
+    for (const slotId of this.visibleSlots) {
       this.refreshSummary(slotId);
     }
   }

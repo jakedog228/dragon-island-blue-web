@@ -68,6 +68,7 @@ COPY --from=build /repo/apps/game-server/dist/dib-game-server.mjs ./dib-game-ser
 # The state directory is a volume mount point; pre-creating it with the right owner means the
 # container can run read-only everywhere else.
 RUN mkdir -p /var/lib/dib-game && chown -R node:node /var/lib/dib-game
+RUN mkdir -p /var/lib/dib-community && chown -R node:node /var/lib/dib-community
 
 # Same treatment for the durable log directory: it is a volume mount point that the unprivileged
 # runtime user must be able to write to under a read-only root filesystem.

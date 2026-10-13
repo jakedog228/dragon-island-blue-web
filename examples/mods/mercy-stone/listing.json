@@ -1,0 +1,9 @@
+{
+  "title": "Mercy Stone",
+  "summary": "A soul stone whose holder can never land a killing blow.",
+  "description": "Adds a new soul stone sold in the town Shop for 100 silver. Its holder can never land a killing blow.\n\nEach spared life is announced with a blue \"Mercy!\" floater. Equip it through the normal Insert Soul Stone picker.",
+  "tags": [
+    "Item",
+    "Gameplay"
+  ]
+}

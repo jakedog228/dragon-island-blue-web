@@ -1,0 +1,10 @@
+{
+  "title": "Less Rare Monsters",
+  "author": "wolfs0",
+  "summary": "Seven rare monsters turn up more often across seven worlds.",
+  "description": "Raises the encounter weights of seven rare monsters across seven worlds, so they turn up more often.\n\nConverted from Wolfgang Kern's Less Rare Monsters v2.0.0 (MIT). It changes which monster appears, not how often battles happen, and never guarantees a rare monster.",
+  "tags": [
+    "Gameplay",
+    "Encounter"
+  ]
+}

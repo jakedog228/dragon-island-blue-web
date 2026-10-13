@@ -15,6 +15,8 @@
     "content:build": "pnpm --filter @dib/web build",
     "content:boundary": "pnpm content:build && pnpm --filter @dib/web content:boundary",
     "mods:examples": "pnpm --filter @dib/mod-kernel build:examples",
+    "mods:catalog": "pnpm --filter @dib/game-server catalog",
+    "mods:screenshots": "node apps/web/tests/browser/mod-listing-screenshots.playwright.mjs",
     "game:dev": "pnpm --filter @dib/game-server dev",
     "game:cli": "pnpm --filter @dib/game-server exec tsx src/cli.ts",
     "save:dev": "pnpm game:dev",

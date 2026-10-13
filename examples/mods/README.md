@@ -53,9 +53,9 @@ Selected together, these packages genuinely overlap: `devtools` and `fire-cub-in
 intercept `BattleNode.renderGameState` (they compose, each adding its own `codeMods` key), and
 devtools owns the `BattleNode.sleep` that the barrage paces itself with. `fire-cub-inferno-barrage`
 therefore declares `optionalDependencies` and `loadAfter` on devtools, honours its delay-free
-setting, and reports a measured `realElapsedMs` beside the scheduled `elapsedMs`. The content gate
-shows the resolved activation order and every shared seam before you launch; see the "Managing
-multiple mods" section of `docs/code-mod-api.md`.
+setting, and reports a measured `realElapsedMs` beside the scheduled `elapsedMs`. The Mod
+Manager's Load order tab shows the resolved activation order and every shared seam; see the
+"Managing multiple mods" section of `docs/code-mod-api.md`.
 
 Build deterministic selectable archives from the repository root:
 
@@ -63,10 +63,21 @@ Build deterministic selectable archives from the repository root:
 pnpm mods:examples
 ```
 
-This writes `examples/mods/dist/*.dibmod`. Select a base IPA/ZIP at the content gate, then the mod
-files, choose Offline, and launch. The picker warns because v4 code runs directly in the app page
-with full client access. Only trusted mods should be loaded. Official online rejects all local mod
+This writes `examples/mods/dist/*.dibmod`. Select a base IPA/ZIP at the content gate, open the
+Mod Manager under it, import the mod files (or install the curated ones from Browse, below), apply,
+choose Offline, and launch. The launcher warns because v4 code runs directly in the app page with
+full client access. Only trusted mods should be loaded. Official online rejects all local mod
 profiles.
+
+A `listing.json` puts an example in the curated Official catalog, which `pnpm mods:examples`
+writes to `dist/official/` (`start-dev.cmd` serves it locally through `pnpm mods:catalog`): `title`,
+an optional `author` credit (otherwise the listing is by DIB Web), a one-line `summary` for cards,
+`description` and `tags` (`Work in progress` flags an unfinished mod everywhere). The catalog is
+Wand Pointer Trail, Realtime Combat (WIP), Mercy Stone, Less Rare Monsters (by wolfs0) and
+Devtools; the other examples are still built into `dist/` for import. Gameplay screenshots are
+generated, never committed, because they show the original game's art: `pnpm mods:screenshots`
+captures `screenshots/<name>.png` for the catalog from your own IPA (opt-in, muted Chromium), and
+`pnpm mods:examples` copies them into `dist/official/` and lists them.
 
 See `docs/code-mod-api.md` for the manifest, lifecycle, runtime module catalog, generic
 interception, bundle files, and shared service registry.

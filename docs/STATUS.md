@@ -9,6 +9,19 @@ while preserving v23 mechanics and historical schemas. See [regression checks](b
 
 ## Current system map
 
+Community mods: the launcher's single Mod Manager button
+(under the archive field) separates Installed (device: Official, Community and Imported files),
+Load order (drag-and-drop activation order with recommended positions, conflict overrides, shared
+seams) and Browse (operator-shipped Official mods via `DIB_OFFICIAL_MODS_DIR` beside community
+uploads; `pnpm mods:catalog` serves the curated examples for Offline development) with grid/list
+layouts, search, tags, sorting, a details window for every mod (imported files included, with
+missing information marked), staged enable/apply, update detection and dependency-aware
+install/disable. A separate-origin author dashboard uses existing
+named login keys, profiles, immutable hosted releases and sanitized screenshots. The catalog is
+outside Official simulation state. See `docs/mod-library.md` for setup, bounds, backup/takedown
+commands and the opt-in browser scenario. Production activation requires the additional author
+hostname.
+
 The project is a broad playable local reimplementation, not an emulator.  It imports an
 operator-selected compatible IPA/ZIP into browser memory and runs the typed game-data,
 engine, PixiJS renderer, and browser shell without shipping game-content bytes.
@@ -45,8 +58,11 @@ service is retired; `apps/game-server` is the Official authority implementation.
 The browser accepts structurally valid resource packages and keeps their bytes client-local.
 Validated compressed archives may be remembered in a disposable IndexedDB cache; expanded
 resources and blob URLs remain session-local. Offline saves take precedence over this cache on
-quota failure. Native import/export provides independent backups. See `docs/save-system.md` and
-`../apps/web/asset-archive-spec.md` for exact storage and identity rules.
+quota failure. Offline settings now owns one paged, named save library with cross-page ordering
+and per-save mod/content warnings; legacy browser saves and undo copies are indexed in place.
+The selected page supplies the in-game three-slot picker. Native import/export provides independent
+backups. See `docs/save-system.md` and `../apps/web/asset-archive-spec.md` for exact storage and
+identity rules.
 `ThingsInWorld.plist` supplies display-only text data. Collection is integrated in both modes with
 strict promoted-route archive validation and unit/component coverage. Online claims submit
 `collection.claim`, mirror only committed rewards and authority-minted monster IDs, restore claimed

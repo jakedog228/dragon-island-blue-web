@@ -1,8 +1,8 @@
 {
   "schemaVersion": 4,
   "id": "dev.dragonislandblue.realtime-combat",
-  "version": "1.1.1",
-  "displayName": "Realtime Combat",
+  "version": "1.1.2",
+  "displayName": "Realtime Combat (WIP)",
   "apiVersion": 4,
   "mode": "offline",
   "dependencies": {},

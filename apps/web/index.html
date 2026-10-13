@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#090d18" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -110,61 +110,22 @@
       /* Author `display` rules outrank the UA `[hidden]` rule, so several gate elements stayed
          laid out while marked hidden. Restore the attribute's meaning for this subtree. */
       .content-gate [hidden] { display: none !important; }
-      .content-gate__mods { display: grid; gap: 7px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--gate-border-soft); }
-      .content-gate__mods-header { display: flex; align-items: center; gap: 6px; }
-      .content-gate__mods-guide { flex: none; margin-left: auto; font-size: 12.5px; white-space: nowrap; }
-      .content-gate__card .content-gate__mods-toggle { display: flex; flex: 0 1 auto; align-items: center; gap: 6px; min-width: 0; min-height: 0; padding: 2px 0; border: 0; border-radius: 7px; background: none; color: var(--gate-text); font: inherit; text-align: left; cursor: pointer; }
-      .content-gate__card .content-gate__mods-toggle:hover { transform: none; background: none; }
-      .content-gate__mods-chevron { display: grid; flex: none; place-items: center; color: var(--gate-muted); transition: transform .14s ease; }
-      .content-gate__mods-chevron svg { width: 14px; height: 14px; }
-      .content-gate__mods-toggle--open .content-gate__mods-chevron { transform: rotate(90deg); }
-      .content-gate__mods-body { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 10px; align-items: center; }
-      .content-gate__mods-picker { min-width: 0; color: var(--gate-muted); font-size: 12.5px; }
-      .content-gate__mods-label { min-width: 0; overflow-wrap: anywhere; color: var(--gate-text); font-size: 12.5px; font-weight: 700; }
-      .content-gate__mods input[type=file] { max-width: 100%; color: var(--gate-muted); font: inherit; }
-      .content-gate__mods-actions { display: flex; align-self: center; gap: 5px; }
+      /* Mod Manager entry: one button under the archive field; the manager owns everything else. */
+      .content-gate__mods { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 5px 8px; align-items: center; margin-top: 9px; }
+      .content-gate__mods:has(> .content-gate__mods-warning[hidden]) { grid-template-columns: minmax(0,1fr); }
+      .content-gate__card .content-gate__mod-manager { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 48px; padding: 7px 12px 7px 8px; border: 2px solid var(--gate-peach); border-radius: 10px; background: var(--gate-drop); color: var(--gate-text); font: inherit; text-align: left; cursor: pointer; transition: background-color .15s ease, border-color .15s ease; }
+      .content-gate__card .content-gate__mod-manager:hover:not(:disabled) { border-color: var(--gate-orchid); background: var(--gate-drop-hover); transform: none; }
+      .content-gate__card .content-gate__mod-manager:focus-visible { outline: 3px solid var(--gate-leaf); outline-offset: 3px; }
+      .content-gate__card .content-gate__mod-manager:disabled { opacity: 0.6; cursor: default; }
+      .content-gate__mod-manager-mark { display: grid; flex: none; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--gate-peach-fill); color: var(--gate-ink); }
+      .content-gate__mod-manager-mark svg { width: 18px; height: 18px; }
+      .content-gate__mod-manager-text { display: grid; flex: 1; min-width: 0; line-height: 1.25; }
+      .content-gate__mod-manager-text strong { font-size: 14.5px; font-weight: 800; }
+      .content-gate__mods-label { min-width: 0; overflow: hidden; color: var(--gate-muted); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+      .content-gate__mod-manager-chevron { display: grid; flex: none; place-items: center; color: var(--gate-muted); }
+      .content-gate__mod-manager-chevron svg { width: 15px; height: 15px; }
       .content-gate__mods-status { grid-column: 1 / -1; overflow-wrap: anywhere; color: var(--gate-muted); font-size: 11.5px; }
-      .content-gate__profiles-open { justify-self: end; }
-      .content-gate__profiles-dialog { width: min(520px, calc(100vw - 18px)); max-width: none; padding: 0; border: 0; border-radius: 14px; background: none; }
-      .content-gate__profiles-dialog::backdrop { background: rgb(8 12 20 / 55%); }
-      .content-gate__profiles-card { display: grid; gap: 11px; padding: 12px; border: 1px solid var(--gate-border); border-radius: 14px; background: var(--gate-surface); color: var(--gate-text); }
-      .content-gate__profiles-card .content-gate__storage-dialog-header { gap: 8px; align-items: center; }
-      .content-gate__profiles-card .content-gate__storage-dialog-mark { display: grid; place-items: center; width: 30px; height: 30px; min-width: 30px; min-height: 30px; padding: 0; border-radius: 9px; }
-      .content-gate__profiles-card .content-gate__storage-dialog-mark svg { width: 16px; height: 16px; }
-      .content-gate__profiles-card .content-gate__dialog-close { width: 28px; height: 28px; min-height: 28px; padding: 0; border: 1px solid var(--gate-border); border-radius: 8px; background: var(--gate-surface-raised); color: var(--gate-muted); }
-      .content-gate__profiles-card .content-gate__dialog-close svg { width: 15px; height: 15px; }
-      .content-gate__profiles-section { display: grid; gap: 7px; }
-      .content-gate__profiles-section h3 { margin: 0; color: var(--gate-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
-      .content-gate__profiles-list { display: grid; gap: 7px; max-height: 42vh; overflow-y: auto; }
-      .content-gate__profile { display: grid; gap: 3px; padding: 7px 8px; border: 1px solid var(--gate-border-soft); border-radius: 10px; background: var(--gate-surface-raised); }
-      .content-gate__profile--partial { border-style: dashed; }
-      .content-gate__profile-header { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
-      .content-gate__profile-header strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-      .content-gate__profile-saves { flex: none; color: var(--gate-muted); font-size: 11.5px; }
-      .content-gate__profile-content { display: flex; align-items: center; gap: 6px; min-height: 24px; font-size: 11.5px; }
-      .content-gate__profile-content-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-      .content-gate__profile-content-state { flex: none; color: var(--gate-muted); font-size: 11px; }
-      .content-gate__profile-content--ghost { opacity: 0.65; }
-      .content-gate__profile-content--ghost .content-gate__profile-content-name { color: var(--gate-muted); }
-      .content-gate__profile-content--ghost .content-gate__profile-content-state { color: #d37b22; }
-      .content-gate__profile-note { margin: 0; color: var(--gate-muted); font-size: 11.5px; line-height: 1.4; }
-      .content-gate__profile-action { display: inline-grid; flex: none; place-items: center; box-sizing: border-box; min-height: 0; padding: 3px 7px; border: 1px solid var(--gate-border); border-radius: 7px; background: var(--gate-surface); color: var(--gate-text); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
-      .content-gate__profile-action--icon { width: 24px; height: 24px; min-height: 0; padding: 0; color: var(--gate-muted); }
-      .content-gate__profile-action--icon svg { width: 13px; height: 13px; }
-      .content-gate__profile-action--icon:hover { color: var(--gate-text); background: var(--gate-surface-raised); }
-      .content-gate__profile-action:disabled { opacity: 0.4; cursor: default; }
-      .content-gate__profile-upload input { display: none; }
-      .content-gate__mods-order { display: grid; gap: 3px; margin: 0; padding-left: 18px; color: var(--gate-text); font-size: 12px; }
-      .content-gate__mods-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 6px; border: 1px solid var(--gate-border-soft); border-radius: 7px; background: var(--gate-surface-raised); }
-      .content-gate__mods-name { overflow-wrap: anywhere; font-weight: 700; }
-      .content-gate__mods-name small { color: var(--gate-muted); font-weight: 400; }
-      .content-gate__mods-move { display: flex; flex: none; gap: 4px; }
-      .content-gate__mods-move button { width: 20px; height: 20px; min-height: 0; padding: 0; border: 1px solid var(--gate-border); border-radius: 6px; background: var(--gate-surface); color: var(--gate-text); font: inherit; font-size: 11px; line-height: 1.2; cursor: pointer; }
-      .content-gate__mods-move button:disabled { opacity: 0.4; cursor: default; }
-      .content-gate__mods-note { margin: 0; overflow-wrap: anywhere; color: var(--gate-muted); font-size: 11.5px; line-height: 1.4; }
-      .content-gate__mods-note--warn { color: #d37b22; }
-      .content-gate__mods-note--error { color: var(--gate-danger, #c8452f); font-weight: 700; }
-      .content-gate__mods-override { justify-self: start; min-height: 0; margin-top: 2px; padding: 6px 9px; border: 1px solid var(--gate-border); border-radius: 8px; background: var(--gate-surface-raised); color: var(--gate-text); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+      .content-gate__mods-status--error { color: #d37b22; font-weight: 700; }
       .content-gate__mods-warning { display: grid; flex: none; place-items: center; width: 20px; height: 20px; border-radius: 6px; color: #d37b22; cursor: help; }
       .content-gate__mods-warning svg { width: 14px; height: 14px; }
       .content-gate__mods-warning:hover, .content-gate__mods-warning:focus-visible { background: color-mix(in srgb, #d37b22 16%, transparent); }

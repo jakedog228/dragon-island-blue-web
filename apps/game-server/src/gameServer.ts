@@ -26,6 +26,7 @@ import type { SaveSlotId } from "@dib/save-protocol";
 import { AccountRequestError } from "./invites.js";
 import { createLogger, errorFields, type LogFields, type Logger } from "./logging.js";
 import { RateLimiter, resolveClientAddress, type RateLimitOptions } from "./rateLimit.js";
+import type { CommunityHttp } from "./community.js";
 
 export * from "./config.js";
 export * from "./fileSlotStore.js";
@@ -96,6 +97,7 @@ export interface ScoreboardDirectory {
 }
 
 export interface GameServerOptions {
+  readonly community?: CommunityHttp;
   readonly hmacSecret: string | Uint8Array;
   readonly services: readonly AnyGameService[];
   readonly isInvited: (playerId: string) => Promise<boolean> | boolean;
@@ -144,7 +146,16 @@ export function createGameServer(options: GameServerOptions): Server {
     // "close" rather than "finish": a client that hangs up mid-response never emits "finish", and an
     // access log that silently omits abandoned requests hides exactly the failure worth seeing.
     response.once("close", () => { runtime.logAccess(request, response, startedAt); });
-    void runtime.route(request, response).catch((error: unknown) => {
+    let route: Promise<void>;
+    if (request.url?.startsWith("/api/community/")) {
+      if (options.community) route = options.community.handle(request, response);
+      else {
+        const info = request.method === "GET" && request.url === "/api/community/info";
+        sendJson(response, info ? 200 : 503, info ? { enabled: false, authorOrigin: "", registrationEnabled: false } : { message: "The mod catalog is not enabled on this server. Installed and local mods remain available." });
+        route = Promise.resolve();
+      }
+    } else route = runtime.route(request, response);
+    void route.catch((error: unknown) => {
       runtime.sendError(response, error);
     });
   });

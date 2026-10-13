@@ -434,6 +434,11 @@ export function matchesRange(version: string, range: string): boolean {
   });
 }
 
+/** Semver-style ordering of two manifest versions (negative when `left` is older). */
+export function compareModVersions(left: string, right: string): number {
+  return compareVersions(parseVersion(left), parseVersion(right));
+}
+
 function satisfiesComparator(target: ParsedVersion, comparator: string): boolean {
   const match = COMPARATOR_PATTERN.exec(comparator);
   if (match === null) return false;

@@ -201,8 +201,9 @@ dibMod.hooks.on("boot:ready", ({ value }) =&gt; {
 <pre><code>python -m zipfile -c inspector.zip my-mod/manifest.json my-mod/scripts
 python -c "from pathlib import Path; Path('inspector.zip').rename('inspector.dibmod')"</code></pre>
           <p>
-            Select a compatible base archive in the loader, open the mods controls, choose
-            <code>inspector.dibmod</code>, and launch Offline. Enter a battle and inspect
+            Select a compatible base archive in the loader, open the <strong>Mod Manager</strong>
+            under it, choose <strong>Import file</strong> (or drop <code>inspector.dibmod</code>
+            onto it), apply, and launch Offline. Enter a battle and inspect
             <code>window.render_game_to_text()</code> in the browser console: the battle projection
             includes <code>myInspector.active</code>. A mod ZIP is an overlay, not a replacement
             for the base game's resource archive.
@@ -229,8 +230,10 @@ python -c "from pathlib import Path; Path('inspector.zip').rename('inspector.dib
           <p>
             Ranges support <code>*</code>, exact versions, comparison operators, <code>^</code>,
             <code>~</code>, space-separated conjunctions, and <code>||</code> alternatives.
-            Picker selection order is ignored. Dependency and ordering edges precede priority;
-            a manual priority cannot bypass an edge or resolve a cycle. Later replacements win,
+            Selection order is ignored. Dependency and ordering edges precede priority; a manual
+            drag in the Mod Manager's <strong>Load order</strong> tab cannot bypass an edge or
+            resolve a cycle; that tab marks each mod's recommended position (its own priority and
+            edges, ignoring manual moves). Later replacements win,
             while interceptors can compose by calling <code>next</code>.
           </p>
           <p>
@@ -297,8 +300,9 @@ python -c "from pathlib import Path; Path('inspector.zip').rename('inspector.dib
           <p>
             The gate caches recently used mod archives and remembers save-linked profiles on this
             device. <strong>Use</strong> restores a profile when its mod bytes remain cached.
-            <strong>Clear mods</strong> clears selection and suppresses automatic profile restoration;
-            if code already ran, it reloads the page so Online can become available again.
+            <strong>Disable all</strong> in the Mod Manager, then <strong>Apply</strong>, clears the
+            selection and suppresses automatic profile restoration; if code already ran, applying
+            reloads the page so Online can become available again.
           </p>
           <p>
             Save namespaces use effective mechanics-bearing content data after the
@@ -326,10 +330,10 @@ python -c "from pathlib import Path; Path('inspector.zip').rename('inspector.dib
             Their sources live under <code>examples/mods/</code>.
           </p>
           <p>
-            Check the resolved order and interference report in the loader, browser console errors,
+            Check the resolved order and shared seams in the Mod Manager's Load order tab, browser console errors,
             and <code>window.render_game_to_text()</code>. For deterministic scenarios, use short
             <code>window.advanceTime(ms)</code> bursts. Test the mod alone and with its declared
-            dependencies, then exercise scene changes, reload, save/restore, and Clear mods.
+            dependencies, then exercise scene changes, reload, save/restore, and Disable all.
             Browser validation is opt-in and must launch Chromium with <code>--mute-audio</code>.
           </p>
           <p>

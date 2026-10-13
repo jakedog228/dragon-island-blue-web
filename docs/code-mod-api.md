@@ -1,5 +1,9 @@
 # Full-Trust Offline Mod Runtime v4
 
+The launcher now supports an optional server-backed catalog and device-local mod library.
+See [Mod Manager and author profiles](mod-library.md) for installation, publishing, author
+authentication, immutable releases and deployment. Local `.dibmod` imports remain supported.
+
 `.dibmod` files are dependency-ordered JavaScript bundles that execute directly in the game page.
 This is an intentional full-trust boundary, not a sandbox. A mod has the same browser authority as
 the client: it can import game modules, replace methods and properties, mutate live objects, alter
@@ -8,8 +12,10 @@ code. Only load mods whose source and publisher you trust completely.
 
 Mods remain Offline/scenario-only. Selecting any mod disables Official launch. Once mod code has
 run, Official stays disabled for that tab even if the picker is cleared, because only a document
-reload can establish a clean page realm. Mod bytes and mod-authored state are never sent to or
-admitted by the authoritative command service.
+reload can establish a clean page realm. Mod bytes and mod-authored state are never admitted by
+Official commands or stored in authoritative slots. Authors may explicitly upload distributable
+mod packages to the separate `/api/community` catalog surface; this does not upload an IPA or
+authorize modified Official play.
 
 ## Bundle and manifest
 
@@ -52,11 +58,10 @@ and `||` alternatives, so a library mod stays usable across its own patch releas
 `dependencies`, `optionalDependencies`, and `conflicts` map reverse-DNS IDs to supported semantic
 version ranges; `loadAfter`/`loadBefore` add soft ordering edges; integer `priority` breaks
 otherwise-unordered ties before the ID tie-breaker. See "Managing multiple mods" below. The
-resolved package bytes and order identify the exact play profile shown by the gate, but do not by
-themselves select a browser-local save namespace. The namespace covers effective
-mechanics-bearing runtime data. This lets visualization and code-only updates keep using the same
-saves; changing the exact profile still produces a prominent warning before an existing save
-opens. Permissions are deliberately absent: selecting a v4 package grants the whole client runtime.
+resolved package bytes and order identify the selection remembered per Offline save. Changing
+mods no longer hides or relocates saves: Offline settings owns one paged library, with advisory
+mod/content warnings per slot. Permissions are deliberately absent: selecting a v4 package grants
+the whole client runtime.
 
 The ZIP reader still rejects path traversal, duplicate paths, malformed manifests, dependency
 cycles, and archive bombs. Those are package-integrity and resource-exhaustion checks, not a
@@ -230,45 +235,37 @@ Selection order is ignored. The loader derives one deterministic activation orde
 
 **Later activation wins**, matching the usual reading of mod-manager priority. A higher `priority`
 therefore loads later and overwrites more. The resolved order remains part of the exact profile
-identity and the gate warns when it differs from the profile that last opened the namespace. It is
-not automatically a new save namespace unless the resulting mechanics-bearing data differs.
+identity. Offline settings compares that order with the individual save's last played selection.
 
-The gate keeps only a mod count and a picker inline. The management surface is the **Profiles**
-modal behind the star button on the Game content card: it lists the resolved order with per-package
-up/down controls, the advisories, and the seam report below. Moving a package rewrites the whole
-order as explicit priorities, persisted in `localStorage` under `dib.mods.loadOrder.v1`. Declared
-edges still win, so a move the relations forbid visibly snaps back — the list always shows the
-order that will actually run.
+The gate keeps a mod count and the **Mod Manager** inline. Activation order, manual moves,
+declared conflict overrides and the interference report live in its **Load order** tab.
+Manual priorities persist under `dib.mods.loadOrder.v1`; declared edges still win.
 
-### Profiles
+### Offline saves
 
-Launching Offline records the pairing that was used — the asset archive, the exact ordered mod
-packages, and the save namespace they produce — and caches the mod bytes behind it. The same modal
-lists every pairing that owns an Offline save on this device, so archives, mods, and save slots are
-visible as one relationship rather than three separate pickers.
+The former Profiles button is replaced by **Offline settings**. One list holds every browser
+save, in pages of three; select a page to choose the three slots available when the game launches.
+Add pages as needed or jump directly to a page. Click a save's name to rename it in place;
+Enter or the checkmark saves, while Escape or cancel discards the edit. **Manage** opens move,
+undo and confirmed deletion controls; **Move save** applies the chosen destination explicitly.
+Names are shell labels and export filenames only;
+imports adopt the filename without changing in-game identity.
 
-A pairing whose packages are all still cached can be restored in one click; that repopulates the
-pickers and stops, because cached mod bytes are executable and re-running them stays an explicit
-act. A pairing missing some bytes renders those rows as ghosts with an Upload control beside them.
-Saves whose pairing predates this record, or whose record was forgotten, are listed as unidentified
-content rather than hidden — the save is real either way. Forgetting a cached package or a pairing
-record never touches a save slot.
+Each save remembers its last played ordered mod packages. Different selections show a warning
+on that slot and a page warning summary in the gate; unknown history uses a neutral information
+marker, distinct from the amber changed-setup warning.
+The compact **View setup** disclosure compares the previous and selected mods in load order,
+marks added/removed/updated packages, and bounds long lists in a keyboard-scrollable region.
+Warnings do not block play or clone state. The player decides compatibility and can export a
+backup before experimenting. Opening settings or exporting does not update history. Old browser
+saves and undo copies stay at their original addresses and are indexed into the list, including
+previously dismissed or unidentified profiles. See [save-system.md](save-system.md).
 
-**Clear mods** clears the active selection without deleting cached packages or their save-linked
-profiles. If mod code already ran, the action reloads the document automatically and suppresses
-profile restoration, so the new clean page can use Online immediately. A selection that never ran
-clears in place. Choosing **Use** on a saved profile, or launching an Offline profile again, opts
-back into restoring that profile on later reloads.
-
-Profiles from a different data namespace expose **Try here** per slot once current Offline content
-has loaded. This is deliberately an escape hatch, not an assertion of compatibility: it clones the
-slot, preserves the original, and warns that absent optional registrations will be ignored while
-larger content differences may crash or corrupt later revisions of the clone. Destination slots
-are never overwritten. Exporting a backup first is strongly recommended.
-
-Each save row also exposes **Delete**. It requires a native confirmation naming both the slot and
-profile, then removes that slot's live and retained rollback revisions. It does not delete another
-slot, cached archive/mod bytes, or the remembered profile metadata.
+The last archive and mod selection still repopulates the gate on reload when cached. **Disable
+all**, then **Apply**, clears that selection without deleting saves or installed mods. If code
+already ran, Apply reloads the document and suppresses automatic mod restoration for Online use.
+Launching Offline again remembers the new selection. This reload convenience is independent
+of save ownership and per-save history.
 
 ### Refusals versus reports
 

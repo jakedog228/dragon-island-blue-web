@@ -1,4 +1,10 @@
+import { SAVE_SLOT_IDS } from "@dib/save-protocol";
 import { probeOnlineServer, type OnlineServerStatus } from "../authority/serverAvailability.js";
+import { showModManager, type ModManagerSelection } from "./modLibrary.js";
+import {
+  stageModSelectionForReload, takePendingModSelection, restorePendingModSelection, PendingModSelectionError,
+  type PendingModSelection,
+} from "./communityClient.js";
 import { installOfflineShellStatus } from "../platform/offlineShell.js";
 import { importContentArchive, type ImportedContentPackage } from "./archivePackage.js";
 import { fingerprintContentPackage, type ContentFingerprint } from "./contentFingerprint.js";
@@ -12,8 +18,11 @@ import {
 import { applyFullTrustModsToContent, hasImportedModProfile } from "./moddedContent.js";
 import type { ModSeam } from "./codeModRuntime.js";
 import { BrowserSaveConnection } from "../player/browserSaveClient.js";
+import { OfflineSaveLibrary } from "../player/offlineSaveLibrary.js";
+import { isQuotaExceeded } from "../player/saveErrors.js";
 import type { SaveSlotStore } from "../player/saveStore.js";
 import { installSaveBackupPanel } from "./saveBackupPanel.js";
+import { compactModNames } from "./saveModComparison.js";
 import { nativeSaveContextFor } from "./nativeSaveContext.js";
 import { identifyContentLogicPack } from "./logicPackIdentity.js";
 import {
@@ -57,18 +66,11 @@ import {
   type CachedModArchive,
 } from "./modArchiveCache.js";
 import {
-  composePlayProfileViews,
   describePlayProfileLabel,
-  dismissPlayProfile,
-  forgetPlayProfile,
-  formatShortFileSize,
   lastUsedPlayProfile,
-  readDismissedProfiles,
   readPlayProfiles,
-  readSaveSlotIndex,
   rememberPlayProfile,
   type PlayProfileRecord,
-  type PlayProfileView,
 } from "./playProfiles.js";
 import {
   activateFullscreenExperience,
@@ -100,9 +102,6 @@ const MOD_TRUST_WARNING =
   "Full trust: mods run inside this page and may replace any game code, read or change local " +
   "saves and browser storage, use the network, and alter the page. Only load code you trust " +
   "completely.";
-// The gate lists the most severe seams and defers the tail to the console rather than growing an
-// unbounded wall of text above the play button.
-const MAX_LISTED_SEAMS = 8;
 
 function readModOrderOverrides(): Record<string, number> {
   try {
@@ -233,11 +232,6 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
             <span>
               <strong>Game content</strong>
             </span>
-            <button class="content-gate__profiles-open content-gate__icon-button content-gate__icon-button--quiet"
-                    type="button"
-                    data-profiles-action aria-label="Saved profiles" title="Saved profiles">
-              ${starIcon()}
-            </button>
           </div>
           <label class="content-gate__drop">
             <span class="content-gate__file-label">Choose asset archive (IPA/ZIP)</span>
@@ -245,32 +239,23 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
                    accept=".ipa,.zip,application/zip,application/octet-stream">
           </label>
           <div class="content-gate__mods">
-            <div class="content-gate__mods-header">
-              <button class="content-gate__mods-toggle" type="button" aria-expanded="false"
-                      aria-controls="content-gate-mods-body">
-                <span class="content-gate__mods-chevron">${chevronIcon()}</span>
-                <span class="content-gate__mods-label">Optional Offline Mods (.dibmod)</span>
-              </button>
-              <span class="content-gate__mods-warning" role="note" tabindex="0"
-                    title="${MOD_TRUST_WARNING}" aria-label="${MOD_TRUST_WARNING}"
-                    hidden>${warningIcon()}</span>
-              <a class="content-gate__mods-guide" href="./modding.html#code-mods"
-                 target="_blank" rel="noopener noreferrer" title="Open the modding guide in a new tab">Modding guide ↗</a>
-            </div>
-            <div class="content-gate__mods-body" id="content-gate-mods-body" hidden>
-              <label class="content-gate__mods-picker">
-                <input type="file" name="mod-archives" multiple
-                       accept=".dibmod,application/zip,application/octet-stream">
-              </label>
-              <span class="content-gate__mods-actions">
-                <button class="content-gate__mods-detail content-gate__icon-button content-gate__icon-button--quiet"
-                        type="button" data-selection-action aria-label="Load order and conflicts"
-                        title="Load order and conflicts" hidden>${tuneIcon()}</button>
-                <button class="content-gate__mods-clear content-gate__icon-button content-gate__icon-button--quiet"
-                        type="button" aria-label="Clear mods" title="Clear mods" hidden>${trashIcon()}</button>
+            <button class="content-gate__mod-manager" type="button"
+                    title="Browse, install, enable and order Offline mods">
+              <span class="content-gate__mod-manager-mark">${modLibraryIcon()}</span>
+              <span class="content-gate__mod-manager-text">
+                <strong>Mod Manager</strong>
+                <small class="content-gate__mods-label">Optional Offline mods</small>
               </span>
-              <small class="content-gate__mods-status"></small>
-            </div>
+              <span class="content-gate__mod-manager-chevron">${chevronIcon()}</span>
+            </button>
+            <span class="content-gate__mods-warning" role="note" tabindex="0"
+                  title="${MOD_TRUST_WARNING}" aria-label="${MOD_TRUST_WARNING}"
+                  hidden>${warningIcon()}</span>
+            <small class="content-gate__mods-status" hidden></small>
+            <!-- Replaces the whole selection with chosen files. The Mod Manager is the player's
+                 route; this stays for scripted sessions (browser scenarios use setInputFiles). -->
+            <input type="file" name="mod-archives" multiple hidden tabindex="-1" aria-hidden="true"
+                   accept=".dibmod,application/zip,application/octet-stream">
           </div>
         </section>
         <fieldset class="content-gate__save-mode content-gate__section"
@@ -364,11 +349,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
     const modLabel = requiredElement<HTMLElement>(panel, ".content-gate__mods-label");
     const modStatus = requiredElement<HTMLElement>(panel, ".content-gate__mods-status");
     const modWarning = requiredElement<HTMLElement>(panel, ".content-gate__mods-warning");
-    const clearModsButton = requiredElement<HTMLButtonElement>(panel, ".content-gate__mods-clear");
-    const modDetailButton = requiredElement<HTMLButtonElement>(panel, ".content-gate__mods-detail");
-    const modActions = requiredElement<HTMLElement>(panel, ".content-gate__mods-actions");
-    const modToggle = requiredElement<HTMLButtonElement>(panel, ".content-gate__mods-toggle");
-    const modBody = requiredElement<HTMLElement>(panel, ".content-gate__mods-body");
+    const modManagerButton = requiredElement<HTMLButtonElement>(panel, ".content-gate__mod-manager");
     const rightsInput = requiredElement<HTMLInputElement>(
       panel,
       '.content-gate__rights input[type="checkbox"]',
@@ -452,15 +433,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
     // reversible. Once code starts, only a document reload can establish a clean Online client.
     let modCodeWasActivated = false;
     let serverStatus: OnlineServerStatus = "checking";
-    let profilesDialog: HTMLDialogElement | undefined;
-    let profileViews: readonly PlayProfileView[] = Object.freeze([]);
     let cachedModArchives: readonly CachedModArchive[] = Object.freeze([]);
-    let cachedArchiveDigest: string | undefined;
-    let cachedArchiveByteLength: number | undefined;
-    let profilesGeneration = 0;
-    let selectionDialog: HTMLDialogElement | undefined;
-    /** Collapsed until this device is known to hold cached packages, or the player selects some. */
-    let modsExpanded = false;
     let importedContent: ImportedContentPackage | undefined;
     let importPromise: Promise<ImportedContentPackage> | undefined;
     let importedFor: File | undefined;
@@ -478,7 +451,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       | {
           readonly phase: "ready";
           readonly file: File;
-          readonly store: BrowserSaveConnection;
+          readonly store: OfflineSaveLibrary;
         }
       | { readonly phase: "error"; readonly file: File; readonly message: string } = {
         phase: "idle",
@@ -748,15 +721,10 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
           if (localSaveProbe.phase === "ready" && localSaveProbe.file === file) {
             store = localSaveProbe.store;
           } else {
-            // Save settings and startup must share one connection: BrowserSaveConnection caches
-            // slot summaries, so importing/deleting/restoring through a sibling instance would
-            // leave the subsequently mounted save selector stale.
+            // Save settings and startup share the selected page and its stable save addresses.
             localSaveProbeGeneration++;
-            const connection = BrowserSaveConnection.forContent(
-              contentFingerprint,
-              undefined,
-              releaseRememberedArchive,
-            );
+            const connection = await createOfflineLibrary(contentFingerprint);
+            if (generation !== storageDialogGeneration || activeStorageDialog?.dialog !== dialog) return;
             store = connection;
             localSaveProbe = { phase: "ready", file, store: connection };
             update();
@@ -768,6 +736,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
           store,
           nativeSave: nativeSaveContextFor(content),
           mode: mode === "local" ? "offline" : "online",
+          onChange: update,
         });
       })().catch((error: unknown) => {
         if (generation !== storageDialogGeneration || activeStorageDialog?.dialog !== dialog) return;
@@ -1090,33 +1059,25 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
 
       fileInput.disabled = busy;
       modInput.disabled = busy;
-      clearModsButton.disabled = busy;
-      clearModsButton.hidden = !hasMods;
+      modManagerButton.disabled = busy;
       modLabel.textContent = hasMods
-        ? `${selectedModFiles.length} Offline ${selectedModFiles.length === 1 ? "Mod" : "Mods"} selected`
-        : "Optional Offline Mods (.dibmod)";
-      // One package names itself; beyond that the list is noise the Load order view owns, and an
-      // empty selection needs no sentence at all — the picker below already says so.
+        ? `${selectedModFiles.length} ${selectedModFiles.length === 1 ? "mod" : "mods"} enabled`
+        : "Optional Offline mods";
+      // Names in activation order; the Mod Manager owns the full list, versions and order.
+      const enabledNames = (modProfile?.packages ?? []).map((pkg) => pkg.manifest.displayName);
       modStatus.textContent = !hasMods
         ? ""
         : mode === "official"
-          ? "Full-trust mods are local-only. Clear them or choose Offline."
-          : selectedModFiles.length === 1
-            ? selectedModFiles[0]!.name
-            : "";
-      // Selecting packages always reveals them; the remembered default only decides the resting
-      // state of an untouched gate.
-      if (hasMods) modsExpanded = true;
-      modToggle.setAttribute("aria-expanded", String(modsExpanded));
-      modToggle.classList.toggle("content-gate__mods-toggle--open", modsExpanded);
-      modBody.hidden = !modsExpanded;
+          ? "Full-trust mods are local-only. Disable them in the Mod Manager or choose Offline."
+          : modResolutionError !== undefined
+            ? "These mods cannot load together. Open the Mod Manager's Load order to fix it."
+            : compactModNames(enabledNames);
+      modStatus.classList.toggle(
+        "content-gate__mods-status--error",
+        hasMods && (mode === "official" || modResolutionError !== undefined),
+      );
       modStatus.hidden = modStatus.textContent === "";
-      modWarning.hidden = !modsExpanded;
-      modDetailButton.hidden = !hasMods || mode === "official";
-      modDetailButton.disabled = busy;
-      modActions.hidden = modDetailButton.hidden && !hasMods;
-      renderProfilesDialog();
-      renderSelectionDialog();
+      modWarning.hidden = !hasMods;
       saveModeFieldset.disabled = !hasFile || busy;
       officialModeInput.disabled = busy || !onlineAvailability.available;
       officialModeRow.classList.toggle(
@@ -1155,9 +1116,12 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
         if (localSaveProbe.phase === "ready" && localSaveProbe.file === file) {
           const count = localSaveProbe.store.slots.length;
           localSaveStatus.classList.add("content-gate__mode-detail-status--success");
-          localSaveStatus.textContent = count === 0
-            ? "No browser saves found for this content. Click the gear icon to import existing save files."
-            : `${count} browser save ${count === 1 ? "slot was" : "slots were"} detected.`;
+          const library = localSaveProbe.store;
+          const warnings = SAVE_SLOT_IDS.filter(slot => library.warning(slot) !== undefined);
+          localSaveStatus.textContent =
+            `Page ${localSaveProbe.store.page + 1} of ${localSaveProbe.store.pageCount}: ${count} saved games. ` +
+            (warnings.length > 0 ? `${warnings.length} save(s) need a mod/content compatibility check. ` : "") +
+            "Manage pages in Offline settings.";
         } else if (localSaveProbe.phase === "error" && localSaveProbe.file === file) {
           localSaveStatus.classList.add("content-gate__mode-detail-status--error");
           localSaveStatus.textContent =
@@ -1256,11 +1220,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       try {
         const contentFingerprint = fingerprint ?? await fingerprintContentPackage(content);
         fingerprint = contentFingerprint;
-        const store = BrowserSaveConnection.forContent(
-          contentFingerprint,
-          undefined,
-          releaseRememberedArchive,
-        );
+        const store = await createOfflineLibrary(contentFingerprint);
         if (generation !== localSaveProbeGeneration || selectedFile !== file) return;
         localSaveProbe = { phase: "ready", file, store };
       } catch (error) {
@@ -1355,30 +1315,6 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       if (selectedMode() === "local") await inspectLocalSaves();
     };
 
-    const reapplyModSelection = (): void => {
-      void applyModSelection().catch((error: unknown) => {
-        status.classList.add("content-gate__status--error");
-        status.textContent = describeError(error);
-        update();
-      });
-    };
-
-    /**
-     * Moves one package within the resolved order. The whole order is rewritten as explicit
-     * priorities so the result is total and predictable; declared dependency and load-order edges
-     * still win, so a move the relations forbid visibly snaps back.
-     */
-    function moveSelectedMod(id: string, delta: number): void {
-      const ids = (modProfile?.packages ?? []).map((pkg) => pkg.manifest.id);
-      const index = ids.indexOf(id);
-      const target = index + delta;
-      if (index < 0 || target < 0 || target >= ids.length) return;
-      [ids[index], ids[target]] = [ids[target]!, ids[index]!];
-      modPriorityOverrides = Object.fromEntries(ids.map((entry, at) => [entry, at * 10]));
-      writeModOrderOverrides(modPriorityOverrides);
-      reapplyModSelection();
-    }
-
     const gateStorage = ((): (KeyValueStorageWithIndex) | undefined => {
       try {
         return globalThis.localStorage as unknown as KeyValueStorageWithIndex;
@@ -1387,30 +1323,23 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       }
     })();
 
-
-    const refreshProfileViews = async (): Promise<void> => {
-      const generation = ++profilesGeneration;
-      const [mods, archive] = await Promise.all([
-        listCachedModArchives(modCache).catch(() => Object.freeze([]) as readonly CachedModArchive[]),
-        loadRememberedContentArchive(archiveCache).catch(() => undefined),
-      ]);
-      if (generation !== profilesGeneration) return;
-      cachedModArchives = mods;
-      cachedArchiveDigest = archive?.digest;
-      cachedArchiveByteLength = archive?.byteLength;
-      profileViews = composePlayProfileViews(
-        readPlayProfiles(gateStorage),
-        readSaveSlotIndex(gateStorage),
-        {
-          archiveDigest: cachedArchiveDigest,
-          ...(cachedArchiveByteLength === undefined
-            ? {}
-            : { archiveByteLength: cachedArchiveByteLength }),
-          modDigests: new Set(mods.map((mod) => mod.digest)),
-          modByteLengths: new Map(mods.map((mod) => [mod.digest, mod.byteLength])),
-        },
-        readDismissedProfiles(gateStorage),
+    const createOfflineLibrary = async (identity: ContentFingerprint): Promise<OfflineSaveLibrary> => {
+      if (gateStorage === undefined) throw new Error("Browser local storage is unavailable.");
+      const storage = gateStorage;
+      const create = () => new OfflineSaveLibrary(
+        storage,
+        `${identity.algorithm}:${identity.scope}:${identity.digest}`,
+        (modProfile?.packages ?? []).map(pkg => ({
+          digest: pkg.digest, id: pkg.manifest.id, version: pkg.manifest.version,
+          displayName: pkg.manifest.displayName, byteLength: undefined,
+        })),
+        releaseRememberedArchive,
       );
+      try { return create(); }
+      catch (error) {
+        if (!isQuotaExceeded(error) || !await releaseRememberedArchive()) throw error;
+        return create();
+      }
     };
 
     const cachedModFilesForProfile = (record: PlayProfileRecord): readonly File[] | undefined => {
@@ -1426,521 +1355,19 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       return Object.freeze(files);
     };
 
-    /**
-     * Restores a remembered pairing from this device alone. Cached mod bytes are executable, so
-     * this only repopulates the pickers — the player still launches deliberately.
-     */
-    const usePlayProfile = async (view: PlayProfileView): Promise<void> => {
-      const record = view.record;
-      if (record === undefined || !view.restorable) return;
-      const remembered = await loadRememberedContentArchive(archiveCache);
-      if (remembered === undefined || remembered.digest !== record.archiveDigest) {
-        await refreshProfileViews();
-        renderProfilesDialog();
-        throw new Error("This profile's game content is no longer on this device.");
-      }
-      const modFiles = cachedModFilesForProfile(record);
-      if (modFiles === undefined) {
-        await refreshProfileViews();
-        renderProfilesDialog();
-        throw new Error("One or more mods in this profile are no longer cached on this device.");
-      }
-      closeProfilesDialog();
-      const archiveFile = new File([remembered.bytes], remembered.archiveName, {
-        type: remembered.bytes.type || "application/zip",
-        lastModified: new Date(remembered.cachedAt).getTime(),
-      });
-      // Restoring the mods first keeps the single archive import from running twice.
-      selectedModFiles = Object.freeze(modFiles);
-      allowDeclaredConflicts = false;
-      modInput.value = "";
-      gateMemory = withRememberedModProfileRestore(gateMemory, true);
-      writeContentGateMemory(gateMemory);
-      await selectArchive(archiveFile, "cache", remembered.digest);
-      status.classList.remove("content-gate__status--error");
-      status.textContent = `Restored ${view.label} from this device.`;
-      update();
-    };
-
-    const currentModSummary = (): string => {
-      const packages = modProfile?.packages ?? [];
-      if (packages.length === 0) return "no mods";
-      return packages.length === 1
-        ? `${packages[0]!.manifest.displayName} ${packages[0]!.manifest.version}`
-        : `${packages.length} mods`;
-    };
-
-    /** Clone, never move, one foreign-profile slot into the currently selected Offline identity. */
-    const trySaveWithCurrentSelection = async (
-      view: PlayProfileView,
-      slotId: (typeof view.saveSlots)[number]["slotId"],
-    ): Promise<void> => {
-      const probe = localSaveProbe;
-      if (selectedFile === undefined || probe.phase !== "ready" || probe.file !== selectedFile) {
-        throw new Error("Wait for the selected Offline content to finish checking its saves.");
-      }
-      if (probe.store.saveNamespace === view.namespace) {
-        throw new Error("That save already belongs to the selected Offline content.");
-      }
-      if (probe.store.summary(slotId) !== undefined) {
-        throw new Error(`${slotId} already has a save under the selected content; it was not overwritten.`);
-      }
-      const accepted = globalThis.confirm(
-        `DANGEROUS SAVE COMPATIBILITY OVERRIDE\n\n` +
-        `Try ${slotId} from “${view.label}” with the current ${currentModSummary()} setup?\n\n` +
-        `The game will clone the save and attempt to load it. The original stays untouched. ` +
-        `Items that no longer exist will be ignored, but removed monsters, worlds, quests, or ` +
-        `unforeseen mod state can still crash the game or corrupt the cloned copy after it saves.\n\n` +
-        `Keep the original and a backup. Continue only if you accept that risk.`,
-      );
-      if (!accepted) return;
-      await probe.store.cloneSlotFromNamespace(view.namespace, slotId);
-      await refreshProfileViews();
-      renderProfilesDialog();
-      status.classList.remove("content-gate__status--error");
-      status.textContent = `${slotId} was cloned for a risky compatibility attempt; the original was preserved.`;
-      update();
-    };
-
-    /** Permanently removes one explicitly confirmed slot without touching its content profile. */
-    const deleteProfileSaveSlot = async (
-      view: PlayProfileView,
-      slotId: (typeof view.saveSlots)[number]["slotId"],
-    ): Promise<void> => {
-      const accepted = globalThis.confirm(
-        `DELETE OFFLINE SAVE PERMANENTLY\n\n` +
-        `Delete ${slotId} from "${view.label}"?\n\n` +
-        `This deletes the current save and its retained rollback revision from this browser. ` +
-        `The game-content archive, mods, other slots, and profile cache are not deleted.\n\n` +
-        `This cannot be undone unless you exported a backup.`,
-      );
-      if (!accepted) return;
-      const activeProbe = localSaveProbe;
-      const store = activeProbe.phase === "ready" &&
-          activeProbe.store.saveNamespace === view.namespace
-        ? activeProbe.store
-        : (() => {
-            if (gateStorage === undefined) {
-              throw new Error("Browser save storage is unavailable.");
-            }
-            return BrowserSaveConnection.forNamespace(view.namespace, gateStorage);
-          })();
-      await store.deleteSlot(slotId);
-      await refreshProfileViews();
-      renderProfilesDialog();
-      status.classList.remove("content-gate__status--error");
-      status.textContent = `${slotId} was permanently deleted from ${view.label}.`;
-      update();
-    };
-
-    const forgetCachedContent = async (view: PlayProfileView, digest: string): Promise<void> => {
-      if (view.record?.archiveDigest === digest) await releaseRememberedArchive();
-      else await modCache.delete(digest);
-      await refreshProfileViews();
-      renderProfilesDialog();
-    };
-
-    /**
-     * Takes one row out of the list. The pairing record is dropped and the namespace is dismissed,
-     * so an unidentified row can be tidied away too, but the save slots are deliberately untouched:
-     * a cleanup button must not be able to destroy a playthrough whose label is only a hash. Saves
-     * are removed from the save-storage dialog, and playing the pairing again brings the row back.
-     */
-    const removeProfileFromList = async (view: PlayProfileView): Promise<void> => {
-      if (view.record !== undefined) forgetPlayProfile(gateStorage, view.namespace);
-      dismissPlayProfile(gateStorage, view.namespace);
-      await refreshProfileViews();
-      renderProfilesDialog();
-    };
-
-    function textRow(className: string, text: string): HTMLElement {
-      const node = document.createElement("p");
-      node.className = className;
-      node.textContent = text;
-      return node;
-    }
-
-    /** Icon-only affordance. `icon` is one of this module's own SVG constants, never author text. */
-    function iconButton(icon: string, label: string, onClick: () => void): HTMLButtonElement {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "content-gate__profile-action content-gate__profile-action--icon";
-      button.innerHTML = icon;
-      button.title = label;
-      button.setAttribute("aria-label", label);
-      button.disabled = busy;
-      button.addEventListener("click", onClick);
-      return button;
-    }
-
-    function textButton(label: string, title: string, onClick: () => void): HTMLButtonElement {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "content-gate__profile-action";
-      button.textContent = label;
-      button.title = title;
-      button.disabled = busy;
-      button.addEventListener("click", onClick);
-      return button;
-    }
-
-    const reportProfileError = (error: unknown): void => {
-      status.classList.add("content-gate__status--error");
-      status.textContent = describeError(error);
-      update();
-    };
-
-    /** The current picker selection: resolved activation order, advisories, and shared seams. */
-    function renderCurrentSelection(root: HTMLElement): void {
-      root.replaceChildren();
-      const packages = modProfile?.packages ?? [];
-      const archiveRow = document.createElement("div");
-      archiveRow.className = "content-gate__profile-content";
-      const archiveName = document.createElement("span");
-      archiveName.className = "content-gate__profile-content-name";
-      archiveName.textContent = selectedFile?.name ?? "No asset archive selected";
-      archiveRow.append(archiveName);
-      if (selectedFile !== undefined) {
-        const archiveSize = document.createElement("span");
-        archiveSize.className = "content-gate__profile-content-state";
-        archiveSize.textContent = formatShortFileSize(selectedFile.size);
-        archiveRow.append(archiveSize);
-      }
-      root.append(archiveRow);
-
-      if (packages.length === 0 && modResolutionError === undefined) {
-        root.append(textRow("content-gate__profile-note", "No mods selected."));
-      }
-
-      if (packages.length > 0) {
-        const list = document.createElement("ol");
-        list.className = "content-gate__mods-order";
-        for (const pkg of packages) {
-          const row = document.createElement("li");
-          row.className = "content-gate__mods-row";
-          const name = document.createElement("span");
-          name.className = "content-gate__mods-name";
-          // Manifest text is untrusted author input and is only ever set as a text node.
-          name.textContent = pkg.manifest.displayName;
-          const version = document.createElement("small");
-          const sourceIndex = modPackages.findIndex((entry) => entry.digest === pkg.digest);
-          const byteLength = sourceIndex < 0 ? undefined : selectedModFiles[sourceIndex]?.size;
-          version.textContent = byteLength === undefined
-            ? pkg.manifest.version
-            : `${pkg.manifest.version} · ${formatShortFileSize(byteLength)}`;
-          name.append(" ", version);
-          const moves = document.createElement("span");
-          moves.className = "content-gate__mods-move";
-          const controls = [[-1, "\u2191", "earlier"], [1, "\u2193", "later"]] as const;
-          for (const [delta, glyph, action] of controls) {
-            const move = document.createElement("button");
-            move.type = "button";
-            move.textContent = glyph;
-            move.title = `Load ${pkg.manifest.id} ${action}`;
-            move.disabled = busy || packages.length < 2;
-            move.addEventListener("click", () => { moveSelectedMod(pkg.manifest.id, delta); });
-            moves.append(move);
-          }
-          row.append(name, moves);
-          list.append(row);
-        }
-        root.append(list);
-      }
-
-      const interference = importedContent !== undefined && hasImportedModProfile(importedContent)
-        ? importedContent.modProfile.interference
-        : undefined;
-      if (packages.length > 1) {
-        root.append(textRow(
-          "content-gate__mods-note",
-          "Activation order above. A later mod overwrites an earlier one.",
-        ));
-      }
-      if (modResolutionError !== undefined) {
-        root.append(textRow("content-gate__mods-note content-gate__mods-note--error", modResolutionError));
-      }
-      for (const advisory of modProfile?.advisories ?? []) {
-        root.append(textRow("content-gate__mods-note", advisory.message));
-      }
-      const seams = interference?.seams ?? [];
-      if (seams.length > 0) {
-        root.append(textRow(
-          "content-gate__mods-note",
-          `${seams.length} shared ${seams.length === 1 ? "seam" : "seams"}; ` +
-          `${interference?.warnings.length ?? 0} where a later mod discards an earlier one.`,
-        ));
-        for (const seam of seams.slice(0, MAX_LISTED_SEAMS)) {
-          root.append(textRow(
-            `content-gate__mods-note content-gate__mods-note--${seam.severity === "warning" ? "warn" : "info"}`,
-            `${seam.target} - ${seam.summary}`,
-          ));
-        }
-        if (seams.length > MAX_LISTED_SEAMS) {
-          root.append(textRow(
-            "content-gate__mods-note",
-            `+${seams.length - MAX_LISTED_SEAMS} more in the browser console.`,
-          ));
-        }
-      }
-      if (modConflictOverridable) {
-        const override = document.createElement("button");
-        override.type = "button";
-        override.className = "content-gate__mods-override";
-        override.textContent = "Load anyway";
-        override.disabled = busy;
-        override.addEventListener("click", () => {
-          allowDeclaredConflicts = true;
-          reapplyModSelection();
-        });
-        root.append(override);
-      }
-    }
-
-    /** Remembered archive+mod pairings that own an Offline save on this device. */
-    function renderSavedProfiles(root: HTMLElement): void {
-      root.replaceChildren();
-      if (profileViews.length === 0) {
-        root.append(textRow(
-          "content-gate__profile-note",
-          "No Offline saves yet. Launch once and the pairing is remembered here.",
-        ));
-        return;
-      }
-      for (const view of profileViews) {
-        const card = document.createElement("article");
-        card.className = view.restorable
-          ? "content-gate__profile"
-          : "content-gate__profile content-gate__profile--partial";
-
-        const header = document.createElement("header");
-        header.className = "content-gate__profile-header";
-        const label = document.createElement("strong");
-        label.textContent = view.label;
-        const saves = document.createElement("span");
-        saves.className = "content-gate__profile-saves";
-        saves.textContent = `${view.saveSlots.length} ${view.saveSlots.length === 1 ? "save" : "saves"}`;
-        header.append(label, saves);
-        if (view.restorable) {
-          header.append(textButton("Use", `Restore ${view.label}`, () => {
-            void usePlayProfile(view).catch(reportProfileError);
-          }));
-        }
-        header.append(iconButton(trashIcon(), "Remove this pairing from the list; saves are kept", () => {
-          void removeProfileFromList(view).catch(reportProfileError);
-        }));
-        card.append(header);
-
-        for (const entry of view.contents) {
-          const row = document.createElement("div");
-          row.className = entry.cached
-            ? "content-gate__profile-content"
-            : "content-gate__profile-content content-gate__profile-content--ghost";
-          const name = document.createElement("span");
-          name.className = "content-gate__profile-content-name";
-          name.textContent = entry.detail === undefined
-            ? entry.label
-            : `${entry.label} ${entry.detail}`;
-          const state = document.createElement("span");
-          state.className = "content-gate__profile-content-state";
-          state.textContent = entry.byteLength === undefined
-            ? entry.cached ? "cached" : "missing"
-            : `${entry.cached ? "cached" : "missing"} · ${formatShortFileSize(entry.byteLength)}`;
-          row.append(name, state);
-          if (entry.cached) {
-            row.append(iconButton(closeIcon(), `Remove the cached ${entry.kind}`, () => {
-              void forgetCachedContent(view, entry.digest).catch(reportProfileError);
-            }));
-          } else {
-            const upload = document.createElement("label");
-            upload.className =
-              "content-gate__profile-action content-gate__profile-action--icon content-gate__profile-upload";
-            upload.title = `Upload this ${entry.kind}`;
-            upload.innerHTML = uploadIcon();
-            const input = document.createElement("input");
-            input.type = "file";
-            input.hidden = true;
-            input.accept = entry.kind === "archive"
-              ? ".ipa,.zip,application/zip,application/octet-stream"
-              : ".dibmod,application/zip,application/octet-stream";
-            input.addEventListener("change", () => {
-              const file = input.files?.[0];
-              if (file === undefined) return;
-              closeProfilesDialog();
-              if (entry.kind === "archive") {
-                void selectArchive(file, "picker").catch(reportProfileError);
-                return;
-              }
-              void selectMods([...selectedModFiles, file]).catch(reportProfileError);
-            });
-            upload.append(input);
-            row.append(upload);
-          }
-          card.append(row);
-        }
-
-        const currentNamespace = localSaveProbe.phase === "ready" &&
-            localSaveProbe.file === selectedFile
-          ? localSaveProbe.store.saveNamespace
-          : undefined;
-        for (const save of view.saveSlots) {
-          const row = document.createElement("div");
-          row.className = "content-gate__profile-content";
-          const name = document.createElement("span");
-          name.className = "content-gate__profile-content-name";
-          name.textContent = save.slotId.replace("slot-", "Slot ");
-          const state = document.createElement("span");
-          state.className = "content-gate__profile-content-state";
-          state.textContent = save.updatedAt ?? "saved";
-          row.append(name, state);
-          if (currentNamespace !== undefined && currentNamespace !== view.namespace) {
-            const destinationOccupied = localSaveProbe.phase === "ready" &&
-              localSaveProbe.store.summary(save.slotId) !== undefined;
-            const tryButton = textButton(
-              "Try here",
-              destinationOccupied
-                ? `${save.slotId} is already occupied under the selected content`
-                : `Clone ${save.slotId} and try it with the selected content`,
-              () => { void trySaveWithCurrentSelection(view, save.slotId).catch(reportProfileError); },
-            );
-            tryButton.disabled = busy || destinationOccupied;
-            row.append(tryButton);
-          }
-          const deleteButton = textButton(
-            "Delete",
-            `Permanently delete ${save.slotId} from ${view.label}`,
-            () => { void deleteProfileSaveSlot(view, save.slotId).catch(reportProfileError); },
-          );
-          deleteButton.disabled = busy;
-          row.append(deleteButton);
-          card.append(row);
-        }
-
-        if (view.record === undefined) {
-          card.append(textRow(
-            "content-gate__profile-note",
-            "Launch this content once to identify it.",
-          ));
-        }
-        root.append(card);
-      }
-    }
-
-    function renderProfilesDialog(): void {
-      const dialog = profilesDialog;
-      if (dialog === undefined) return;
-      renderSavedProfiles(requiredElement<HTMLElement>(dialog, "[data-profiles-saved]"));
-    }
-
-    function renderSelectionDialog(): void {
-      const dialog = selectionDialog;
-      if (dialog === undefined) return;
-      renderCurrentSelection(requiredElement<HTMLElement>(dialog, "[data-selection-current]"));
-    }
-
-    function closeProfilesDialog(): void {
-      const dialog = profilesDialog;
-      profilesDialog = undefined;
-      dismissDialog(dialog);
-    }
-
-    function closeSelectionDialog(): void {
-      const dialog = selectionDialog;
-      selectionDialog = undefined;
-      dismissDialog(dialog);
-    }
-
     function dismissDialog(dialog: HTMLDialogElement | undefined): void {
       if (dialog === undefined) return;
       if (dialog.open) dialog.close();
       dialog.remove();
     }
 
-    /**
-     * Both gate dialogs share this chrome. They are deliberately separate surfaces: profiles are
-     * about content this device remembers, load order is about the selection in hand.
-     */
-    function buildDialog(
-      id: string,
-      eyebrow: string,
-      title: string,
-      mark: string,
-      body: string,
-      onClose: () => void,
-    ): HTMLDialogElement {
-      const dialog = document.createElement("dialog");
-      dialog.className = "content-gate__profiles-dialog";
-      dialog.setAttribute("aria-labelledby", `${id}-title`);
-      dialog.innerHTML = `
-        <div class="content-gate__profiles-card">
-          <header class="content-gate__storage-dialog-header">
-            <span class="content-gate__storage-dialog-mark">${mark}</span>
-            <span>
-              <span class="content-gate__storage-dialog-eyebrow">${eyebrow}</span>
-              <strong id="${id}-title">${title}</strong>
-            </span>
-            <button class="content-gate__dialog-close content-gate__icon-button" type="button"
-                    aria-label="Close ${title}" title="Close">${closeIcon()}</button>
-          </header>
-          ${body}
-        </div>
-      `;
-      panel.append(dialog);
-      requiredElement<HTMLButtonElement>(dialog, ".content-gate__dialog-close")
-        .addEventListener("click", onClose);
-      dialog.addEventListener("cancel", onClose);
-      dialog.addEventListener("click", (event) => {
-        if (event.target === dialog) onClose();
-      });
-      dialog.showModal();
-      return dialog;
-    }
-
-    const openProfilesDialog = (): void => {
-      closeStorageDialog();
-      closeSelectionDialog();
-      closeProfilesDialog();
-      profilesDialog = buildDialog(
-        "profiles-dialog",
-        "Offline",
-        "Profiles",
-        starIcon(),
-        `<div class="content-gate__profiles-list" data-profiles-saved></div>`,
-        () => { closeProfilesDialog(); },
-      );
-      renderProfilesDialog();
-      void refreshProfileViews().then(renderProfilesDialog).catch(reportProfileError);
-    };
-
-    const openSelectionDialog = (): void => {
-      closeStorageDialog();
-      closeProfilesDialog();
-      closeSelectionDialog();
-      selectionDialog = buildDialog(
-        "selection-dialog",
-        "Mods",
-        "Load order",
-        tuneIcon(),
-        `<div data-selection-current></div>`,
-        () => { closeSelectionDialog(); },
-      );
-      renderSelectionDialog();
-    };
-
-    for (const trigger of panel.querySelectorAll<HTMLElement>("[data-profiles-action]")) {
-      trigger.addEventListener("click", () => { openProfilesDialog(); });
-    }
-    for (const trigger of panel.querySelectorAll<HTMLElement>("[data-selection-action]")) {
-      trigger.addEventListener("click", () => { openSelectionDialog(); });
-    }
-    modToggle.addEventListener("click", () => {
-      modsExpanded = !modsExpanded;
-      update();
-    });
-
-    const selectMods = async (files: readonly File[]): Promise<void> => {
+    const selectMods = async (
+      files: readonly File[],
+      options: { readonly allowDeclaredConflicts?: boolean } = {},
+    ): Promise<void> => {
       closeStorageDialog();
       selectedModFiles = Object.freeze([...files]);
-      allowDeclaredConflicts = false;
+      allowDeclaredConflicts = options.allowDeclaredConflicts ?? false;
       if (files.length > 0) {
         console.warn(
           "Full-trust .dibmod files selected. They run inside the game page with the same access as the app:",
@@ -1950,28 +1377,47 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       invalidateLogin();
       await applyModSelection();
     };
-    modInput.addEventListener("change", () => {
-      const files = [...(modInput.files ?? [])];
-      void selectMods(files).catch((error: unknown) => {
-        status.classList.add("content-gate__status--error");
-        status.textContent = describeError(error);
-        update();
-      });
-    });
-    clearModsButton.addEventListener("click", () => {
-      modInput.value = "";
-      // Clearing is an explicit selection choice. Keep cached packages for save-linked profiles,
-      // but do not immediately repopulate this same profile when the required clean-tab reload
-      // happens after full-trust code has run.
-      gateMemory = withRememberedModProfileRestore(gateMemory, false);
-      writeContentGateMemory(gateMemory);
+    /**
+     * The Mod Manager stages a selection plus its load-order choices and hands them back on Apply.
+     * Once full-trust code has run in this page, applying goes through a clean reload instead.
+     */
+    const applyModManagerSelection = async (selection: ModManagerSelection): Promise<void> => {
+      modPriorityOverrides = { ...selection.priorityOverrides };
+      writeModOrderOverrides(modPriorityOverrides);
+      if (modCodeWasActivated || selection.files.length === 0) {
+        // An explicit choice: the next page must not repopulate the last played profile's mods.
+        gateMemory = withRememberedModProfileRestore(gateMemory, false);
+        writeContentGateMemory(gateMemory);
+      }
       if (modCodeWasActivated) {
-        // Same-realm mod effects are not generally reversible. Reload immediately so the player
-        // arrives at an actually clean, Online-eligible document instead of a dead-end message.
+        await stageModSelectionForReload(selection.files, modCache, sessionStorage, {
+          allowDeclaredConflicts: selection.allowDeclaredConflicts,
+        });
         globalThis.location.reload();
         return;
       }
-      void selectMods([]).catch((error: unknown) => {
+      modInput.value = "";
+      await selectMods(selection.files, { allowDeclaredConflicts: selection.allowDeclaredConflicts });
+    };
+    modManagerButton.addEventListener("click", () => {
+      if (busy) return;
+      closeStorageDialog();
+      showModManager({
+        cache: modCache,
+        selected: () => selectedModFiles,
+        order: () => ({ priorityOverrides: modPriorityOverrides, allowDeclaredConflicts }),
+        interference: () => importedContent !== undefined && hasImportedModProfile(importedContent) &&
+            importedModsFor === selectedModFiles
+          ? importedContent.modProfile.interference
+          : undefined,
+        applyReloads: () => modCodeWasActivated,
+        select: applyModManagerSelection,
+        ...(selectedModFiles.length > 0 && modResolutionError !== undefined ? { initialTab: "order" as const } : {}),
+      });
+    });
+    modInput.addEventListener("change", () => {
+      const files = [...(modInput.files ?? [])];
+      void selectMods(files).catch((error: unknown) => {
         status.classList.add("content-gate__status--error");
         status.textContent = describeError(error);
         update();
@@ -2094,11 +1540,10 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       if (mode === "local") await rememberOfflineProfile(file, digest, storageReport);
     };
 
-
-
-
-
-
+    /**
+     * Retains the last archive/mod selection for convenience on reload. Save ownership and
+     * per-slot mod history are independent, in OfflineSaveLibrary.
+     */
     const rememberOfflineProfile = async (
       file: File,
       archiveDigest: string,
@@ -2155,41 +1600,6 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       }
     };
 
-    const confirmChangedModProfileForExistingSaves = (): boolean => {
-      const probe = localSaveProbe;
-      if (probe.phase !== "ready" || probe.file !== selectedFile || probe.store.slots.length === 0) {
-        return true;
-      }
-      const previous = readPlayProfiles(gateStorage)
-        .find((record) => record.namespace === probe.store.saveNamespace);
-      const current = (modProfile?.packages ?? []).map((pkg) => pkg.digest);
-      if (previous === undefined) {
-        if (current.length === 0) return true;
-        return globalThis.confirm(
-          `MODS WITH UNIDENTIFIED OFFLINE SAVES\n\n` +
-          `This namespace already contains Offline saves, but the game cannot identify the exact ` +
-          `profile that last opened them. You are now using ${currentModSummary()}.\n\n` +
-          `This is often safe for visual or debugging mods, but mods have full access and may ` +
-          `change the meaning of saved fields. Missing items will be ignored; larger mismatches ` +
-          `may crash or damage later revisions. Export a backup first.\n\nContinue with these saves?`,
-        );
-      }
-      const prior = previous.mods.map((mod) => mod.digest);
-      if (current.length === prior.length && current.every((digest, index) => digest === prior[index])) {
-        return true;
-      }
-      return globalThis.confirm(
-        `MOD PROFILE CHANGED FOR THESE SAVES\n\n` +
-        `The selected content has the same effective save data, but these Offline saves were last ` +
-        `opened as “${describePlayProfileLabel(previous, previous.namespace)}”. You are now using ` +
-        `${currentModSummary()}.\n\n` +
-        `This is often safe for visual, debugging, or behavior-only mods, but code mods have full ` +
-        `access and may give the same saved fields a different meaning. Missing items will be ` +
-        `ignored; larger mismatches may crash or damage later revisions. Export a backup first.\n\n` +
-        `Continue with these saves?`,
-      );
-    };
-
     button.addEventListener("click", () => {
       const file = selectedFile;
       const mode = selectedMode();
@@ -2222,9 +1632,6 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
           if (localSaveProbe.phase !== "ready" || localSaveProbe.file !== file) {
             throw new Error("Browser saves were not checked for the selected content.");
           }
-          if (!confirmChangedModProfileForExistingSaves()) {
-            throw new Error("Offline launch cancelled; the saves were not changed.");
-          }
           acquired = { content, saveStore: localSaveProbe.store };
         }
         assertOfficialContentBoundary(acquired);
@@ -2240,9 +1647,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
         .then(async (acquired) => {
           closeStorageDialog();
           closeRegisterDialog();
-          closeProfilesDialog();
-          closeSelectionDialog();
-          const firstLoadScreen = await prepareSourceLoadingScreen(acquired.content);
+              const firstLoadScreen = await prepareSourceLoadingScreen(acquired.content);
           await fadeOutContentGate(panel);
           disposeOfflineShellStatus();
           firstLoadScreen.mount(host);
@@ -2264,6 +1669,14 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       if (panel.isConnected) update();
     });
     if (archiveCache.supported) {
+      let pendingModSelection: PendingModSelection | undefined;
+      let pendingModError: string | undefined;
+      try { pendingModSelection = takePendingModSelection(sessionStorage); }
+      catch (error) {
+        // Disabled sessionStorage is not a failure of the pre-existing archive/profile restore.
+        // An actual malformed pending selection does fail closed instead of restoring older mods.
+        if (error instanceof PendingModSelectionError) pendingModError = error.message;
+      }
       const restoreGeneration = archiveGeneration;
       status.textContent = "Checking this device for remembered game content…";
       void Promise.all([
@@ -2272,34 +1685,30 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       ]).then(async ([remembered, mods]) => {
         if (archiveGeneration !== restoreGeneration || selectedFile !== undefined) return;
         cachedModArchives = mods;
-        cachedArchiveDigest = remembered?.digest;
-        cachedArchiveByteLength = remembered?.byteLength;
-        profileViews = composePlayProfileViews(
-          readPlayProfiles(gateStorage),
-          readSaveSlotIndex(gateStorage),
-          {
-            archiveDigest: cachedArchiveDigest,
-            ...(cachedArchiveByteLength === undefined
-              ? {}
-              : { archiveByteLength: cachedArchiveByteLength }),
-            modDigests: new Set(mods.map((mod) => mod.digest)),
-            modByteLengths: new Map(mods.map((mod) => [mod.digest, mod.byteLength])),
-          },
-          readDismissedProfiles(gateStorage),
-        );
-        if (mods.length > 0) modsExpanded = true;
+        if (pendingModSelection !== undefined) {
+          try {
+            allowDeclaredConflicts = pendingModSelection.allowDeclaredConflicts;
+            selectedModFiles = await restorePendingModSelection(pendingModSelection.digests, mods);
+            await resolveSelectedMods(selectedModFiles);
+            if (modResolutionError) throw new Error(modResolutionError);
+          } catch (error) {
+            pendingModError = describeError(error);
+            selectedModFiles = Object.freeze([]);
+            await resolveSelectedMods(selectedModFiles);
+          }
+        }
         if (remembered === undefined) {
-          status.textContent = "";
+          status.textContent = pendingModError ?? (pendingModSelection !== undefined ? "Applied your mod selection. Choose a game archive to continue." : "");
           update();
           return;
         }
-        const lastProfile = shouldRestoreLastModProfile(gateMemory)
+        const lastProfile = pendingModSelection === undefined && !pendingModError && shouldRestoreLastModProfile(gateMemory)
           ? lastUsedPlayProfile(readPlayProfiles(gateStorage))
           : undefined;
         const restoredProfileFiles = lastProfile?.archiveDigest === remembered.digest
           ? cachedModFilesForProfile(lastProfile)
           : undefined;
-        let profileRestoreError: string | undefined;
+        let profileRestoreError: string | undefined = pendingModError;
         if (restoredProfileFiles !== undefined) {
           selectedModFiles = restoredProfileFiles;
           allowDeclaredConflicts = false;
@@ -2311,7 +1720,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
             await resolveSelectedMods(selectedModFiles);
           }
         } else if (lastProfile?.archiveDigest === remembered.digest && lastProfile.mods.length > 0) {
-          profileRestoreError = "One or more mods from the last Offline profile are no longer cached.";
+          profileRestoreError = "One or more previously selected mods are no longer cached.";
         }
         const file = new File([remembered.bytes], remembered.archiveName, {
           type: remembered.bytes.type || "application/zip",
@@ -2321,7 +1730,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
         if (selectedFile !== file) return;
         status.classList.toggle("content-gate__status--error", profileRestoreError !== undefined);
         status.textContent = profileRestoreError !== undefined
-          ? `Restored the asset archive, but not its last Offline profile: ${profileRestoreError}`
+          ? `Restored the asset archive, but not its previous mods: ${profileRestoreError}`
           : restoredProfileFiles !== undefined && lastProfile !== undefined
             ? `Restored ${describePlayProfileLabel(lastProfile, lastProfile.namespace)} from this device.`
             : "Restored the last asset archive from this device.";
@@ -2340,12 +1749,6 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
           `The remembered archive could not be restored: ${describeError(error)} Choose it again.`;
         update();
       });
-    } else {
-      // A device that holds only mod packages still opens the disclosure so the cache is visible.
-      void refreshProfileViews().then(() => {
-        if (cachedModArchives.length > 0) modsExpanded = true;
-        update();
-      }).catch(() => undefined);
     }
   });
 }
@@ -2424,26 +1827,15 @@ function keyIcon(): string {
   );
 }
 
+function modLibraryIcon(): string {
+  return svgIcon(
+    '<path d="M9 4.5a2 2 0 1 1 4 0V6h3a1 1 0 0 1 1 1v3h1.5a2 2 0 1 1 0 4H17v3a1 1 0 0 1-1 1h-3v-1.5' +
+      'a2 2 0 1 0-4 0V18H6a1 1 0 0 1-1-1v-3h1.5a2 2 0 1 0 0-4H5V7a1 1 0 0 1 1-1h3Z"/>',
+  );
+}
+
 function chevronIcon(): string {
   return svgIcon('<path d="m9 6 6 6-6 6"/>');
-}
-
-function uploadIcon(): string {
-  return svgIcon('<path d="M12 16V4m-4 4 4-4 4 4M5 20h14"/>');
-}
-
-function trashIcon(): string {
-  return svgIcon('<path d="M4 7h16M10 4h4M6 7l1 13h10l1-13M10 11v5M14 11v5"/>');
-}
-
-function tuneIcon(): string {
-  return svgIcon('<path d="M4 8h9m4 0h3M4 16h3m4 0h9M15 5v6M9 13v6"/>');
-}
-
-function starIcon(): string {
-  return svgIcon(
-    '<path d="M12 3.6l2.6 5.27 5.82.85-4.21 4.1.99 5.79L12 16.88l-5.2 2.73.99-5.79-4.21-4.1 5.82-.85Z"></path>',
-  );
 }
 
 function closeIcon(): string {

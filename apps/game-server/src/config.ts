@@ -25,6 +25,10 @@ export interface RateLimitSettings {
 }
 
 export interface GameServerConfig {
+  readonly communityOrigin: string | undefined;
+  readonly communityDirectory: string;
+  /** Read-only directory of operator-shipped `.dibmod` files published as Official mods. */
+  readonly officialModsDirectory: string | undefined;
   readonly environment: GameEnvironment;
   readonly port: number;
   readonly bindHost: string;
@@ -233,9 +237,32 @@ export function loadGameServerConfig(
     );
   }
 
+  const communityOrigin = read("DIB_COMMUNITY_ORIGIN");
+  if (communityOrigin) {
+    try {
+      const url = new URL(communityOrigin);
+      if (url.origin !== communityOrigin || (isProduction ? url.protocol !== "https:" : !["http:", "https:"].includes(url.protocol))) {
+        problems.fail("DIB_COMMUNITY_ORIGIN must be a bare HTTPS origin (HTTP allowed in development).");
+      }
+    } catch { problems.fail("DIB_COMMUNITY_ORIGIN must be a valid origin."); }
+    const gameOrigin = read("DIB_GAME_PUBLIC_ORIGIN") ?? (isProduction ? undefined : "http://localhost:5173");
+    try {
+      const game = new URL(gameOrigin ?? "");
+      if (game.origin !== gameOrigin || (isProduction && game.protocol !== "https:") || game.origin === new URL(communityOrigin).origin) {
+        problems.fail("Community authors require a bare DIB_GAME_PUBLIC_ORIGIN and a different DIB_COMMUNITY_ORIGIN.");
+      }
+    } catch { problems.fail("Community authors require a valid DIB_GAME_PUBLIC_ORIGIN."); }
+    if (isProduction && !read("DIB_COMMUNITY_DATA_DIR")) problems.fail("DIB_COMMUNITY_DATA_DIR is required for community hosting in production.");
+  }
+  const communityDirectory = resolve(read("DIB_COMMUNITY_DATA_DIR") ?? resolve(dataDirectory ?? ".", "community"));
+  const officialModsRaw = read("DIB_OFFICIAL_MODS_DIR");
+  const officialModsDirectory = officialModsRaw ? resolve(officialModsRaw) : undefined;
   const warnings = problems.finish();
   return Object.freeze({
     environment,
+    communityOrigin,
+    communityDirectory,
+    officialModsDirectory,
     port,
     bindHost,
     hmacSecret: hmacSecret as string,

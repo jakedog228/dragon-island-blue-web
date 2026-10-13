@@ -65,6 +65,17 @@ function problemsOf(load: () => unknown): readonly string[] {
 }
 
 describe("loadGameServerConfig", () => {
+  it("requires a distinct canonical author origin and explicit production mod storage", () => {
+    const paths = fixture(); makeExtractedData(paths.extractedData);
+    const environment = { DIB_GAME_ENV: "production", DIB_GAME_HMAC_SECRET_FILE: paths.secretFile,
+      DIB_GAME_DATA_DIR: paths.dataDirectory, DIB_GAME_EXTRACTED_DATA: paths.extractedData,
+      DIB_COMMUNITY_ORIGIN: "https://authors.example.com", DIB_GAME_PUBLIC_ORIGIN: "https://play.example.com",
+      DIB_COMMUNITY_DATA_DIR: join(paths.repositoryRoot, "community") };
+    expect(loadGameServerConfig({ environment }).communityOrigin).toBe(environment.DIB_COMMUNITY_ORIGIN);
+    expect(problemsOf(() => loadGameServerConfig({ environment: { ...environment, DIB_GAME_PUBLIC_ORIGIN: environment.DIB_COMMUNITY_ORIGIN } })).join(" ")).toContain("different");
+    expect(problemsOf(() => loadGameServerConfig({ environment: { ...environment, DIB_GAME_PUBLIC_ORIGIN: environment.DIB_COMMUNITY_ORIGIN + "/" } })).join(" ")).toContain("bare");
+    expect(problemsOf(() => loadGameServerConfig({ environment: { ...environment, DIB_COMMUNITY_DATA_DIR: "" } })).join(" ")).toContain("DIB_COMMUNITY_DATA_DIR");
+  });
   it("loads a complete production environment", () => {
     const paths = fixture();
     makeExtractedData(paths.extractedData);
