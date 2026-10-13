@@ -1,9 +1,12 @@
 import type { Container, Ticker } from "pixi.js";
+import { PvpActionV1Schema } from "@dib/game-protocol";
 import type { PvpClientSetupV1, PvpEntryV1 } from "@dib/game-protocol";
 import type { LoadedGame } from "../loadGame.js";
 import { PvpClient, PvpClientError } from "./pvpClient.js";
 import { PvpBattleView } from "./pvpBattleView.js";
 import { pvpRulesMismatch } from "./pvpBattleModel.js";
+import { preparePvpAppearance } from "./pvpAppearance.js";
+import { DISPLAY_MODE } from "../runtimeSettings.js";
 import { PvpMatchController, type PvpControllerState } from "./pvpMatchController.js";
 import "./pvp.css";
 
@@ -22,16 +25,18 @@ export function showPvpFlow(options: PvpFlowOptions): PvpFlowHandle {
   let state: PvpControllerState | undefined, localError: unknown, menuOpen = true, code = "", confirmingForfeit = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let renderedKey: string | undefined;
+  let background: Container | undefined;
   const previousFocus = document.activeElement;
   const dialog = element("dialog"); dialog.className = "pvp-dialog"; dialog.setAttribute("aria-label", "Multiplayer PvP");
   document.body.append(dialog);
   dialog.addEventListener("keydown", (event) => event.stopPropagation());
   const handle: PvpFlowHandle = {
-    get debugState() { return { open: !closed, lobby: menuOpen, match: state?.match ?? null, busy: state?.busy ?? false,
+    get debugState() { return { open: !closed, lobby: menuOpen, match: state?.match ?? null, busy: state?.busy ?? (!controller && !localError),
       error: localError instanceof Error ? localError.message : state?.error?.message ?? null, board: board?.debugState ?? null }; },
     requestBack() { if (board && !menuOpen) { menuOpen = true; render(); } else close(); return true; },
     dispose() {
       if (closed) return; closed = true; clearTimeout(timer); controller?.dispose(); board?.dispose(); dialog.close(); dialog.remove();
+      background?.destroy({ children: true });
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
     },
   };
@@ -44,6 +49,13 @@ export function showPvpFlow(options: PvpFlowOptions): PvpFlowHandle {
   async function connect(): Promise<void> {
     localError = undefined; render();
     try {
+      if (!background) {
+        const prepared = await preparePvpAppearance(options.game.assets, options.game.scale9, DISPLAY_MODE, dialog);
+        if (closed) { prepared.destroy({ children: true }); return; }
+        background = prepared; options.parent.addChildAt(background, 0);
+        // Above the Arena background, below any PvP battle board.
+        options.parent.setChildIndex(background, options.parent.children.length - 1);
+      }
       const connection = await options.connect(); if (closed) return;
       controller = new PvpMatchController(connection.client, connection.setup, options.entry, (next) => {
         if (closed) return;
@@ -55,7 +67,7 @@ export function showPvpFlow(options: PvpFlowOptions): PvpFlowHandle {
           board?.dispose(); board = undefined;
         } else if (next.match?.battle) {
           if (!board) {
-            board = new PvpBattleView(options.game, options.ticker, (action) => { void controller?.submit(action.type === "ability" ? { ...action, targets: [...action.targets] } : action); },
+            board = new PvpBattleView(options.game, options.ticker, (action) => { void controller?.submit(PvpActionV1Schema.parse(action)); },
               () => { menuOpen = true; render(); }, fail);
             options.parent.addChild(board);
           }
@@ -92,9 +104,15 @@ export function showPvpFlow(options: PvpFlowOptions): PvpFlowHandle {
     const caret = focused ? (document.activeElement as HTMLInputElement).selectionStart : null;
     dialog.replaceChildren();
     const header = element("div"); header.className = "pvp-dialog__header";
-    header.append(element("h2", "Multiplayer PvP"), button("Close", close)); dialog.append(header);
-    dialog.append(element("p", "Challenge a friend with your current party. Both teams start at full HP. These exhibition matches leave your campaign, items and rewards unchanged."));
-    if (match?.players.some((player) => player.source === "offline")) dialog.append(element("p", "This match includes an Offline party. Offline parties are player-controlled and are not verified Official saves."));
+    const titles = element("div"), eyebrow = element("p", "Dragon Island Arena"); eyebrow.className = "pvp-dialog__eyebrow";
+    titles.append(eyebrow, element("h2", "Multiplayer PvP"));
+    header.append(titles, button("Close", close)); dialog.append(header);
+    const intro = element("p", match ? "Exhibition match · Your campaign stays unchanged." : "Challenge a friend with your party. Both teams start at full health. Your campaign and rewards stay unchanged.");
+    intro.className = "pvp-dialog__intro"; dialog.append(intro);
+    if (match?.players.some((player) => player.source === "offline")) {
+      const notice = element("p", "Includes a player-controlled Offline party, not a verified Official save.");
+      notice.className = "pvp-dialog__notice"; dialog.append(notice);
+    }
     if (error) {
       const alert = element("section"); alert.className = "pvp-dialog__error"; alert.setAttribute("role", "alert");
       alert.append(element("strong", error instanceof Error ? error.message : String(error)));
@@ -114,13 +132,14 @@ export function showPvpFlow(options: PvpFlowOptions): PvpFlowHandle {
       if (match.status === "waiting") {
         dialog.append(element("h3", "Invite ready"), element("p", "Send this code to your opponent, then keep this screen open."));
         const invite = element("output", match.code); invite.className = "pvp-dialog__code"; invite.setAttribute("aria-label", "Invite code"); dialog.append(invite);
-        dialog.append(button("Copy code", () => {
+        const inviteActions = element("div"); inviteActions.className = "pvp-dialog__button-row";
+        inviteActions.append(button("Copy code", () => {
           // Clipboard access may be absent on local HTTP hosts; the selectable code still works.
           if (navigator.clipboard) void navigator.clipboard.writeText(match.code!).catch(() => { invite.focus(); });
           else { const range = document.createRange(); range.selectNodeContents(invite); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); }
         }));
-        dialog.append(element("p", `Expires ${new Date(match.expiresAt).toLocaleTimeString()}. Closing this window keeps your invite available until then.`));
-        dialog.append(button("Cancel invite", () => { void controller?.cancel(); }, busy || state?.canRetry));
+        inviteActions.append(button("Cancel invite", () => { void controller?.cancel(); }, busy || state?.canRetry));
+        dialog.append(element("p", `Expires ${new Date(match.expiresAt).toLocaleTimeString()}. You can return here after closing.`), inviteActions);
       } else if (match.status === "active") {
         dialog.append(element("h3", match.turn === match.you ? "Your turn" : "Opponent’s turn"));
         dialog.append(element("p", `Turn deadline: ${new Date(match.expiresAt).toLocaleTimeString()}. You can reopen PvP to reconnect after leaving this screen.`));
@@ -132,14 +151,15 @@ export function showPvpFlow(options: PvpFlowOptions): PvpFlowHandle {
         } else dialog.append(button("Forfeit…", () => { confirmingForfeit = true; render(); }, busy || state?.canRetry));
       } else {
         const result = match.status === "ended" ? match.winner === "draw" ? "Draw" : match.winner === match.you ? "Victory" : "Defeat" : match.status === "expired" ? "Invite expired" : "Invite cancelled";
-        dialog.append(element("h3", result), element("p", match.endReason ? `Match ended: ${match.endReason}.` : "Create a new invite to play."));
+        const resultTitle = element("h3", result); resultTitle.className = "pvp-dialog__result";
+        dialog.append(resultTitle, element("p", match.endReason ? `Match ended: ${match.endReason}.` : "Create a new invite to play."));
         dialog.append(button("New match", () => { board?.dispose(); board = undefined; localError = undefined; controller?.newMatch(); }, busy));
       }
     } else if (controller) {
       const actions = element("div"); actions.className = "pvp-dialog__actions";
       actions.append(button("Create invite", () => { void controller?.invite(); }, busy || state?.canRetry));
       const form = element("form"), label = element("label", "Invite code"), input = element("input");
-      input.value = code; input.maxLength = 8; input.autocomplete = "off"; input.spellcheck = false; input.placeholder = "8-character code";
+      input.value = code; input.maxLength = 8; input.autocomplete = "off"; input.spellcheck = false; input.placeholder = "ABCD2345";
       input.setAttribute("aria-label", "Invite code"); input.addEventListener("input", () => { code = input.value; });
       label.append(input); const join = element("button", "Join match"); join.type = "submit"; join.disabled = busy || state?.canRetry === true;
       form.append(label, join); form.addEventListener("submit", (event) => { event.preventDefault();

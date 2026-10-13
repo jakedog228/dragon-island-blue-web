@@ -104,7 +104,11 @@ describe("PvP selection and display", () => {
     const layout = pvpLayout(mode); expect(layout.w).toBe(w); expect(layout.h).toBe(h);
     expect(layout.cellW * 4 + layout.margin * 2).toBeLessThanOrEqual(w);
     expect(layout.controlsY + layout.buttonH * 2).toBeLessThan(h);
-    expect(layout.titleFont).toBe(h * 0.045); expect(layout.tournamentButton).toEqual({ x: w * 0.025, y: h * 0.045, font: h * 0.05 });
+    expect(layout.modButton.x).toBeGreaterThan(layout.margin + w * 0.22); // Delay ends here.
+    expect(layout.modButton.x + layout.modButton.w).toBeLessThan(w * 0.68); // More abilities starts here.
+    expect(layout.modButton.y).toBeGreaterThan(layout.controlsY + layout.buttonH * 2);
+    expect(layout.modButton.y + layout.modButton.h).toBeLessThan(h);
+    expect(layout.titleFont).toBe(h * 0.045);
   });
   it("resolves target pools relative to either human team and rejects duplicate or wrong-side selections", () => {
     const { restored } = createPvpBattle(loadGameData(), [[{ shortType: "FireCub", level: 5 }], [{ shortType: "SnowCub", level: 5 }]], () => 0.5);

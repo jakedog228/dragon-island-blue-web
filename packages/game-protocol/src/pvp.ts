@@ -47,10 +47,17 @@ export const PvpInviteRequestV1Schema = z.object({
 export const PvpJoinRequestV1Schema = PvpInviteRequestV1Schema.extend({
   code: z.string().trim().toUpperCase().regex(/^[A-HJ-NP-Z2-9]{8}$/),
 });
+const intentScalar = z.union([z.string().max(160), boundedNumber, z.boolean()]);
+export const PvpAdapterIntentV1Schema = z.record(key, z.union([intentScalar, z.array(intentScalar).max(128)]))
+  .superRefine((input, context) => {
+    if (Object.keys(input).length > 16) context.addIssue({ code: "custom", message: "Too many adapter intent fields" });
+  });
+export const PvpAdapterIdentityV1Schema = z.object({ rulesId: key, digest }).strict();
 export const PvpActionV1Schema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ability"), actorId: key, slot: z.string().regex(/^usable[0-9]+$/), targets: z.array(key).max(32) }).strict(),
   z.object({ type: z.literal("delay"), actorId: key }).strict(),
   z.object({ type: z.literal("forfeit") }).strict(),
+  z.object({ type: z.literal("adapter"), actorId: key, rulesId: key, command: key, input: PvpAdapterIntentV1Schema }).strict(),
 ]);
 export const PvpCommandV1Schema = z.object({
   commandId: z.uuid(), expectedRevision: z.number().int().nonnegative(),
@@ -58,6 +65,7 @@ export const PvpCommandV1Schema = z.object({
 }).strict();
 export const PvpBattleSnapshotV1Schema = z.object({
   simulationVersion: z.literal("pvp-v1"),
+  adapters: z.array(PvpAdapterIdentityV1Schema).min(1).max(64).optional(),
   teams: z.tuple([
     z.array(PvpRosterMemberV1Schema.extend({ capturable: z.literal(false) })).min(1).max(32),
     z.array(PvpRosterMemberV1Schema.extend({ capturable: z.literal(false) })).min(1).max(32),

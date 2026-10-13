@@ -1,13 +1,38 @@
-.pvp-dialog { color: #f0eee6; background: #172a32; border: 1px solid #859b9f; border-radius: 12px; width: min(560px, 88vw); max-height: 84dvh; padding: 20px; box-shadow: 0 16px 64px #0009; font: 15px/1.5 system-ui, sans-serif; }
-.pvp-dialog::backdrop { background: #071016b8; }
-.pvp-dialog__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.pvp-dialog h2, .pvp-dialog h3 { margin: 0 0 8px; }
-.pvp-dialog button { color: #fff; background: #355464; border: 1px solid #7897a5; border-radius: 6px; padding: 9px 14px; margin: 4px 8px 4px 0; font: inherit; cursor: pointer; }
+/* Same package-owned nine-slice artwork as Tournament/Popup. Dimensions below are
+   responsive fractions of the active game window; no shipped geometry is overridden. */
+.pvp-dialog { --pvp-unit: min(.208333vw, .3125dvh); box-sizing: border-box; color: white;
+  background: #10251ddd; border-style: solid; border-width: calc(var(--pvp-unit) * 15);
+  border-image-source: var(--pvp-panel-image); border-image-slice: var(--pvp-panel-slice) fill;
+  border-image-width: 1; width: calc(var(--pvp-unit) * 410); max-width: 96vw; max-height: 94dvh;
+  padding: calc(var(--pvp-unit) * 7); overflow: auto;
+  font: bold max(12px, calc(var(--pvp-unit) * 9.5))/1.4 Arial, sans-serif;
+  text-shadow: 1px 1px 2px black; }
+.pvp-dialog::backdrop { background: #0008; }
+.pvp-dialog__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pvp-dialog h2 { font-size: calc(var(--pvp-unit) * 21); line-height: 1.1; margin: 0; }
+.pvp-dialog h3 { font-size: calc(var(--pvp-unit) * 15); margin: .7em 0 .35em; }
+.pvp-dialog p { margin: .65em 0; }
+.pvp-dialog .pvp-dialog__eyebrow { margin: 0 0 .25em; color: #ead3a0; font-size: .85em; }
+.pvp-dialog__intro { padding-bottom: .7em; border-bottom: 1px solid #dfc28955; }
+.pvp-dialog__notice { color: #e4d6b7; font-size: .85em; }
+.pvp-dialog button { color: white; background: transparent; border-style: solid;
+  border-width: calc(var(--pvp-unit) * 5) calc(var(--pvp-unit) * 8);
+  border-image-source: var(--pvp-button-image); border-image-slice: var(--pvp-button-slice) fill;
+  padding: calc(var(--pvp-unit) * 2) calc(var(--pvp-unit) * 7); margin: .25em .35em .25em 0;
+  font: bold max(13px, calc(var(--pvp-unit) * 12))/1.2 Arial, sans-serif;
+  text-shadow: 1px 1px 2px black; cursor: pointer; min-height: 34px; }
+.pvp-dialog button:hover:enabled { filter: brightness(1.2); }
+.pvp-dialog button:active:enabled { filter: brightness(.8); }
 .pvp-dialog button:disabled { opacity: .5; cursor: default; }
-.pvp-dialog button:focus-visible, .pvp-dialog input:focus-visible { outline: 3px solid #f3d17e; outline-offset: 2px; }
-.pvp-dialog__code { display: block; color: #f3d17e; font: 700 32px monospace; letter-spacing: .18em; padding: 12px 0; user-select: all; }
-.pvp-dialog__error { border-left: 3px solid #eea080; background: #4b3033; padding: 12px; overflow-wrap: anywhere; }
-.pvp-dialog__actions { display: grid; gap: 16px; }
-.pvp-dialog form { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
-.pvp-dialog label { display: grid; gap: 6px; }
-.pvp-dialog input { background: #091c25; border: 1px solid #7897a5; color: white; padding: 10px; border-radius: 4px; font: 18px monospace; text-transform: uppercase; width: 12ch; }
+.pvp-dialog button:focus-visible, .pvp-dialog input:focus-visible { outline: 2px solid #ffe5a0; outline-offset: 2px; }
+.pvp-dialog__code { display: block; color: #ffe3a1; font: bold calc(var(--pvp-unit) * 24) Arial, sans-serif;
+  letter-spacing: .18em; text-align: center; padding: .35em; user-select: all; background: #0004; }
+.pvp-dialog__error { border-left: 3px solid #e7aa72; background: #42190b88; padding: .7em; overflow-wrap: anywhere; }
+.pvp-dialog__actions { display: grid; gap: calc(var(--pvp-unit) * 10); }
+.pvp-dialog__button-row { display: flex; flex-wrap: wrap; gap: .5em; }
+.pvp-dialog form { display: flex; align-items: end; justify-content: center; gap: .65em; flex-wrap: wrap; }
+.pvp-dialog label { display: grid; gap: .25em; }
+.pvp-dialog input { background: #140f0ae6; border: 1px solid #c4a36b; color: white; padding: .45em;
+  font: bold max(16px, calc(var(--pvp-unit) * 13)) Arial, sans-serif; letter-spacing: .08em; text-transform: uppercase; width: 13ch; }
+.pvp-dialog .pvp-dialog__result { text-align: center; color: #ffe3a1; font-size: calc(var(--pvp-unit) * 28); }
+@media (orientation: portrait) { .pvp-dialog { --pvp-unit: .235vw !important; width: 96vw; } }

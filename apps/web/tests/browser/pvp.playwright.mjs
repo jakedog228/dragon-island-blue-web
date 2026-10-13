@@ -16,10 +16,12 @@ const output = path.resolve(process.env.DIB_PVP_OUTPUT ?? `output/pvp-${displayM
 const errors = [], tokens = [process.env.DIB_PVP_HOST_TOKEN, process.env.DIB_PVP_GUEST_TOKEN];
 const mods = [process.env.DIB_PVP_HOST_MOD, process.env.DIB_PVP_GUEST_MOD];
 const incompatible = process.env.DIB_PVP_EXPECT_INCOMPATIBLE === "1";
+const adapterExample = process.env.DIB_PVP_ADAPTER_EXAMPLE === "1";
 const fullBattle = process.env.DIB_PVP_FULL_BATTLE === "1";
 const lostResponse = process.env.DIB_PVP_LOST_RESPONSE === "1";
 const browsers = [];
 const read = async (page) => { await page.bringToFront(); return page.evaluate(() => JSON.parse(window.render_game_to_text())); };
+const pageScreenshot = (page, name) => page.screenshot({ path: path.join(output, name) });
 const advance = (page, ms = 25) => page.evaluate((ms) => window.advanceTime(ms), ms);
 async function wait(page, predicate, description) {
   const end = Date.now() + 60000;
@@ -50,7 +52,7 @@ async function click(page, label) {
   await page.mouse.click(point.x, point.y); await advance(page);
   await wait(page, (s) => !s.overlay?.pvp?.board?.rendering, `Render after ${label}`);
 }
-async function openTournament(page) {
+async function openArena(page) {
   const town = (await read(page)).town;
   const arena = town?.buildings.find((building) => building.className === "ArenaMenuItem" && building.enabled);
   if (arena) await click(page, `town:${town.name}:building:${arena.sourceIndex}`);
@@ -58,32 +60,23 @@ async function openTournament(page) {
   await wait(page, async () => pixiLabelVisible(page, "guildQuestChatFinish"), "Arena greeting");
   await advance(page, 550); await tapPixiLabel(page, "guildQuestChat");
   await wait(page, (s) => s.overlay?.open && s.overlay?.buttons, "Arena menu");
-  await tapPixiLabel(page, "arena:tournament");
-  await wait(page, (s) => s.overlay?.kind === "tournament", "Tournament entry");
-  await advance(page, 1500);
-  if ((await read(page)).overlay.entryPending) {
-    await click(page, "tournament:pvp");
-    assert.equal((await read(page)).overlay.pvp, undefined, "Pending entry must retain ownership");
-    await wait(page, (s) => !s.overlay.entryPending || s.overlay.popups.depth > 0, "Tournament entry ready");
-  }
-  // A fresh Official profile may still need the source Tournament tutorial.
-  if ((await read(page)).overlay?.popups?.depth) {
-    await click(page, "tournament:pvp");
-    assert.equal((await read(page)).overlay.pvp, undefined, "Tutorial must retain input ownership");
-    await click(page, "popupButton:Ok"); await advance(page, 550);
-    await wait(page, (s) => s.overlay?.popups?.depth === 0, "Tutorial dismissed");
-  }
-  await wait(page, (s) => !s.overlay.entryPending, "Entry settled");
-  await click(page, "tournament:pvp");
+  assert.ok((await read(page)).overlay.buttons.some(button => button.action === "pvp"));
+  await page.waitForTimeout(200); await advance(page);
+  await page.screenshot({ path: path.join(output, "arena-entry.png") });
+  await click(page, "arena:pvp");
   await page.getByRole("dialog", { name: "Multiplayer PvP" }).waitFor();
   await wait(page, (s) => s.overlay?.pvp?.busy === false, "PvP ready");
+  await page.waitForTimeout(150); await advance(page);
+  await page.screenshot({ path: path.join(output, "lobby.png") });
 }
 async function launch(index) {
   console.log(`Launching player ${index + 1}`);
   // Use separate storage contexts; explicitly foreground each client before driving it.
   const browser = browsers[0] ?? await chromium.launch({ channel: "chromium", headless: process.env.DIB_HEADED !== "1", args: ["--mute-audio", "--disable-features=CalculateNativeWinOcclusion", "--disable-gpu-vsync", "--disable-frame-rate-limit"] });
   if (!browsers.length) browsers.push(browser);
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const context = await browser.newContext({ viewport: {
+    width: Number(process.env.DIB_PVP_VIEWPORT_WIDTH ?? 1280), height: Number(process.env.DIB_PVP_VIEWPORT_HEIGHT ?? 800),
+  } });
   const page = await context.newPage();
   // Windows can occlude even separate headless windows; model two foreground devices.
   const cdp = await context.newCDPSession(page);
@@ -120,7 +113,7 @@ async function launch(index) {
     await page.locator(".content-gate__login-status--success").waitFor({ timeout: 60000 });
     await page.locator(".content-gate__rights input").check();
     await page.getByRole("button", { name: "Play Online", exact: true }).click();
-  } else await loadLocalContent(page, archive, { modArchives: mods[index] ? [mods[index]] : [] });
+  } else await loadLocalContent(page, archive, { modArchives: mods[index] ? mods[index].split(";") : [] });
   let state = await wait(page, (s) => s.startup?.phase === "title", "Title");
   await page.keyboard.press("Enter");
   state = await wait(page, (s) => ["new-game-plot", "pick-dragon", "save-select"].includes(s.startup?.phase) || s.mode === "town", "Start");
@@ -140,7 +133,7 @@ async function launch(index) {
     if (ready.overlay?.kind !== "townEnterChat") break;
     await advance(page, 550); await tapPixiLabel(page, "guildQuestChat"); await page.waitForTimeout(20);
   }
-  await advance(page, 12000); await openTournament(page);
+  await advance(page, 12000); await openArena(page);
   // These are explicitly disposable scenario accounts; leave any previous interrupted match.
   const retained = (await read(page)).overlay.pvp.match;
   if (retained?.status === "active") {
@@ -162,6 +155,11 @@ try {
   console.log("Invite requested");
   const code = await pages[0].locator('output[aria-label="Invite code"]').innerText(); assert.match(code, /^[A-HJ-NP-Z2-9]{8}$/);
   console.log("Invite ready");
+  const cancelBox = await pages[0].getByRole("button", { name: "Cancel invite", exact: true }).boundingBox();
+  assert.ok(cancelBox && cancelBox.y >= 0 && cancelBox.y + cancelBox.height <= pages[0].viewportSize().height,
+    "Cancel invite remains on screen without scrolling");
+  await pages[0].waitForTimeout(150); await advance(pages[0]);
+  await pageScreenshot(pages[0], "invite.png");
   await pages[1].bringToFront();
   await pages[1].getByRole("textbox", { name: "Invite code" }).fill(code);
   console.log("Code entered");
@@ -204,7 +202,17 @@ try {
     console.log(`Turn ${turn + 1}, player ${match.turn + 1}`);
     const active = pages[match.turn];
     await wait(active, (s) => s.overlay?.pvp?.board?.revision === match.revision && !s.overlay.pvp.board.busy && !s.overlay.pvp.board.rendering, "Turn controls");
-    await click(active, "pvp:usable1");
+    if (adapterExample && turn < 2) {
+      await click(active, "pvp:adapter-menu");
+      if (turn === 0) await click(active, "pvp:adapter:example.echo-strike-v1:strike-0");
+      else {
+        await click(active, "pvp:adapter:example.echo-strike-v1:custom");
+        const aiming = (await read(active)).overlay.pvp.board;
+        const enemy = aiming.monsters.find((m) => m.team !== aiming.you);
+        await pageScreenshot(active, "adapter-aim.png");
+        await click(active, `pvp:echo-aim:${enemy.id}`);
+      }
+    } else await click(active, "pvp:usable1");
     const board = (await read(active)).overlay.pvp.board;
     if (board.choice) {
       const enemy = board.monsters.find((m) => m.team !== board.you);
@@ -212,6 +220,7 @@ try {
     }
     if (lostResponse && turn === 0) {
       await active.getByRole("button", { name: "Retry pending action", exact: true }).waitFor();
+      await pageScreenshot(active, "retry.png");
       const retryRequest = active.waitForRequest((request) => request.url().endsWith("/commands"));
       await active.getByRole("button", { name: "Retry pending action", exact: true }).click();
       assert.equal((await retryRequest).postData(), interceptedBody);
@@ -227,13 +236,22 @@ try {
     fs.writeFileSync(path.join(output, `state-${index}.json`), JSON.stringify(await read(page), null, 2));
   }
   assert.deepEqual((await read(pages[0])).overlay.pvp.match.battle, (await read(pages[1])).overlay.pvp.match.battle);
+  if (adapterExample) {
+    const boards = await Promise.all(pages.map(async page => (await read(page)).overlay.pvp.board));
+    assert.deepEqual(boards[0].adapters, boards[1].adapters);
+    assert.equal(boards[0].adapters.length, 2);
+    const strikes = boards[0].adapters.find(a => a.rulesId === "example.echo-strike-v1").state.strikes;
+    assert.ok(strikes[0] > 0 && strikes[1] > 0, "Custom action must work for both teams");
+    assert.equal(match.battle.commands.filter(c => c.action.type === "adapter").length, 2);
+  }
   if (fullBattle) { assert.equal(match.status, "ended"); assert.equal(match.endReason, "defeat"); }
   else {
   // Leaving/reopening the scene must recover the same identity and committed match.
   await click(pages[0], "pvp:menu"); await pages[0].getByRole("dialog", { name: "Multiplayer PvP" }).getByRole("button", { name: "Close", exact: true }).click();
-  await click(pages[0], "tournament:pvp");
+  await click(pages[0], "arena:pvp");
   await wait(pages[0], (s) => s.overlay?.pvp?.match?.matchId === match.matchId, "Resume match");
   await pages[0].getByRole("button", { name: "Forfeit…", exact: true }).click();
+  await pages[0].waitForTimeout(150); await pageScreenshot(pages[0], "forfeit-confirmation.png");
   await pages[0].getByRole("button", { name: "Yes, forfeit", exact: true }).click();
   for (const page of pages) await wait(page, (s) => s.overlay?.pvp?.match?.status === "ended", "Terminal result");
   assert.equal((await read(pages[1])).overlay.pvp.match.winner, 1);

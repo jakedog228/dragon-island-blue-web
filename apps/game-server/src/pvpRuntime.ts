@@ -1,3 +1,4 @@
+import { validatePvpInstallation, type PvpAdapterInstallation } from "./pvpAdapters.js";
 import { join } from "node:path";
 import type { GameData } from "@dib/gamedata";
 import type { SaveSlotId } from "@dib/save-protocol";
@@ -8,13 +9,18 @@ import { PvpService, PvpServiceError } from "./pvpService.js";
 
 export function createInstalledPvpService(options: {
   data: GameData; logicPackId: string; dataDirectory: string;
+  installation?: PvpAdapterInstallation;
   supportedMods?: readonly PvpModSupport[];
   readOfficialState: (playerId: string, slotId: SaveSlotId) => Promise<OfficialGameStateV24 | undefined>;
 }): PvpService {
+  const installation = options.installation ?? { profiles: [], mods: [] };
+  validatePvpInstallation(installation);
   return new PvpService({
     store: new FilePvpStore(join(options.dataDirectory, "pvp")),
-    profiles: new Map([["pvp-baseline-v1", options.data]]),
-    compatibility: new PvpCompatibilityRegistry(options.supportedMods ?? [], [
+    profiles: new Map([["pvp-baseline-v1", options.data], ...installation.profiles.map((profile) => [profile.id, profile.data] as const)]),
+    adapters: new Map(installation.profiles.map((profile) => [profile.id, profile.adapters])),
+    compatibility: new PvpCompatibilityRegistry([...(options.supportedMods ?? []), ...installation.mods], [
+      ...installation.profiles.map(({ id, logicPackId, rules }) => ({ id, logicPackId, rules })),
       { id: "pvp-baseline-v1", logicPackId: options.logicPackId, rules: [] },
     ]),
     officialParty: async (playerId, slotId, logicPackId) => {

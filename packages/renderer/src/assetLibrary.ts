@@ -84,6 +84,14 @@ export class AssetLibrary {
     return this.texture(rel);
   }
 
+  /** The same manifest-owned URL for accessible DOM controls beside the canvas.
+   * Imported packages resolve this to a tab-local blob; callers must not persist it. */
+  spriteUrl(name: string): string {
+    const rel = this.manifest.sprites[name];
+    if (!rel) throw new Error(`unknown sprite: ${name}`);
+    return this.resolveUrl(rel);
+  }
+
   async atlas(name: string): Promise<Spritesheet> {
     const entry = this.manifest.atlases[name];
     if (!entry) throw new Error(`unknown atlas: ${name}`);

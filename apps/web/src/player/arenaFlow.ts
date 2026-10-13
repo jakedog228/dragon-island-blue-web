@@ -1,3 +1,4 @@
+import type { PvpFlowHandle } from "../pvp/pvpFlow.js";
 import {
   pointSprite,
   type AssetLibrary,
@@ -19,7 +20,7 @@ import {
   nextLicense,
 } from "./characterProgressionModel.js";
 
-type ArenaAction = "current" | "next" | "battle" | "tournament" | "back";
+type ArenaAction = "current" | "next" | "battle" | "tournament" | "pvp" | "back";
 
 export interface ArenaFlowOptions {
   readonly parent: Container;
@@ -37,12 +38,15 @@ export interface ArenaFlowOptions {
   readonly onBlocked: () => void;
   readonly onClose: () => void;
   readonly onChallenge: (license: LicenseDef) => void | Promise<void>;
+  readonly onPvp?: (parent: Container, onClose: () => void) => PvpFlowHandle;
   readonly onTournament: () => void | Promise<void>;
 }
 
 /** ArenaMenuItem's source action order and Licenses.plist qualification surface. */
 export class ArenaFlow extends Container {
   private closed = false;
+  private pvp: PvpFlowHandle | undefined;
+  private messagePending = false;
   private readonly buttons: Array<Record<string, unknown>> = [];
 
   private constructor(private readonly opts: ArenaFlowOptions) {
@@ -59,6 +63,7 @@ export class ArenaFlow extends Container {
   }
 
   requestBack(): boolean {
+    if (this.pvp) return this.pvp.requestBack();
     this.dispose();
     return true;
   }
@@ -66,6 +71,7 @@ export class ArenaFlow extends Container {
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
+    this.pvp?.dispose(); this.pvp = undefined;
     this.opts.onClose();
     this.parent?.removeChild(this);
     this.destroy({ children: true });
@@ -84,6 +90,7 @@ export class ArenaFlow extends Container {
         this.opts.completedQuests,
       ),
       buttons: this.buttons,
+      ...(this.pvp ? { pvp: this.pvp.debugState } : {}),
     };
   }
 
@@ -117,6 +124,8 @@ export class ArenaFlow extends Container {
             { value: "tournament", key: "TournamentKey", enabled: this.opts.tournamentEnabled },
             { value: "back", key: "BackButtonKey", enabled: true },
           ];
+    // Optional port-extension row, adjacent to Tournament; the baseline source menu is unchanged.
+    if (this.opts.onPvp) sourceItems.splice(sourceItems.length - 1, 0, { value: "pvp", key: "PvpMenuKey", enabled: true });
     const metrics = {
       itemGap: idiomPairPt(30, 60, DISPLAY_MODE),
       columnGap: idiomPairPt(30, 60, DISPLAY_MODE),
@@ -167,8 +176,9 @@ export class ArenaFlow extends Container {
   }
 
   private async activate(action: ArenaAction): Promise<void> {
-    if (this.closed) return;
+    if (this.closed || this.pvp || this.messagePending || PopupHost.for(this).modalDepth > 0) return;
     this.opts.onClick();
+    if (action === "pvp") { this.pvp = this.opts.onPvp?.(this, () => { this.pvp = undefined; }); return; }
     if (action === "back") {
       this.dispose();
       return;
@@ -252,14 +262,17 @@ export class ArenaFlow extends Container {
 
 
   private async showMessage(message: string): Promise<void> {
-    const chat = await showGuildQuestChat({
-      parent: this,
-      assets: this.opts.assets,
-      scale9: this.opts.scale9,
-      ticker: this.opts.ticker,
-      message,
-    });
-    await chat.closed;
+    this.messagePending = true;
+    try {
+      const chat = await showGuildQuestChat({
+        parent: this,
+        assets: this.opts.assets,
+        scale9: this.opts.scale9,
+        ticker: this.opts.ticker,
+        message,
+      });
+      await chat.closed;
+    } finally { this.messagePending = false; }
   }
 }
 
@@ -292,6 +305,7 @@ function arenaFallback(action: ArenaAction): string {
     next: "Next License",
     battle: "Battle",
     tournament: "Tournament",
+    pvp: "PvP",
     back: "Back",
   }[action];
 }

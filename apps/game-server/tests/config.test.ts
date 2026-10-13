@@ -70,6 +70,9 @@ describe("loadGameServerConfig", () => {
     const environment = { DIB_GAME_HMAC_SECRET_FILE: paths.secretFile, DIB_GAME_DATA_DIR: paths.dataDirectory,
       DIB_GAME_EXTRACTED_DATA: paths.extractedData };
     expect(loadGameServerConfig({ environment }).pvpEnabled).toBe(true);
+    expect(loadGameServerConfig({ environment }).pvpAdaptersModule).toBeUndefined();
+    const adapterPath = join(paths.repositoryRoot, "server-adapters.mjs");
+    expect(loadGameServerConfig({ environment: { ...environment, DIB_PVP_ADAPTERS_MODULE: adapterPath } }).pvpAdaptersModule).toBe(adapterPath);
     expect(loadGameServerConfig({ environment: { ...environment, DIB_PVP_ENABLED: "0" } }).pvpEnabled).toBe(false);
     expect(problemsOf(() => loadGameServerConfig({ environment: { ...environment, DIB_PVP_ENABLED: "maybe" } })).join(" ")).toContain("DIB_PVP_ENABLED");
   });

@@ -26,6 +26,7 @@ export interface RateLimitSettings {
 
 export interface GameServerConfig {
   readonly pvpEnabled: boolean;
+  readonly pvpAdaptersModule: string | undefined;
   readonly communityOrigin: string | undefined;
   readonly communityDirectory: string;
   /** Read-only directory of operator-shipped `.dibmod` files published as Official mods. */
@@ -259,9 +260,12 @@ export function loadGameServerConfig(
   const communityDirectory = resolve(read("DIB_COMMUNITY_DATA_DIR") ?? resolve(dataDirectory ?? ".", "community"));
   const officialModsRaw = read("DIB_OFFICIAL_MODS_DIR");
   const officialModsDirectory = officialModsRaw ? resolve(officialModsRaw) : undefined;
+  const pvpAdaptersRaw = read("DIB_PVP_ADAPTERS_MODULE");
+  const pvpAdaptersModule = pvpAdaptersRaw ? resolve(pvpAdaptersRaw) : undefined;
   const warnings = problems.finish();
   return Object.freeze({
     pvpEnabled,
+    pvpAdaptersModule,
     environment,
     communityOrigin,
     communityDirectory,

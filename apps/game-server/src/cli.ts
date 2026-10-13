@@ -4,6 +4,7 @@ import { CommunityHttp } from "./community.js";
 import { createCatalogOnlyServer } from "./devCatalog.js";
 import { ModCatalog } from "./modCatalog.js";
 import { loadOfficialMods } from "./officialMods.js";
+import { loadPvpAdapterInstallation } from "./pvpAdapters.js";
 import { createInstalledPvpService } from "./pvpRuntime.js";
 import { installedPvpMods } from "./pvpSupportedMods.js";
 import {
@@ -597,10 +598,12 @@ async function serve(): Promise<void> {
   // Fail startup on a malformed shipped package rather than serving a partial Official catalog.
   const officialMods = config.officialModsDirectory ? await loadOfficialMods(config.officialModsDirectory) : [];
   const pvpMods = config.pvpEnabled ? await installedPvpMods(officialMods) : [];
+  const pvpInstallation = config.pvpEnabled ? await loadPvpAdapterInstallation(config.pvpAdaptersModule, { data, logicPackId: pack.logicPackId }) : undefined;
   const server = createGameServer({
     ...(config.pvpEnabled ? { pvp: createInstalledPvpService({
       data, logicPackId: pack.logicPackId, dataDirectory,
       supportedMods: pvpMods,
+      ...(pvpInstallation ? { installation: pvpInstallation } : {}),
       readOfficialState: async (playerId, slotId) => {
         const record = await store.read(playerId, slotId);
         if (record === undefined) return undefined;

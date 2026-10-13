@@ -10,13 +10,25 @@ while preserving v23 mechanics and historical schemas. See [regression checks](b
 ## Current system map
 
 Multiplayer PvP (browser verified): a built-in Official mod in the manager
-adds Tournament invite/join/resume and a two-human exhibition board. The CLI installs the durable
+has a searchable card, description and screenshot gallery, and adds Arena invite/join/resume
+beside Tournament and a two-human exhibition board. The CLI installs the durable
 match service, reads Official parties from committed slots, and accepts isolated Offline parties.
 Reviewed cosmetic mod differences reconcile; unknown gameplay adapters give specific errors.
 Workspace tests/typecheck and the content boundary pass. Muted two-client browser checks
 cover Offline, Official and mixed matches, phone/tablet layouts, committed-response retry,
-compatibility errors, cosmetics, reserves, natural victory and reconnect/forfeit. First-entry
-Tournament claims and tutorial popups retain input ownership before PvP opens. See `docs/pvp.md`.
+compatibility errors, cosmetics, reserves, natural victory and reconnect/forfeit. Arena chats and
+popups retain input ownership before PvP opens. See `docs/pvp.md`.
+
+PvP presentation now reuses Tournament/Arena backgrounds, MenuButton2, shared popup frames,
+outlined Arial labels and native tinted HP bars, including lobby/waiting/reconnect/results.
+Invite entry remains keyboard/paste accessible. The listing preview contains neutral artwork;
+selected-package images stay browser-local.
+
+PvP adapter API: operator-installed, versioned rules now execute custom turn actions
+with per-match replayed state, explicit combination/dependency/conflict checks, and registered
+client buttons/canvas controls. Echo Strike + Turn Counter pass composed two-client phone/tablet
+checks, retry and reconnect; added-monster data profiles have server proof. Existing unreviewed
+gameplay mods remain unsupported. See `docs/pvp-adapter-api.md`.
 
 Community mods: the launcher's single Mod Manager button
 (under the archive field) separates Installed (device: Official, Community and Imported files),

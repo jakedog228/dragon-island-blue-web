@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { GameData } from "@dib/gamedata";
-import { advancePvpBattle, createPvpBattle, restorePvpBattle, type PvpBattleSnapshot, type RestoredPvpBattle, type TeamMemberSetup } from "@dib/engine";
+import { validatePvpAdapters, requirePvpAdapters, advancePvpBattle, createPvpBattle, restorePvpBattle, type PvpBattleAdapter, type PvpBattleSnapshot, type RestoredPvpBattle, type TeamMemberSetup } from "@dib/engine";
 import {
   PVP_PROTOCOL_VERSION, PvpBattleSnapshotV1Schema, PvpCommandV1Schema, PvpInviteRequestV1Schema,
   PvpJoinRequestV1Schema, PvpMatchViewV1Schema, PvpRosterMemberV1Schema,
@@ -32,6 +32,7 @@ export interface PvpServiceOptions {
   readonly store: PvpStore;
   readonly compatibility: PvpCompatibilityRegistry;
   readonly profiles: ReadonlyMap<string, GameData>;
+  readonly adapters?: ReadonlyMap<string, readonly PvpBattleAdapter[]>;
   /** Read a committed Official slot, verify its rules and that its party can enter an exhibition. */
   readonly officialParty: (playerId: string, slotId: SaveSlotId, logicPackId: string) => Promise<readonly TeamMemberSetup[]>;
   readonly now?: () => number;
@@ -43,6 +44,14 @@ export class PvpService {
   private readonly now: () => number;
   private readonly randomSource: () => number;
   constructor(private readonly options: PvpServiceOptions) {
+    for (const id of options.profiles.keys()) {
+      const rules = options.compatibility.rulesForProfile(id);
+      const adapters = options.adapters?.get(id) ?? [];
+      validatePvpAdapters(adapters);
+      if (!rules || rules.length !== adapters.length || rules.some((rule, index) => rule !== adapters[index]?.rulesId)) {
+        throw new Error(`PvP profile ${id} must execute exactly its declared adapters`);
+      }
+    }
     this.now = options.now ?? Date.now;
     this.randomSource = options.randomSource ?? secureUnitRandom;
   }
@@ -56,9 +65,18 @@ export class PvpService {
     }
     return data;
   }
+  private adapters(record: PvpMatchRecord): readonly PvpBattleAdapter[] {
+    const adapters = this.options.adapters?.get(record.profileId!) ?? [];
+    try {
+      if (record.battle) requirePvpAdapters(record.battle.adapters ?? [], adapters);
+    } catch {
+      throw new PvpServiceError("UNAVAILABLE", "This match requires its original ordered PvP adapters and exact rules digests. Ask the operator to restore them, or forfeit the match.");
+    }
+    return adapters;
+  }
   private restore(record: PvpMatchRecord): RestoredPvpBattle {
     if (!record.battle) throw new Error("PvP record has no battle");
-    return restorePvpBattle(this.data(record), record.battle as PvpBattleSnapshot);
+    return restorePvpBattle(this.data(record), record.battle as PvpBattleSnapshot, this.adapters(record));
   }
   private decisionId(record: PvpMatchRecord): string { return `pvp-${record.id}-${record.revision}`; }
 
@@ -180,7 +198,7 @@ export class PvpService {
       const guest = await this.participant(principal, input.setup, input.entry);
       let battle;
       try {
-        battle = createPvpBattle(this.data(record), [record.players[0]!.party as TeamMemberSetup[], guest.party as TeamMemberSetup[]], this.randomSource);
+        battle = createPvpBattle(this.data(record), [record.players[0]!.party as TeamMemberSetup[], guest.party as TeamMemberSetup[]], this.randomSource, 3, this.adapters(record));
       } catch (error) {
         if (error instanceof PvpServiceError) throw error;
         throw new PvpServiceError("INCOMPATIBLE", "A selected party cannot be simulated by this server.", [{ code: "PARTY_UNSUPPORTED", path: "entry.party",
@@ -238,7 +256,7 @@ export class PvpService {
         throw new PvpServiceError("NOT_YOUR_TURN", "It is your opponent's turn.");
       }
       let advanced;
-      try { advanced = advancePvpBattle(this.data(record), record.battle as PvpBattleSnapshot, { team, action: input.action }, this.randomSource); }
+      try { advanced = advancePvpBattle(this.data(record), record.battle as PvpBattleSnapshot, { team, action: input.action }, this.randomSource, this.adapters(record)); }
       catch (error) { throw new PvpServiceError("INVALID_REQUEST", String(error instanceof Error ? error.message : error).slice(0, 500)); }
       record.battle = PvpBattleSnapshotV1Schema.parse(advanced.snapshot); record.revision++;
       this.settle(record, advanced.restored);

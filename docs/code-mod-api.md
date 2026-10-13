@@ -387,3 +387,13 @@ class method to recognize completed `portOptionsContent` bodies and append a rea
 slider before the popup is measured. The persisted 0.50x-5.00x value scales both effect radius and
 emission density immediately in startup, world, and dungeon Options. It also demonstrates cleaning
 up DOM, ticker, and display-object ownership across renderer restarts and mod disposal.
+
+## PvP adapters
+
+Single-player hooks are not implicitly supported by the two-human PvP board.
+The [PvP adapter API](pvp-adapter-api.md) provides shared deterministic rules, strict custom
+intent handlers, per-match replayed state, explicit server-installed combinations, and client
+buttons or custom canvas input. Register through `web/pvp/pvpAdapters.ts` and dispose with
+`dibMod.onDispose`. The operator must install matching reviewed rule artifacts and exact package
+digests. This preserves Offline/Official campaign isolation. Unreviewed special
+monster packages remain unsupported; real-time reactions require a further authority protocol.

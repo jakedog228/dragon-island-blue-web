@@ -1,3 +1,4 @@
+import { requirePvpAdapters, validatePvpAdapters, type PvpAdapterIdentity, type PvpBattleAdapter, type PvpBattleAdapterInstance, type PvpIntent } from "./pvpAdapters.js";
 import type { GameData } from "@dib/gamedata";
 import type { BattleEvent, TeamMemberSetup } from "./events.js";
 import { BattleSession, type PlayerChoice } from "./session.js";
@@ -9,6 +10,7 @@ export type PvpTeam = 0 | 1;
 export type PvpAction =
   | { readonly type: "ability"; readonly actorId: string; readonly slot: string; readonly targets: readonly string[] }
   | { readonly type: "delay"; readonly actorId: string }
+  | { readonly type: "adapter"; readonly actorId: string; readonly rulesId: string; readonly command: string; readonly input: PvpIntent }
   | { readonly type: "forfeit" };
 export interface PvpCommand {
   readonly team: PvpTeam;
@@ -21,6 +23,7 @@ export interface PvpBattleSnapshot {
   /** Committed draws only; never a seed or future randomness. */
   readonly randomDraws: readonly number[];
   readonly commands: readonly PvpCommand[];
+  readonly adapters?: readonly PvpAdapterIdentity[];
 }
 export type PvpDecision =
   | { readonly type: "turn"; readonly team: PvpTeam; readonly actorId: string; readonly choices: readonly PlayerChoice[] }
@@ -29,6 +32,7 @@ export interface RestoredPvpBattle {
   readonly session: BattleSession;
   readonly decision: PvpDecision;
   readonly events: readonly BattleEvent[];
+  readonly extensions: ReadonlyMap<string, PvpBattleAdapterInstance>;
 }
 
 /** A bounded exhibition protects the service against endless heal/delay or all-berserk matches. */
@@ -55,7 +59,7 @@ function nextDecision(session: BattleSession): PvpDecision {
   return { type: "ended", winner: "draw", reason: "turn-limit" };
 }
 
-function apply(session: BattleSession, decision: PvpDecision, command: PvpCommand): PvpDecision {
+function apply(session: BattleSession, decision: PvpDecision, command: PvpCommand, extensions: ReadonlyMap<string, PvpBattleAdapterInstance>): PvpDecision {
   if (command.team !== 0 && command.team !== 1) throw new Error("PvP team must be 0 or 1");
   if (decision.type === "ended") throw new Error("This PvP match has already ended.");
   if (command.action.type === "forfeit") {
@@ -63,15 +67,25 @@ function apply(session: BattleSession, decision: PvpDecision, command: PvpComman
   }
   if (decision.team !== command.team) throw new Error("It is your opponent's turn.");
   if (decision.actorId !== command.action.actorId) throw new Error("That monster is no longer taking its turn. Refresh the match.");
+  const action = command.action;
+  const handler = action.type === "adapter" ? extensions.get(action.rulesId)?.commands?.[action.command] : undefined;
+  if (action.type === "adapter" && (!handler || !Object.hasOwn(extensions.get(action.rulesId)!.commands!, action.command))) {
+    throw new Error(`Unsupported PvP adapter command ${action.rulesId}:${action.command}`);
+  }
+  const parsed = action.type === "adapter" ? handler!.parse(structuredClone(action.input)) : undefined;
+  for (const extension of extensions.values()) extension.beforeCommand?.(command, decision);
   switch (command.action.type) {
     case "ability": session.submitPlayerAction(command.action.slot, [...command.action.targets]); break;
     case "delay": session.submitDelayAction(); break;
+    case "adapter": handler!.execute(parsed, decision); break;
     default: throw new Error("Unknown PvP action.");
   }
+  for (const extension of extensions.values()) extension.afterCommand?.(command, decision);
   return nextDecision(session);
 }
 
-function replay(data: GameData, snapshot: PvpBattleSnapshot, tape: ReplayableRng): RestoredPvpBattle {
+function replay(data: GameData, snapshot: PvpBattleSnapshot, tape: ReplayableRng, adapters: readonly PvpBattleAdapter[]): RestoredPvpBattle {
+  requirePvpAdapters(snapshot.adapters ?? [], adapters);
   if (snapshot.simulationVersion !== PVP_SIMULATION_VERSION) throw new Error("Unsupported PvP simulation version.");
   if (!Number.isInteger(snapshot.fightingGroupSize) || snapshot.fightingGroupSize < 1 || snapshot.fightingGroupSize > 3) {
     throw new Error("PvP fighting group size must be 1, 2 or 3.");
@@ -79,9 +93,10 @@ function replay(data: GameData, snapshot: PvpBattleSnapshot, tape: ReplayableRng
   if (snapshot.commands.length > MAX_TURNS + 1) throw new Error("PvP command limit exceeded.");
   const session = new BattleSession(data, structuredClone(snapshot.teams) as [TeamMemberSetup[], TeamMemberSetup[]], tape,
     { fightingGroupSize: snapshot.fightingGroupSize, humanTeams: [0, 1], blockCapture: true, silver: 0 });
+  const extensions = new Map(adapters.map((adapter) => [adapter.rulesId, adapter.create({ data, session, random: () => tape.next() })]));
   let decision = nextDecision(session);
-  for (const command of snapshot.commands) decision = apply(session, decision, command);
-  return { session, decision, events: session.events };
+  for (const command of snapshot.commands) decision = apply(session, decision, command, extensions);
+  return { session, decision, events: session.events, extensions };
 }
 
 export function createPvpBattle(
@@ -89,21 +104,24 @@ export function createPvpBattle(
   teams: PvpBattleSnapshot["teams"],
   randomSource: () => number,
   fightingGroupSize = 3,
+  adapters: readonly PvpBattleAdapter[] = [],
 ): { snapshot: PvpBattleSnapshot; restored: RestoredPvpBattle } {
+  validatePvpAdapters(adapters);
   // No campaign identities or damage carry into this exhibition. Equipment and stat bonuses do.
   const exhibitionTeams = teams.map((team) => team.map(({ currentHp: _hp, sourceInstanceId: _id, ...member }) =>
     ({ ...member, capturable: false }))) as [TeamMemberSetup[], TeamMemberSetup[]];
   const initial: PvpBattleSnapshot = { simulationVersion: PVP_SIMULATION_VERSION, teams: structuredClone(exhibitionTeams),
-    fightingGroupSize, randomDraws: [], commands: [] };
+    fightingGroupSize, randomDraws: [], commands: [],
+    ...(adapters.length ? { adapters: adapters.map(({ rulesId, digest }) => ({ rulesId, digest })) } : {}) };
   const tape = replayableRng([], randomSource);
-  const restored = replay(data, initial, tape);
+  const restored = replay(data, initial, tape, adapters);
   return { snapshot: { ...initial, randomDraws: tape.draws }, restored };
 }
 
 /** Restoring committed state may not consume new randomness, even on the authority. */
-export function restorePvpBattle(data: GameData, snapshot: PvpBattleSnapshot): RestoredPvpBattle {
+export function restorePvpBattle(data: GameData, snapshot: PvpBattleSnapshot, adapters: readonly PvpBattleAdapter[] = []): RestoredPvpBattle {
   const tape = replayableRng(snapshot.randomDraws);
-  const restored = replay(data, snapshot, tape);
+  const restored = replay(data, snapshot, tape, adapters);
   if (tape.cursor !== snapshot.randomDraws.length) throw new Error("PvP snapshot has unused random draws.");
   return restored;
 }
@@ -111,16 +129,17 @@ export function restorePvpBattle(data: GameData, snapshot: PvpBattleSnapshot): R
 /** Detached replay gives the service rollback on invalid commands, mechanics errors or write failure. */
 export function advancePvpBattle(
   data: GameData, snapshot: PvpBattleSnapshot, command: PvpCommand, randomSource: () => number,
+  adapters: readonly PvpBattleAdapter[] = [],
 ): { snapshot: PvpBattleSnapshot; restored: RestoredPvpBattle } {
   const tape = replayableRng(snapshot.randomDraws);
-  const previous = replay(data, snapshot, tape);
+  replay(data, snapshot, tape, adapters);
   if (tape.cursor !== snapshot.randomDraws.length) throw new Error("PvP snapshot has unused random draws.");
   // Restore with a fresh extensible tape only after validating the committed prefix in full.
   const nextTape = replayableRng(snapshot.randomDraws, randomSource);
-  const next = replay(data, snapshot, nextTape);
-  const decision = apply(next.session, previous.decision, command);
+  const next = replay(data, snapshot, nextTape, adapters);
+  const decision = apply(next.session, next.decision, command, next.extensions);
   return {
     snapshot: { ...structuredClone(snapshot), commands: [...snapshot.commands, structuredClone(command)], randomDraws: nextTape.draws },
-    restored: { session: next.session, decision, events: next.session.events },
+    restored: { session: next.session, decision, events: next.session.events, extensions: next.extensions },
   };
 }

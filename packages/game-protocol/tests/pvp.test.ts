@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PvpInviteRequestV1Schema, PvpCommandV1Schema, PvpRosterMemberV1Schema, PvpMatchViewV1Schema } from "../src/pvp.js";
+import { PvpInviteRequestV1Schema, PvpCommandV1Schema, PvpRosterMemberV1Schema, PvpMatchViewV1Schema, PvpAdapterIntentV1Schema } from "../src/pvp.js";
 
 const logicPackId = `logic-v1:${"a".repeat(64)}`;
 const request = { requestId: "11111111-1111-4111-8111-111111111111", setup: { logicPackId, mods: [] }, entry: { source: "official", slotId: "slot-1" } };
@@ -25,5 +25,16 @@ describe("PvP wire boundaries", () => {
     expect(PvpRosterMemberV1Schema.parse(member)).toEqual(member);
     expect(PvpRosterMemberV1Schema.safeParse({ ...member, currentHp: 1 }).success).toBe(false);
     expect(PvpRosterMemberV1Schema.safeParse({ ...member, sourceInstanceId: "private-campaign-id" }).success).toBe(false);
+  });
+});
+
+
+describe("bounded PvP adapter intent", () => {
+  it("admits semantic scalar/array input but rejects snapshots, nested state and unbounded payloads", () => {
+    expect(PvpAdapterIntentV1Schema.parse({ target: "t1m0:FireCub", samples: [0, 0.5, 1], pressed: true })).toBeDefined();
+    for (const input of [{ state: { hp: 999 } }, { path: Array(129).fill(0) }, { value: Infinity },
+      { target: "x".repeat(161) }, Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`x${i}`, 1]))]) {
+      expect(PvpAdapterIntentV1Schema.safeParse(input).success).toBe(false);
+    }
   });
 });

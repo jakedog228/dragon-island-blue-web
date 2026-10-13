@@ -15,7 +15,7 @@ export function pvpLayout(mode: DisplayMode) {
   return { w, h, margin: w * 0.025, titleFont: h * 0.045, font: h * 0.034,
     buttonH: h * 0.082, top: h * 0.13, rowH: h * 0.235, controlsY: h * 0.735,
     monsterW: w * 0.19, monsterH: h * 0.155, cellW: w * 0.2325,
-    tournamentButton: { x: w * 0.025, y: h * 0.045, font: h * 0.05 },
+    modButton: { x: w * 0.28, y: h * 0.935, w: w * 0.36, h: h * 0.05 },
   };
 }
 export interface PvpTargetRequirement { enemies: readonly string[]; friends: readonly string[]; enemyCount: number; friendCount: number }

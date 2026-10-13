@@ -50,3 +50,10 @@ describe("PvP compatibility negotiation", () => {
     expect(() => registry.negotiate(setup([cosmetic, cosmetic]), setup())).toThrow("once");
   });
 });
+
+
+it("rejects ambiguous profiles for the same rules combination", () => {
+  expect(() => new PvpCompatibilityRegistry([], [
+    { id: "a", logicPackId, rules: [] }, { id: "b", logicPackId, rules: [] },
+  ])).toThrow("Duplicate PvP rules combination");
+});

@@ -45,7 +45,7 @@ export default defineConfig(({ command }) => ({
 }));
 
 /** Stable root URLs are required by installed web apps; publicDir remains disabled so this emits
- * only the two reviewed engine-shell resources instead of opening a path for packaged content. */
+ * only reviewed engine-shell resources instead of opening a path for packaged content. */
 function webAppShellResources(): Plugin {
   const resources = new Map([
     ["/app.webmanifest", { path: webAppManifestPath, contentType: "application/manifest+json" }],

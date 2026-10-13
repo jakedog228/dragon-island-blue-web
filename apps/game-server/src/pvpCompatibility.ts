@@ -49,8 +49,15 @@ export class PvpCompatibilityRegistry {
       indexed.set(mod.digest, structuredClone(mod));
     }
     if (new Set(profiles.map((profile) => profile.id)).size !== profiles.length) throw new Error("Duplicate PvP profile id");
+    const combinations = profiles.map((profile) => JSON.stringify([profile.logicPackId, profile.rules]));
+    if (new Set(combinations).size !== combinations.length) throw new Error("Duplicate PvP rules combination");
     this.mods = indexed;
     this.profiles = structuredClone(profiles);
+  }
+
+  rulesForProfile(id: string): readonly string[] | undefined {
+    const profile = this.profiles.find((candidate) => candidate.id === id);
+    return profile ? [...profile.rules] : undefined;
   }
 
   private inspect(setup: PvpClientSetupV1, player: "host" | "guest"): InspectedSetup {

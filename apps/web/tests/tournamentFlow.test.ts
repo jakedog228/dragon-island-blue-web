@@ -10,36 +10,12 @@ vi.hoisted(() => {
 });
 
 describe("TournamentFlow debug state", () => {
-  it("keeps Tournament popups in control before opening PvP", () => {
-    const host = { modalDepth: 1 };
-    vi.spyOn(PopupHost, "for").mockReturnValue(host as PopupHost);
-    const receiver = { closed: false, exitPending: false, entryPending: true, pvp: undefined,
-      opts: { onPvp: vi.fn(() => ({ dispose: vi.fn() })), onClick: vi.fn() } };
-    const open = (TournamentFlow.prototype as unknown as { openPvp(): void }).openPvp;
-    open.call(receiver);
-    expect(receiver.opts.onPvp).not.toHaveBeenCalled();
-    host.modalDepth = 0;
-    open.call(receiver);
-    expect(receiver.opts.onPvp).not.toHaveBeenCalled();
-    host.modalDepth = 1;
-    TournamentFlow.prototype.finishEntry.call(receiver as never);
-    open.call(receiver);
-    expect(receiver.opts.onPvp).not.toHaveBeenCalled();
-    host.modalDepth = 0;
-    open.call(receiver);
-    expect(receiver.opts.onPvp).toHaveBeenCalledOnce();
-    expect(receiver.opts.onClick).toHaveBeenCalledOnce();
-    open.call(receiver);
-    expect(receiver.opts.onPvp).toHaveBeenCalledOnce();
-  });
-  it("keeps PvP reachable after tournament completion and gives its overlay Back ownership", async () => {
+  it("runs the normal finished-tournament exit now that PvP lives in Arena", async () => {
     const receiver = { finishedTournament: true, closed: false,
-      opts: { onPvp: vi.fn(), onFinished: vi.fn() }, requestExit: vi.fn(),
-      pvp: { requestBack: vi.fn(() => true) }, prizeList: undefined };
-    expect(await TournamentFlow.prototype.presentFinishedPlotIfNeeded.call(receiver as never)).toBe(false);
-    expect(TournamentFlow.prototype.requestBack.call(receiver as never)).toBe(true);
-    expect(receiver.pvp.requestBack).toHaveBeenCalledOnce();
-    expect(receiver.requestExit).not.toHaveBeenCalled(); expect(receiver.opts.onFinished).not.toHaveBeenCalled();
+      opts: { onFinished: vi.fn() }, requestExit: vi.fn() };
+    expect(await TournamentFlow.prototype.presentFinishedPlotIfNeeded.call(receiver as never)).toBe(true);
+    expect(receiver.opts.onFinished).toHaveBeenCalledOnce();
+    expect(receiver.requestExit).toHaveBeenCalledWith("finished");
   });
   it("keeps the active Tournament overlay while exposing its nested cooldown popup", () => {
     const popupState = {

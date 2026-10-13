@@ -1,10 +1,17 @@
 # Multiplayer PvP
 
+PvP uses the Tournament background and the shared popup/MenuButton2 artwork from the selected
+content package. Invite entry, waiting, reconnect, forfeit and results use the same framed visual
+style; input remains a real accessible text field for paste and mobile keyboards. The exhibition
+board uses Arena scenery, native menu buttons, popup card frames and the shared tinted HP bars.
+All new geometry is responsive port-extension layout, not a claim about shipped PvP behavior.
+The Mod Manager screenshot shows the real lobby layout with labeled neutral preview artwork:
+imported game artwork stays in the tab and is never copied into the distribution.
+
 Status (2026-10-05): engine, protocol, durable service, CLI composition, built-in mod selection,
-tournament lobby and two-human battle board are connected. Workspace tests/typecheck, production
-builds and content boundary pass. Browser verification is pending authorization;
-the rendered composition and actual pointer behavior have not yet been verified. No deployment
-has been performed.
+Arena lobby and two-human battle board are connected. Workspace tests/typecheck, production
+builds and content boundary pass. Authorized muted browser checks cover baseline
+play and composed example adapters in both display tiers. No deployment has been performed.
 
 The goal is an official selectable mod adding invite-code multiplayer to the tournament UI
 in both Offline and Official play. Both players bring their parties and the server owns
@@ -50,11 +57,18 @@ is bound to the installed archive digest. This supports an unequal cosmetic sele
 trusting the mod's name or a save-neutral claim. Other packages need reviewed descriptors and,
 when they change battles, a server profile; unsupported selections identify their ID/version/path.
 
+The executable [PvP adapter API](pvp-adapter-api.md) now supplies per-match rules, strict custom
+intents, replayed state, dependency/conflict checks, and client buttons/custom canvas controls.
+Operators install explicitly reviewed combinations through `DIB_PVP_ADAPTERS_MODULE`. The runnable
+Echo Strike + Turn Counter examples demonstrate composition. Existing special-monster mods
+remain unsupported until their own adapters and necessary timing
+protocols exist; the previous cosmetic checks did not establish gameplay-mod compatibility.
+
 ## Playing
 
-Open **Mod Manager → Installed → Multiplayer PvP**, enable its switch, and Apply. It is included
+Open **Mod Manager → Browse → Multiplayer PvP**, choose Enable, and Apply (Installed works too). It is included
 with the engine and does not need a `.dibmod` download. Enabling it alone does not restrict Official
-launch. In a town's Tournament screen, choose **PvP**, then **Create invite** or enter a friend's
+launch. In a town's Arena menu, choose **PvP** directly below **Tournament**, then **Create invite** or enter a friend's
 eight-character code and **Join match**. The menu remains available after completing tournaments.
 
 Both players see the same committed battle with their own team below their opponent. Choose an
@@ -135,8 +149,8 @@ both-team mixed targeting, phone/tablet geometry and Official credential renewal
 projection tests prove the campaign stays unchanged and town/healthy-party eligibility is enforced.
 Additional regression checks cover input during polling, incompatible response retry, retained
 terminal recovery, mismatched client/server rules, prototype receipt recovery, and strict PvP
-request/response boundaries. Tournament entry also retains input ownership through the pending
-Official tutorial claim and the visible tutorial popup, before allowing PvP to open.
+request/response boundaries. Arena chat and popup presentation retains input ownership before
+allowing PvP to open. Tournament entry no longer owns a PvP button.
 
 On 2026-10-05, authorized muted browser checks passed against an isolated file-backed API and
 fresh production preview, using the operator-owned original archive. Screenshots and exported
@@ -158,7 +172,7 @@ Run scenarios serially against one isolated API to avoid catalog/session rate li
 
 To repeat `pnpm scenario:pvp`, start fresh isolated API/Vite servers from this checkout, set
 `DIB_WEB_URL` and `DIB_CONTENT_ARCHIVE`, then run it when browser validation is authorized.
-It launches two isolated muted contexts, enables the actual manager switch, enters Tournament,
+It launches two isolated muted contexts, enables the actual manager switch, enters Arena,
 creates/joins an invite, submits moves through real canvas clicks, compares both committed
 transcripts, reconnects and forfeits. Inspect `output/pvp-iphone` screenshots and JSON; repeat with
 `DIB_DISPLAY_MODE=ipad`.

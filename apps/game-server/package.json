@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/gameServer.ts" },
+  "exports": { ".": "./src/gameServer.ts", "./pvp-adapters": "./src/pvpAdapters.ts" },
   "scripts": {
     "build": "node build.mjs",
     "dev": "tsx watch src/cli.ts",

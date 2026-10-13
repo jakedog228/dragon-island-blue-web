@@ -1,7 +1,7 @@
 import type { AuthorProfile, CatalogMod, CatalogSort, CatalogTag, CommunityInfo, ModRelease } from "@dib/mod-kernel/catalog";
 import { importCodeModArchive, matchesRange, resolveCodeModProfile, type CodeModPackage, type ModAdvisory } from "@dib/mod-kernel";
 import {
-  catalogImageUrl, catalogLookup, catalogPage, catalogTags, communityInfo, communityJson, disableSelectedMod,
+  catalogImageUrl as remoteCatalogImageUrl, catalogLookup, catalogPage, catalogTags, communityInfo, communityJson, disableSelectedMod,
   enableInstalledMod, forgetInstalledDigest, installCatalogPlan, installedCatalogMods, planCatalogInstall, storeLocalMod,
   type InstalledCatalogMod,
 } from "./communityClient.js";
@@ -19,6 +19,10 @@ import { readPlayProfiles } from "./playProfiles.js";
 import { loadRequiredLocalFonts } from "../localFonts.js";
 import "./modLibrary.css";
 import { PVP_MOD, pvpModEnabled, setPvpModEnabled } from "../pvp/pvpMod.js";
+import { PVP_LISTING, PVP_BUILTIN_RELEASE, pvpLibraryEntry, pvpListingMatches } from "../pvp/pvpModListing.js";
+
+const catalogImageUrl = (mod: CatalogMod, digest: string): string => mod.id === PVP_LISTING.id
+  ? `${import.meta.env.BASE_URL}pvp-lobby.png` : remoteCatalogImageUrl(mod, digest);
 
 /** What Apply hands back to the launcher: the files to enable and how they resolve. */
 export interface ModManagerSelection extends LoadOrderChoice {
@@ -47,7 +51,7 @@ const TABS: readonly { id: ModManagerTab; label: string; hint: string }[] = [
   { id: "browse", label: "Browse", hint: "Official and community mods you can install" },
 ];
 const ORIGIN_META: Record<LibraryOrigin, { label: string; hint: string; source: string }> = {
-  official: { label: "Official", hint: "from this server", source: "Official" },
+  official: { label: "Official", hint: "from the game and this server", source: "Official" },
   community: { label: "Community", hint: "shared by players", source: "Community" },
   local: { label: "Imported files", hint: "added from this device", source: "Imported file" },
 };
@@ -242,7 +246,7 @@ export function showModManager(options: ModManagerOptions): void {
       publish.append(link);
     }
     if (info?.enabled) {
-      try { browseCount = (await catalogPage({})).total; } catch { /* shown on the tab itself */ }
+      try { browseCount = (await catalogPage({})).total + 1; } catch { /* shown on the tab itself */ }
     }
   };
   /** Display name for a mod ID, wherever it is best known; the raw ID only for mods seen nowhere. */
@@ -292,11 +296,13 @@ export function showModManager(options: ModManagerOptions): void {
     return true;
   };
   const enable = async (digest: string): Promise<void> => {
+    if (digest === PVP_BUILTIN_RELEASE) { stagedPvp = true; return; }
     if (!await stageEnabled(digest)) return;
     const entry = library.find((row) => row.stagedDigest === digest);
     toaster.show(`${entry?.displayName ?? "Mod"} will be enabled when you apply.`, "success");
   };
   const disable = async (entry: LibraryEntry): Promise<void> => {
+    if (entry.modId === PVP_MOD.id) { stagedPvp = false; return; }
     const result = await disableSelectedMod(stagedFiles, entry.modId, { allowDeclaredConflicts: stagedAllow });
     await stage(result.files);
     toaster.show(result.cascaded.length
@@ -461,6 +467,7 @@ export function showModManager(options: ModManagerOptions): void {
    */
   const openDetail = async (modId: string, mod: CatalogMod | undefined, listingId: string | undefined): Promise<void> => {
     const active = document.activeElement instanceof HTMLElement && main.contains(document.activeElement) ? document.activeElement : undefined;
+    if (modId === PVP_MOD.id) { mod = PVP_LISTING; listingId = undefined; }
     const subject: Detail = { modId, mod, pkg: undefined, loading: listingId !== undefined, note: undefined,
       opener: { node: active, modId: active?.closest("[data-mod-id]")?.getAttribute("data-mod-id") ?? undefined, role: active?.classList[0] } };
     detail = subject;
@@ -512,7 +519,8 @@ export function showModManager(options: ModManagerOptions): void {
   // Browse data
   // ---------------------------------------------------------------------------------------------
   const loadBrowse = async (append = false): Promise<void> => {
-    if (tab !== "browse" || !info?.enabled) return;
+    if (tab !== "browse") return;
+    if (!info?.enabled) { results = { mods: [], next: null, total: 0 }; render(); return; }
     const generation = ++browseGeneration;
     if (!append) { results = undefined; render(); }
     try {
@@ -523,7 +531,7 @@ export function showModManager(options: ModManagerOptions): void {
       if (generation !== browseGeneration) return;
       results = append && results ? { mods: [...results.mods, ...page.mods], next: page.next, total: page.total } : page;
       tags = tagList;
-      if (!query && !tag && !author) browseCount = page.total;
+      if (!query && !tag && !author) browseCount = page.total + 1;
       catalogError = undefined;
     } catch (error) {
       if (generation !== browseGeneration) return;
@@ -661,7 +669,7 @@ export function showModManager(options: ModManagerOptions): void {
     if (entry.update && entry.listing) actions.append(button("Update", { tone: "primary", small: true, onClick: () => run(() => installLatest(entry.listing!, true)) }));
     if (!storedAny && entry.listingId) actions.append(button("Download", { tone: "primary", small: true, onClick: () => openEntry(entry) }));
     actions.append(iconButton("info", "Details", () => openEntry(entry)));
-    actions.append(iconButton("trash", "Remove from device", () => run(() => remove(entry)), "danger"));
+    if (entry.modId !== PVP_MOD.id) actions.append(iconButton("trash", "Remove from device", () => run(() => remove(entry)), "danger"));
     const toggle = el("button", "ml-switch", el("span", "ml-switch__thumb"));
     toggle.type = "button"; toggle.setAttribute("role", "switch"); toggle.setAttribute("aria-checked", String(enabled));
     toggle.setAttribute("aria-label", entry.displayName); toggle.title = enabled ? "Enabled" : "Disabled";
@@ -706,12 +714,10 @@ export function showModManager(options: ModManagerOptions): void {
 
   const renderLibrary = (): void => {
     const text = query.trim().toLowerCase();
-    const showPvp = (!text || `${PVP_MOD.name} ${PVP_MOD.id} Official multiplayer online`.toLowerCase().includes(text)) &&
-      (libraryFilter === "all" || (libraryFilter === "enabled" && stagedPvp));
     const visible = library.filter((entry) => (!text || `${entry.displayName} ${entry.modId}`.toLowerCase().includes(text)) &&
       (libraryFilter === "all" || (libraryFilter === "enabled" ? entry.stagedDigest !== undefined : entry.update !== undefined)));
     const segment = el("div", "ml-segment"); segment.setAttribute("role", "radiogroup"); segment.setAttribute("aria-label", "Filter installed mods");
-    for (const [id, label, count] of [["all", "All", library.length + 1], ["enabled", "Enabled", library.filter((entry) => entry.stagedDigest).length + Number(stagedPvp)],
+    for (const [id, label, count] of [["all", "All", library.length], ["enabled", "Enabled", library.filter((entry) => entry.stagedDigest).length],
       ["updates", "Updates", library.filter((entry) => entry.update).length]] as const) {
       const node = el("button", "ml-segment__item", label, el("span", "ml-segment__count", String(count)));
       node.type = "button"; node.setAttribute("role", "radio"); node.setAttribute("aria-checked", String(libraryFilter === id));
@@ -719,7 +725,7 @@ export function showModManager(options: ModManagerOptions): void {
       segment.append(node);
     }
     const importButton = button("Import file", { tone: "secondary", small: true, title: "Add .dibmod files from this device. You can also drop them anywhere here.", onClick: () => fileInput.click() });
-    if (!library.length && !showPvp && !text && libraryFilter === "all") {
+    if (!library.length && !text && libraryFilter === "all") {
       main.replaceChildren(emptyState("No mods installed yet", "Find some under Browse, or import a .dibmod file you already have.",
         button("Browse mods", { tone: "primary", onClick: () => switchTab("browse") }),
         button("Import file", { tone: "secondary", onClick: () => fileInput.click() })));
@@ -728,20 +734,7 @@ export function showModManager(options: ModManagerOptions): void {
     const disableAllButton = staged.length > 0 || stagedPvp
       ? button("Disable all", { tone: "ghost", small: true, title: "Turn every mod off. Takes effect when you apply.", onClick: () => run(disableAll) }) : undefined;
     main.replaceChildren(el("div", "ml-toolbar", segment, el("span", "ml-toolbar__spacer"), disableAllButton, importButton, viewToggle()));
-    if (showPvp) {
-      const toggle = el("button", "ml-switch", el("span", "ml-switch__thumb"));
-      toggle.type = "button"; toggle.setAttribute("role", "switch");
-      toggle.setAttribute("aria-label", PVP_MOD.name); toggle.setAttribute("aria-checked", String(stagedPvp));
-      toggle.addEventListener("click", () => { stagedPvp = !stagedPvp; render(); main.querySelector<HTMLButtonElement>(`[data-mod-id="${PVP_MOD.id}"] [role="switch"]`)?.focus(); });
-      const row = el("article", `ml-row ${stagedPvp ? "ml-row--on" : "ml-row--off"}`, toggle,
-        el("div", "ml-row__main", el("div", "ml-row__title", el("h4", "", PVP_MOD.name),
-          stagedPvp !== appliedPvp ? badge(stagedPvp ? "Enabling on apply" : "Disabling on apply", "pending") : undefined),
-        el("div", "ml-row__meta", `v${PVP_MOD.version} · by ${PVP_MOD.author} · Built-in · Offline + Official`),
-        el("p", "ml-muted", PVP_MOD.description)));
-      row.dataset["modId"] = PVP_MOD.id;
-      main.append(el("section", "ml-group ml-group--official", el("h3", "ml-group__title", "Official", el("small", "", "Included with the game")), row));
-    }
-    if (!visible.length && !showPvp) {
+    if (!visible.length) {
       main.append(emptyState(text ? "Nothing matches" : libraryFilter === "updates" ? "Everything is up to date" : "No mods are enabled",
         text ? `None of your installed mods match \u201c${query}\u201d.` : libraryFilter === "enabled" ? "Use the switch next to a mod to enable it." : "Updates are checked each time you open this list."));
       return;
@@ -766,7 +759,7 @@ export function showModManager(options: ModManagerOptions): void {
   };
   const renderOrder = (): void => {
     if (!staged.length) {
-      main.replaceChildren(emptyState("No mods enabled", "Enable mods in Installed, then drag them into the order they activate in here.",
+      main.replaceChildren(emptyState(stagedPvp ? "No load order needed" : "No mods enabled", stagedPvp ? "Multiplayer PvP works on its own. Enable other mods to arrange their load order." : "Enable mods in Installed, then drag them into the order they activate in here.",
         button("Go to installed mods", { tone: "primary", onClick: () => switchTab("library") })));
       return;
     }
@@ -1014,19 +1007,17 @@ export function showModManager(options: ModManagerOptions): void {
   };
 
   const renderBrowse = (): void => {
-    if (!info?.enabled || (catalogError && !results)) {
-      main.replaceChildren(emptyState(info?.enabled === false ? "This server has no mod catalog" : "Couldn't reach the mod catalog",
-        catalogError ?? "Check your connection and try again. Installed mods still work.",
-        button("Try again", { tone: "primary", onClick: () => run(async () => { await loadInfo(); await loadBrowse(); }) }),
-        button("Go to installed mods", { tone: "ghost", onClick: () => switchTab("library") })));
-      return;
-    }
+    const included = pvpListingMatches(query, tag, author?.id) ? [PVP_LISTING] : [];
+    const shownMods = [...included, ...(results?.mods ?? []).filter(mod => mod.modId !== PVP_MOD.id)];
+    shownMods.sort((a, b) => sort === "name" ? a.title.localeCompare(b.title) :
+      (sort === "newest" ? b.createdAt.localeCompare(a.createdAt) : b.updatedAt.localeCompare(a.updatedAt)));
+    const total = (results?.total ?? 0) + included.length;
     const sortSelect = el("select", "ml-select__input"); sortSelect.setAttribute("aria-label", "Sort mods");
     for (const entry of SORTS) { const option = el("option", "", entry.label); option.value = entry.id; option.selected = entry.id === sort; sortSelect.append(option); }
     sortSelect.addEventListener("change", () => { sort = sortSelect.value as CatalogSort; void loadBrowse(); });
     const filtered = Boolean(query || tag || author);
     const summary = el("span", "ml-toolbar__summary");
-    if (results) summary.append(el("strong", "", String(results.total)), filtered ? ` ${results.total === 1 ? "match" : "matches"}` : ` ${results.total === 1 ? "mod" : "mods"}`);
+    summary.append(el("strong", "", String(total)), filtered ? ` ${total === 1 ? "match" : "matches"}` : ` ${total === 1 ? "mod" : "mods"}`);
     const toolbar = el("div", "ml-toolbar", summary);
     if (author) {
       const chip = el("button", "ml-chip ml-chip--active", `by ${author.name}`, icon("close", "ml-icon ml-icon--small"));
@@ -1036,7 +1027,15 @@ export function showModManager(options: ModManagerOptions): void {
     }
     toolbar.append(el("span", "ml-toolbar__spacer"), el("label", "ml-select", "Sort", sortSelect), viewToggle());
     main.replaceChildren(toolbar);
-    if (tags.length) {
+    if (catalogError) main.append(el("div", "ml-note", el("p", "", "The online catalog is unavailable. Included mods are still available."),
+      button("Try again", { tone: "secondary", onClick: () => run(async () => { await loadInfo(); await loadBrowse(); }) })));
+    const shownTags = tags.map(entry => ({ ...entry }));
+    for (const value of PVP_LISTING.tags) {
+      const existing = shownTags.find(entry => entry.tag === value);
+      if (existing) existing.count++;
+      else shownTags.push({ tag: value, count: 1 });
+    }
+    if (shownTags.length) {
       const chips = el("div", "ml-chips"); chips.setAttribute("aria-label", "Filter by tag");
       const chipFor = (label: string, value: string | undefined, count?: number): HTMLButtonElement => {
         const node = el("button", `ml-chip${tag === value ? " ml-chip--active" : ""}`, label,
@@ -1047,25 +1046,25 @@ export function showModManager(options: ModManagerOptions): void {
       };
       // Keep the filter row to one line; the long tail sits behind a toggle (an active tag always shows).
       const limit = 8;
-      const shown = tagsExpanded ? tags : tags.filter((entry, at) => at < limit || entry.tag === tag);
+      const shown = tagsExpanded ? shownTags : shownTags.filter((entry, at) => at < limit || entry.tag === tag);
       chips.append(chipFor("All tags", undefined), ...shown.map((entry) => chipFor(entry.tag, entry.tag, entry.count)));
-      if (tags.length > limit) {
-        const more = el("button", "ml-chip ml-chip--more", tagsExpanded ? "Fewer tags" : `${tags.length - shown.length} more`);
+      if (shownTags.length > limit) {
+        const more = el("button", "ml-chip ml-chip--more", tagsExpanded ? "Fewer tags" : `${shownTags.length - shown.length} more`);
         more.type = "button"; more.setAttribute("aria-expanded", String(tagsExpanded));
         more.addEventListener("click", () => { tagsExpanded = !tagsExpanded; render(); });
         chips.append(more);
       }
       main.append(chips);
     }
-    if (!results) { main.append(el("p", "ml-loading", "Loading mods\u2026")); return; }
-    if (!results.mods.length) {
+    if (!results && info?.enabled) main.append(el("p", "ml-loading", "Loading more mods\u2026"));
+    if (!shownMods.length) {
       main.append(emptyState(filtered ? "No mods match" : "Nothing to browse yet",
         filtered ? "Try a different search, or clear the filters." : "This server has not published any mods, and nobody has shared one here yet.",
         ...(filtered ? [button("Clear filters", { tone: "secondary", onClick: () => { query = ""; search.value = ""; tag = undefined; author = undefined; void loadBrowse(); } })] : [])));
       return;
     }
-    main.append(view === "grid" ? el("div", "ml-tiles", ...results.mods.map(tile)) : el("div", "ml-list", ...results.mods.map(card)));
-    if (results.next !== null) {
+    main.append(view === "grid" ? el("div", "ml-tiles", ...shownMods.map(tile)) : el("div", "ml-list", ...shownMods.map(card)));
+    if (results && results.next !== null) {
       main.append(el("div", "ml-more", button(`Show ${Math.min(results.total - results.mods.length, results.mods.length)} more`, { tone: "secondary", onClick: () => run(() => loadBrowse(true)) })));
     }
   };
@@ -1131,7 +1130,7 @@ export function showModManager(options: ModManagerOptions): void {
     const latest = mod?.releases[0];
     const stored = entry?.versions.find((version) => version.stored && version.digest === entry.stagedDigest) ?? entry?.versions.find((version) => version.stored);
     const deviceRow = stored ? device.find((row) => row.digest === stored.digest) : undefined;
-    modalSource.replaceChildren(sourceLabel(origin), mod?.source === "official" ? el("span", "", " \u00b7 shipped by this server") : "");
+    modalSource.replaceChildren(sourceLabel(origin), mod?.source === "official" ? el("span", "", mod.modId === PVP_MOD.id ? " \u00b7 included with the game" : " \u00b7 shipped by this server") : "");
 
     // What this window cannot show, said once up front.
     const notices: HTMLElement[] = [];
@@ -1167,7 +1166,7 @@ export function showModManager(options: ModManagerOptions): void {
     const state = mod ? listingState(mod, library) : undefined;
     const actions = el("div", "ml-detail__actions",
       mod && state ? (latest ? stateAction(mod, state, true) : badge("No release to download", "warning")) : entry ? entryAction(entry, true) : undefined);
-    if (entry && entry.versions.some((version) => version.stored)) {
+    if (entry && entry.modId !== PVP_MOD.id && entry.versions.some((version) => version.stored)) {
       actions.append(iconButton("trash", "Remove from device", () => run(() => remove(entry)), "danger"));
     }
     const head = el("header", "ml-detail__head",
@@ -1200,6 +1199,7 @@ export function showModManager(options: ModManagerOptions): void {
         const on = entry?.stagedDigest === release.digest;
         const rowActions = el("div", "ml-versions__actions");
         if (on) rowActions.append(button("In use", { icon: "check", tone: "success", small: true, title: "Disable", onClick: () => run(() => disable(entry!)) }));
+        else if (copy && mod.modId === PVP_MOD.id) rowActions.append(button("Use this", { tone: "secondary", small: true, onClick: () => run(() => enable(PVP_BUILTIN_RELEASE)) }));
         else if (copy) rowActions.append(button("Use this", { tone: "secondary", small: true, title: "Switch to this version", onClick: () => run(() => enable(release.digest)) }),
           iconButton("trash", `Remove v${release.version}`, () => run(() => remove(entry!, release.digest)), "danger"));
         else rowActions.append(button("Install", { small: true, tone: at === 0 ? "primary" : "secondary", onClick: () => run(() => install(mod, release)) }));
@@ -1207,7 +1207,7 @@ export function showModManager(options: ModManagerOptions): void {
         list.append(el("li", `ml-versions__row${on ? " ml-versions__row--on" : ""}`,
           el("div", "ml-versions__main", el("strong", "", `v${release.version}`), at === 0 ? badge("latest", "update") : undefined,
             copy ? badge("on this device", "muted") : undefined),
-          el("small", "ml-versions__meta", el("span", "", formatRelative(release.createdAt)), el("span", "", formatBytes(release.byteLength)),
+          el("small", "ml-versions__meta", el("span", "", formatRelative(release.createdAt)), el("span", "", mod.modId === PVP_MOD.id ? "Included with the game" : formatBytes(release.byteLength)),
             el("span", "", `API ${release.apiVersion}`), deps ? el("span", "", plural(deps, "requirement")) : undefined),
           rowActions));
       }
@@ -1284,6 +1284,8 @@ export function showModManager(options: ModManagerOptions): void {
   };
 
   const render = (): void => {
+    library = [pvpLibraryEntry(stagedPvp, appliedPvp), ...library.filter(entry => entry.modId !== PVP_MOD.id)];
+    browseCount ??= 1;
     // Rendering replaces nodes; put focus back on the equivalent control so keyboard users (and
     // the dialog's own key handling) never fall out to <body>.
     const active = document.activeElement instanceof HTMLElement && dialog.contains(document.activeElement) ? document.activeElement : undefined;
@@ -1395,7 +1397,7 @@ export function showModManager(options: ModManagerOptions): void {
     await loadInfo();
     await refreshDevice(true);
     // First visit with nothing installed: show what is available instead of an empty page.
-    if (!options.initialTab && !library.length && info?.enabled && (browseCount ?? 0) > 0) { tab = "browse"; void loadBrowse(); }
+    if (!options.initialTab && library.every(entry => entry.modId === PVP_MOD.id) && info?.enabled && (browseCount ?? 0) > 0) { tab = "browse"; void loadBrowse(); }
     else if (tab === "browse") void loadBrowse();
   });
 }

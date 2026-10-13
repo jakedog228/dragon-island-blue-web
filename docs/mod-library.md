@@ -1,5 +1,18 @@
 # Mod Manager and author profiles
 
+**Multiplayer PvP** is included as a normal Official listing in Browse and Installed, with search,
+tags, author filtering, grid/list layouts, a description, and a lobby-layout screenshot gallery.
+The preview uses labeled neutral artwork; in-game PvP reuses the selected package's Tournament
+background, popup frames and menu buttons throughout the flow.
+Enable/disable uses the shared staged Apply/Discard flow. It remains available without the remote
+catalog; there is no download or Remove action for this built-in release. It adds **PvP** directly
+below **Tournament** in the Arena menu. The listing explains the server-adapter requirement for
+gameplay mods and does not claim native support for other gameplay mods. Its local release token is presentation metadata,
+never a downloadable digest or a relaxation of archive/trust checks.
+
+The opt-in `apps/web/tests/browser/pvp-listing.playwright.mjs` covers desktop/phone Browse,
+details/gallery, staged changes, Installed, and unavailable-catalog search against `DIB_WEB_URL`.
+
 The launcher's **Mod Manager** button, directly under the asset archive field, opens the one place
 for Offline mods: browsing, installing, enabling, disabling, removing, load order and conflicts.
 None of it requires an account. The button's second line says how many mods are enabled, and the
@@ -300,8 +313,7 @@ the game backup may have observed an incomplete snapshot if the two jobs overlap
 Unit coverage: `apps/game-server/tests/{community,modCatalog,officialMods,devCatalog}.test.ts`
 (including a check that every shipped example `listing.json` loads with its summary) and
 `apps/web/tests/{communityClient,modLibraryModel}.test.ts` (load-order moves, conflict
-classification, layout preference, the conflict-override reload format). Existing workspace tests, typechecks and the content
-boundary remain required. The prepared opt-in browser scenario is:
+classification, layout preference, the conflict-override reload format). Existing workspace tests, typechecks and the content boundary remain required. The prepared opt-in browser scenario is:
 
 ```powershell
 node apps/web/tests/browser/mod-library.playwright.mjs
