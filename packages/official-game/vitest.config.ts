@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 const corpusTests = [
   "tests/eggContinuation.test.ts",
   "tests/officialGame.test.ts",
+  "tests/officialV25.test.ts",
   "tests/reservedCommands.test.ts"
 ];
 const hasCorpus = existsSync(resolve(import.meta.dirname, "../../extracted/data/Monsters.json"));
