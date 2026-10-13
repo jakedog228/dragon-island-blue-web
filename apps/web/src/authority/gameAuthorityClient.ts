@@ -140,6 +140,9 @@ export type InstalledCommandResult =
  * client: command availability and projection semantics can otherwise fail only after gameplay
  * has already begun, leaving modal flows waiting on commands the running server does not know. */
 export const OFFICIAL_CLIENT_SIMULATION_VERSION = OFFICIAL_GAME_SIMULATION_VERSION;
+// Transport headroom, not simulation time. Renew on the next authenticated operation rather
+// than starting background timers; idle tabs need no network activity.
+const SESSION_RENEWAL_MARGIN_MS = 30_000;
 
 export interface GameAuthority {
   setRecoveryPrompt?(prompt: (error: RemoteGameAuthorityError) => Promise<void>): void;
@@ -191,6 +194,7 @@ export class RemoteGameAuthority implements GameAuthority {
       const headers = new Headers(init.headers); headers.set("Authorization", `Bearer ${this.token}`);
       return fetch(`${this.endpoint}${path}`, { ...init, headers });
     };
+    await this.ensureSessionFresh();
     const response = await send();
     if (response.status !== 401) return response;
     await this.reauthenticate();
@@ -206,6 +210,7 @@ export class RemoteGameAuthority implements GameAuthority {
   private constructor(
     private readonly endpoint: string,
     token: string,
+    private expiresAtMs: number,
     readonly pack: LogicPackDescriptorV1,
     slots: readonly AuthoritativeSlotSummaryV1[],
     private readonly authentication: {
@@ -270,6 +275,7 @@ export class RemoteGameAuthority implements GameAuthority {
     return new RemoteGameAuthority(
       endpoint,
       session.token,
+      Date.parse(session.expiresAt),
       session.pack,
       session.slots,
       authentication,
@@ -433,6 +439,7 @@ export class RemoteGameAuthority implements GameAuthority {
     for (;;) {
       try {
         try {
+          await this.ensureSessionFresh();
           return await this.authorizedJsonOnce(path, init);
         } catch (error) {
           if (!(error instanceof RemoteGameAuthorityError) || error.code !== "SESSION_EXPIRED") throw error;
@@ -455,6 +462,12 @@ export class RemoteGameAuthority implements GameAuthority {
     return await requestJson(`${this.endpoint}${path}`, { ...init, headers });
   }
 
+  private async ensureSessionFresh(): Promise<void> {
+    if (this.reauthentication !== undefined || Date.now() >= this.expiresAtMs - SESSION_RENEWAL_MARGIN_MS) {
+      await this.reauthenticate();
+    }
+  }
+
   private async reauthenticate(): Promise<void> {
     if (this.reauthentication === undefined) {
       this.reauthentication = createSession(this.endpoint, this.authentication)
@@ -470,6 +483,7 @@ export class RemoteGameAuthority implements GameAuthority {
             );
           }
           this.token = session.token;
+          this.expiresAtMs = Date.parse(session.expiresAt);
           this.slotSummaries = [...session.slots];
         })
         .finally(() => {

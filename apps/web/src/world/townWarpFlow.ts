@@ -45,6 +45,8 @@ export interface TownWarpFlowOptions {
   readonly onUnknownTown: (townName: string) => void | Promise<void>;
   readonly onTravel: (townName: string) => void | Promise<void>;
   readonly onClose: () => void;
+  /** The owning scene retains input during the first-use claim and tutorial mounting. */
+  readonly isInputBlocked?: () => boolean;
 }
 
 
@@ -64,7 +66,13 @@ export class TownWarpFlow {
   }
 
   requestClose(): void {
+    if (this.inputBlocked) return;
     this.dispose();
+  }
+
+  private get inputBlocked(): boolean {
+    return this.closed || this.invoking || this.options.isInputBlocked?.() === true ||
+      PopupHost.for(this.options.parent).modalDepth > 0;
   }
 
   dispose(): void {
@@ -80,6 +88,7 @@ export class TownWarpFlow {
       kind: "townWarp",
       open: !this.closed,
       config: "TownWarp",
+      inputBlocked: this.inputBlocked,
       content: { ...this.contentRect },
       popups: PopupHost.for(this.options.parent).debugState,
       destinations: this.buttonState.map((state) => ({ ...state })),
@@ -181,19 +190,7 @@ export class TownWarpFlow {
       const { item: viewItem, layout } = button;
       const item = viewItem.value;
       (button.onPress ?? ((handler) => button.node.on("pointertap", handler)))(() => {
-        if (this.closed || this.invoking) return;
-        this.options.onClick();
-        if (!item.visited) {
-          void Promise.resolve(this.options.onUnknownTown(item.townName));
-          return;
-        }
-        this.invoking = true;
-        // Visited items receive source `autoCloseOnInvoke=YES`; unknown rows remain underneath
-        // their UnknownTown popup because their flag is exactly NO.
-        this.dispose();
-        void Promise.resolve(this.options.onTravel(item.townName)).catch((error: unknown) => {
-          queueMicrotask(() => { throw error; });
-        });
+        this.invoke(item);
       });
       this.buttonState.push({
         townName: item.townName,
@@ -222,14 +219,30 @@ export class TownWarpFlow {
     close.cursor = "pointer";
     close.on("pointertap", (event) => {
       event.stopPropagation();
+      if (this.inputBlocked) return;
       this.options.onClick();
-      this.dispose();
+      this.requestClose();
     });
     root.addChild(close);
 
     this.root = root;
     parent.sortableChildren = true;
     parent.addChild(root);
+  }
+
+  private invoke(item: TownWarpItemModel): void {
+    if (this.inputBlocked) return;
+    this.options.onClick();
+    if (!item.visited) {
+      void Promise.resolve(this.options.onUnknownTown(item.townName));
+      return;
+    }
+    this.invoking = true;
+    // Source autoCloseOnInvoke=YES for visited destinations; unknown rows stay open.
+    this.dispose();
+    void Promise.resolve(this.options.onTravel(item.townName)).catch((error: unknown) => {
+      queueMicrotask(() => { throw error; });
+    });
   }
 
   private async buildQuestBadge(item: TownWarpItemModel): Promise<PopupMenuItemAccessory> {

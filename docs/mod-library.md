@@ -7,6 +7,9 @@ Enable/disable uses the shared staged Apply/Discard flow. It remains available w
 catalog and counts as one mod in the Installed, enabled, Load order, Apply and launcher totals.
 PvP needs no load-order position; the Load order screen counts it alongside the sortable mods.
 The launcher updates immediately after Apply, including when PvP is the only changed mod.
+Installed switches are disabled while a manager load or mutation is pending, then become
+interactive when it finishes. The opt-in `mod-library-busy.playwright.mjs` holds catalog loading
+and checks the disabled pointer path plus enable/Apply/reopen persistence.
 It remains compatible with Official play.
 There is no download or Remove action for this built-in release. It adds **PvP** directly
 below **Tournament** in the Arena menu. The listing explains that PvP accepts reviewed cosmetic mods only and rejects

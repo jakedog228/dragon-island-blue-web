@@ -457,3 +457,27 @@ async function createProductionDungeonNode(
   await node.prepareStart([{ kind: "waypoint", floor: 1, roomId: "room-1" }]);
   return { node, stage };
 }
+
+
+describe("Dungeon menu transition input ownership", () => {
+  it("blocks pointer room selection and keyboard/menu actions until the owner releases input", async () => {
+    let pending = true;
+    const onMenu = vi.fn(), selectRoom = vi.fn();
+    const node = Object.assign(Object.create(DungeonNode.prototype), {
+      locked: false,
+      deps: { isInputBlocked: () => pending, onMenu, session: { state: { currentRoomId: "a" } } },
+      selectRoom,
+    }) as { handleRoomTouch: (id: string, point: { x: number; y: number }) => Promise<void>;
+      requestDirectionalMove: DungeonNode["requestDirectionalMove"]; requestMenu: DungeonNode["requestMenu"] };
+    await node.handleRoomTouch("b", { x: 0, y: 0 });
+    expect(node.requestDirectionalMove("north")).toBe(false);
+    expect(node.requestMenu()).toBe(false);
+    expect(selectRoom).not.toHaveBeenCalled();
+    expect(onMenu).not.toHaveBeenCalled();
+    pending = false;
+    await node.handleRoomTouch("b", { x: 0, y: 0 });
+    expect(selectRoom).toHaveBeenCalledWith("b");
+    expect(node.requestMenu()).toBe(true);
+    expect(onMenu).toHaveBeenCalledOnce();
+  });
+});

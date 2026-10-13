@@ -540,9 +540,10 @@ describe("official-game-v26 opening wallet settlement", () => {
   const earned = () => JSON.parse(readFileSync(new URL("./fixtures/earned-v25-opening-silver.json", import.meta.url), "utf8")) as OfficialGameStateV24;
   const migrate = (state: OfficialGameStateV24) => migrateOfficialGameV25ToV26({ data, quests, state, context: { dungeonResources: source } });
   const attack: GameCommandEnvelopeV1["command"] = { type: "battle.chooseAbility", battleId: "battle-1181", actorId: "t0m1:SteelSnake", slot: "usable1", targetIds: ["t1m0:Abomination"] };
-  it("commits the earned Master license and its eighteen batting-order slots", () => {
-    const state = JSON.parse(readFileSync(new URL("./fixtures/earned-v25-master-order.json", import.meta.url), "utf8")) as OfficialGameStateV24;
+  it("commits the earned Elite license and its eighteen batting-order slots", () => {
+    const state = JSON.parse(readFileSync(new URL("./fixtures/earned-v25-elite-order.json", import.meta.url), "utf8")) as OfficialGameStateV24;
     const result = apply(V26, state, { type: "battle.chooseAbility", battleId: "battle-1527", actorId: "t0m3:Guardian", slot: "usable2", targetIds: ["t1m8:WolfGod"] });
+    expect("licenseType" in result.state.profile && result.state.profile.licenseType).toBe("Elite");
     expect(result.projection.player.battingOrderSize).toBe(18);
     expect(result.projection.player.battingOrderIds).toHaveLength(18);
     expect(result.projection).toEqual(v26.projectPersistedState(result.state));

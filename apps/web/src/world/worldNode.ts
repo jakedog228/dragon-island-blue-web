@@ -3791,6 +3791,7 @@ export class WorldNode {
         visitedTownNames: configured.visitedTownNames,
         questsAvailableInTown: (townName) =>
           this.deps.guildQuests?.questsAvailableInTown(townName) ?? 0,
+        isInputBlocked: () => this.modalOpening || this.locked || this.lifecycle.disposed,
         onClick: () => this.deps.audio.playSfx("click"),
         onUnknownTown: async () => {
           await showMonsterHatchPopup({
@@ -3836,7 +3837,7 @@ export class WorldNode {
       }
       this.activeTownWarp = flow;
       this.deps.onStateChanged();
-      if (await this.claimTutorialFlag("TownWarpTutorial") === "claimed") {
+      if (await this.claimTutorialFlag("TownWarpTutorial") === "claimed" && !this.lifecycle.disposed) {
         await showMonsterHatchPopup({
           parent: this.pointRoot,
           owner: this,

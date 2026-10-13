@@ -1098,6 +1098,9 @@ export class DungeonFeatureController<ShellMode extends string> {
       },
       onMusic: notifyDungeonMusic,
       claimTutorialFlag: async (flag) => {
+        // Every newly discovered waypoint reaches this callback. Source first-use claims are
+        // no-ops once seen; Official must not send a duplicate command before checking the mirror.
+        if (player.profile.hasTutorialFlag(flag)) return false;
         await this.host.authority?.claimTutorialFlag(flag);
         return player.profile.claimTutorialFlag(flag);
       },
@@ -1145,6 +1148,7 @@ export class DungeonFeatureController<ShellMode extends string> {
       isCollectionMonsterEligible: (shortType, extraLivingArguments) =>
         extraLivingArguments?.capturable !== false &&
         this.host.game.gd.monsterByShortType(shortType).category !== "Summon",
+      isInputBlocked: () => menuActionPending,
       onMenu: async () => {
         if (
           activeMenu !== undefined ||

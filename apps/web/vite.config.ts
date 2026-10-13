@@ -2,6 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { defineConfig, type Plugin, type PreviewServer, type ViteDevServer } from "vite";
 import { offlineShell } from "./build/offlineShell.js";
+import { createLocalApiProxy } from "./build/localApiProxy.js";
 
 const webRoot = import.meta.dirname;
 const repositoryRoot = resolve(webRoot, "../..");
@@ -10,28 +11,15 @@ const codeModApiPath = resolve(repositoryRoot, "docs/code-mod-api.md");
 const webAppManifestPath = resolve(webRoot, "app.webmanifest");
 const gameProxyPort = process.env["DIB_GAME_PROXY_PORT"] ?? "8788";
 const gameProxyTarget = `http://127.0.0.1:${gameProxyPort}`;
+const localApi = createLocalApiProxy(gameProxyTarget);
 const localDownloadPaths = new Map<string, string>();
 
 
 export default defineConfig(({ command }) => ({
   publicDir: false,
-  plugins: [webAppShellResources(), assetArchiveResources(), offlineShell(), ...(command === "serve" ? [developmentCsp()] : [])],
+  plugins: [localApi.lifecycle, webAppShellResources(), assetArchiveResources(), offlineShell(), ...(command === "serve" ? [developmentCsp()] : [])],
   server: {
-    proxy: {
-      "/api/pvp": { target: gameProxyTarget, changeOrigin: false },
-      "/api/community": { target: gameProxyTarget, changeOrigin: false },
-      "/api/game": {
-        target: gameProxyTarget,
-        configure(proxy) {
-          proxy.on("proxyReq", (proxyRequest) => {
-            // The browser request is same-origin with Vite. Do not turn the internal hop to the
-            // loopback game service into a synthetic cross-origin request; direct cross-origin
-            // clients still pass through the game server's exact allowlist.
-            proxyRequest.removeHeader("origin");
-          });
-        },
-      },
-    },
+    proxy: localApi.proxy,
   },
   build: {
     rollupOptions: {

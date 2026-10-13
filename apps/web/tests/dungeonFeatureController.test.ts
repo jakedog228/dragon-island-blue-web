@@ -12,6 +12,7 @@ vi.hoisted(() => {
 import { Container } from "pixi.js";
 import { infiniteDungeonFloorEntry } from "@dib/player-domain";
 import { SceneCoordinator } from "../src/sceneCoordinator.js";
+import { WorldMenu } from "../src/world/worldMenu.js";
 import { DungeonNode, type DungeonNodeDeps } from "../src/dungeon/dungeonNode.js";
 import {
   DungeonFeatureController,
@@ -418,6 +419,7 @@ describe("Volcano infinite progression proof gate", () => {
         highest = entry.highestLevel;
         return entry;
       },
+      hasTutorialFlag: () => true,
       claimTutorialFlag: () => false,
     };
     const ticker = { add: vi.fn(), remove: vi.fn(), deltaMS: 0 };
@@ -620,5 +622,100 @@ describe("Volcano infinite progression proof gate", () => {
     expect(controller.diagnosticSnapshot().map(({ detail }) => detail?.detail)).toEqual([
       "one", "one", "two",
     ]);
+  });
+});
+
+
+describe("Dungeon first-use tutorial authority ownership", () => {
+  it.each(["WaypointReached", "NewInfiniteMonsterSlot"])("claims %s once and waits for authority before mirroring", async flag => {
+    const flags = new Set<string>([flag]);
+    let resolveClaim!: () => void;
+    let rejectClaim!: (error: Error) => void;
+    const authorityClaim = vi.fn(() => new Promise<void>((resolve, reject) => {
+      resolveClaim = resolve; rejectClaim = reject;
+    }));
+    const profile = { hasTutorialFlag: (key: string) => flags.has(key),
+      claimTutorialFlag: vi.fn((key: string) => {
+        if (flags.has(key)) return false;
+        flags.add(key); return true;
+      }) };
+    let captured!: DungeonNodeDeps;
+    const node = { lifecycleSignal: new AbortController().signal, onDestroy: vi.fn(),
+      prepareStart: vi.fn(async () => undefined), start: vi.fn(async () => undefined) };
+    const create = vi.spyOn(DungeonNode, "create").mockImplementation(async deps => {
+      captured = deps; return node as unknown as DungeonNode;
+    });
+    const scenes = { current: undefined as unknown, replace: vi.fn(async (incoming: unknown) => { scenes.current = incoming; }) };
+    const controller = new DungeonFeatureController({
+      player: () => ({ party: {}, profile }), game: {}, audio: {}, content: { hasDungeonCapability: true }, scenes,
+      stage: { app: { ticker: { add: vi.fn(), remove: vi.fn() } } },
+      keyboard: { register: vi.fn(() => vi.fn()) }, checkpoint: vi.fn(),
+      authority: { claimTutorialFlag: authorityClaim },
+    } as unknown as DungeonFeatureHost<"shell">) as unknown as {
+      run: unknown; startDungeonScene: (entry: object) => Promise<unknown>;
+    };
+    controller.run = { session: {}, route: {}, definition: {} };
+    try {
+      await controller.startDungeonScene({ kind: "restore", actions: [], documentRestore: true });
+      const alreadySeen = captured.claimTutorialFlag(flag);
+      expect(authorityClaim).not.toHaveBeenCalled();
+      await expect(alreadySeen).resolves.toBe(false);
+      flags.delete(flag);
+      const first = captured.claimTutorialFlag(flag);
+      expect(authorityClaim).toHaveBeenCalledTimes(1);
+      expect(profile.claimTutorialFlag).not.toHaveBeenCalled();
+      expect(flags.has(flag)).toBe(false);
+      resolveClaim(); await expect(first).resolves.toBe(true);
+      await expect(captured.claimTutorialFlag(flag)).resolves.toBe(false);
+      expect(authorityClaim).toHaveBeenCalledTimes(1);
+      flags.delete(flag);
+      const failure = captured.claimTutorialFlag(flag);
+      rejectClaim(new Error("claim rejected"));
+      await expect(failure).rejects.toThrow("claim rejected");
+      expect(flags.has(flag)).toBe(false);
+      const retry = captured.claimTutorialFlag(flag);
+      resolveClaim(); await expect(retry).resolves.toBe(true);
+      expect(authorityClaim).toHaveBeenCalledTimes(3);
+    } finally { create.mockRestore(); }
+  });
+});
+
+
+describe("Dungeon menu owner guard wiring", () => {
+  it("retains pointer ownership after the menu closes until Town Portal finishes", async () => {
+    let captured!: DungeonNodeDeps;
+    let menuOptions!: Parameters<typeof WorldMenu.show>[1];
+    let finishPortal!: () => void;
+    const portal = vi.fn(() => new Promise<void>(resolve => { finishPortal = resolve; }));
+    const node = { lifecycleSignal: new AbortController().signal, onDestroy: vi.fn(),
+      prepareStart: vi.fn(async () => undefined), start: vi.fn(async () => undefined) };
+    const create = vi.spyOn(DungeonNode, "create").mockImplementation(async deps => {
+      captured = deps; return node as unknown as DungeonNode;
+    });
+    const show = vi.spyOn(WorldMenu, "show").mockImplementation(async (_parent, options) => {
+      menuOptions = options; return {} as WorldMenu;
+    });
+    const scenes = { current: undefined as unknown, replace: vi.fn(async (incoming: unknown) => { scenes.current = incoming; }) };
+    const controller = new DungeonFeatureController({
+      player: () => ({ party: {}, profile: {} }), game: { sourceTutorialTopics: [] }, audio: {},
+      content: { hasDungeonCapability: true }, scenes, onTownPortal: portal,
+      stage: { app: { ticker: { add: vi.fn(), remove: vi.fn() } } },
+      keyboard: { register: vi.fn(() => vi.fn()) }, checkpoint: vi.fn(),
+    } as unknown as DungeonFeatureHost<"shell">) as unknown as {
+      run: unknown; startDungeonScene: (entry: object) => Promise<unknown>;
+    };
+    controller.run = { session: {}, route: {}, definition: {} };
+    try {
+      await controller.startDungeonScene({ kind: "restore", actions: [], documentRestore: true });
+      expect(captured.isInputBlocked?.()).toBe(false);
+      await captured.onMenu();
+      menuOptions.onClose?.();
+      menuOptions.onSelect("townPortal");
+      expect(captured.isInputBlocked?.()).toBe(true);
+      await vi.waitFor(() => expect(portal).toHaveBeenCalledOnce());
+      expect(captured.isInputBlocked?.()).toBe(true);
+      finishPortal();
+      await vi.waitFor(() => expect(captured.isInputBlocked?.()).toBe(false));
+    } finally { create.mockRestore(); show.mockRestore(); }
   });
 });

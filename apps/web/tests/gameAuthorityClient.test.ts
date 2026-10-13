@@ -91,7 +91,7 @@ function stubCurrentSession(handler: (url: string, init: RequestInit) => Respons
         protocolVersion: GAME_PROTOCOL_VERSION,
         selectedEventVersion: PRESENTATION_EVENT_VERSION,
         token: "signed-session-token-long-enough",
-        expiresAt: "2026-08-29T00:00:00.000Z",
+        expiresAt: new Date(Date.now() + 7_200_000).toISOString(),
         pack: v26Pack,
         slots: [{
           slotId: "slot-1",
@@ -110,6 +110,7 @@ function stubCurrentSession(handler: (url: string, init: RequestInit) => Respons
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("RemoteGameAuthority", () => {
@@ -169,7 +170,7 @@ describe("RemoteGameAuthority", () => {
         protocolVersion: GAME_PROTOCOL_VERSION,
         selectedEventVersion: PRESENTATION_EVENT_VERSION,
         token: "signed-session-token-long-enough",
-        expiresAt: "2026-07-29T00:00:00.000Z",
+        expiresAt: new Date(Date.now() + 7_200_000).toISOString(),
         pack,
         slots: [],
       }), { status: 200, headers: { "Content-Type": "application/json" } })
@@ -219,7 +220,7 @@ describe("RemoteGameAuthority", () => {
         protocolVersion: GAME_PROTOCOL_VERSION,
         selectedEventVersion: PRESENTATION_EVENT_VERSION,
         token: "signed-session-token-long-enough",
-        expiresAt: "2026-07-29T00:00:00.000Z",
+        expiresAt: new Date(Date.now() + 7_200_000).toISOString(),
         pack: { ...pack, simulationVersion: OFFICIAL_GAME_V18_SIMULATION_VERSION },
         slots: [],
       }), { status: 200, headers: { "Content-Type": "application/json" } })
@@ -343,7 +344,7 @@ describe("RemoteGameAuthority", () => {
           protocolVersion: GAME_PROTOCOL_VERSION,
           selectedEventVersion: PRESENTATION_EVENT_VERSION,
           token: sessionCount === 1 ? "expired-session-token-value" : "renewed-session-token-value",
-          expiresAt: "2026-07-29T00:00:00.000Z",
+          expiresAt: new Date(Date.now() + 7_200_000).toISOString(),
           pack,
           slots: [],
         }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -375,5 +376,80 @@ describe("RemoteGameAuthority", () => {
     await expect(authority.refreshSlots()).resolves.toEqual([]);
     expect(sessionCount).toBe(2);
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("Official session renewal before expiry", () => {
+  it("shares one renewal across campaign and PvP requests without changing their bodies", async () => {
+    let now = Date.parse("2026-10-07T00:00:00Z"), sessions = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const requests: Array<{ url: string; authorization: string | null; body: BodyInit | null | undefined }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      if (url === "/api/game/session") {
+        sessions++;
+        if (sessions === 2) await held;
+        return jsonResponse({ protocolVersion: GAME_PROTOCOL_VERSION, selectedEventVersion: PRESENTATION_EVENT_VERSION,
+          token: `session-${sessions}-long-enough-token`, expiresAt: new Date(now + 60_000).toISOString(), pack: v26Pack, slots: [] });
+      }
+      requests.push({ url, authorization: new Headers(init.headers).get("Authorization"), body: init.body });
+      if (url.endsWith("/commands")) return jsonResponse({ protocolVersion: GAME_PROTOCOL_VERSION,
+        commandId: "renewal-command-01", previousRevision: 1, revision: 2, eventCursorStart: 0,
+        eventCursorEnd: 0, events: [], projection: v26Projection(2), idempotentReplay: false });
+      return jsonResponse(url.startsWith("/api/pvp/") ? { accepted: true } : { protocolVersion: GAME_PROTOCOL_VERSION, slots: [] });
+    }));
+    const authority = await RemoteGameAuthority.authenticate({ endpoint: "", loginToken: "private-login-token", logicPackId });
+    now += 29_999;
+    await authority.refreshSlots();
+    expect(sessions).toBe(1);
+    expect(requests[0]?.authorization).toBe("Bearer session-1-long-enough-token");
+    now++;
+    const envelope = { protocolVersion: GAME_PROTOCOL_VERSION, commandId: "renewal-command-01", expectedRevision: 1,
+      command: { type: "world.navigate" as const, targetPoiId: "Forest" } };
+    const command = authority.command("slot-1", envelope);
+    const pvpBody = JSON.stringify({ requestId: "unchanged-pvp" });
+    const pvp = authority.pvpTransport("/api/pvp/invites", { method: "POST", body: pvpBody });
+    const slots = authority.refreshSlots();
+    expect(sessions).toBe(2);
+    expect(requests).toHaveLength(1);
+    release(); await Promise.all([command, pvp, slots]);
+    expect(sessions).toBe(2);
+    expect(requests.slice(1).map(request => request.authorization)).toEqual(Array(3).fill("Bearer session-2-long-enough-token"));
+    expect(requests.find(request => request.url.endsWith("/commands"))?.body).toBe(JSON.stringify(envelope));
+    expect(requests.find(request => request.url.startsWith("/api/pvp/"))?.body).toBe(pvpBody);
+  });
+
+  it("does not dispatch a protected request when proactive renewal fails", async () => {
+    let now = Date.parse("2026-10-07T00:00:00Z"), sessions = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const commands = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url !== "/api/game/session") { commands(); throw new Error("Must not dispatch game command"); }
+      if (++sessions > 1) return new Response(JSON.stringify({ error: { code: "AUTH_REQUIRED",
+        message: "login revoked", retryable: false, correlationId: "corr-revoked" } }), { status: 401 });
+      return jsonResponse({ protocolVersion: GAME_PROTOCOL_VERSION, selectedEventVersion: PRESENTATION_EVENT_VERSION,
+        token: "first-session-token-long-enough", expiresAt: new Date(now + 60_000).toISOString(), pack: v26Pack, slots: [] });
+    }));
+    const authority = await RemoteGameAuthority.authenticate({ endpoint: "", loginToken: "private-login-token", logicPackId });
+    now += 60_001;
+    await expect(authority.refreshSlots()).rejects.toMatchObject({ code: "AUTH_REQUIRED", retryable: false });
+    expect(commands).not.toHaveBeenCalled();
+    expect(sessions).toBe(2);
+  });
+
+  it("rejects a simulation change during proactive renewal before sending gameplay", async () => {
+    let now = Date.parse("2026-10-07T00:00:00Z"), sessions = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      expect(url).toBe("/api/game/session"); sessions++;
+      return jsonResponse({ protocolVersion: GAME_PROTOCOL_VERSION, selectedEventVersion: PRESENTATION_EVENT_VERSION,
+        token: "session-token-long-enough", expiresAt: new Date(now + 60_000).toISOString(),
+        pack: sessions === 1 ? v26Pack : { ...v26Pack, simulationVersion: OFFICIAL_GAME_V18_SIMULATION_VERSION }, slots: [] });
+    }));
+    const authority = await RemoteGameAuthority.authenticate({ endpoint: "", loginToken: "private-login-token", logicPackId });
+    now += 30_000;
+    await expect(authority.refreshSlots()).rejects.toMatchObject({ code: "PACK_UNAVAILABLE" });
+    expect(sessions).toBe(2);
   });
 });

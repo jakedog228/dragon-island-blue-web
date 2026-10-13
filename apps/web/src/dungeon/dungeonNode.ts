@@ -209,6 +209,8 @@ export interface DungeonNodeDeps {
     extraLivingArguments: Readonly<Record<string, unknown>> | undefined,
   ) => boolean;
   readonly onMenu: () => void | Promise<void>;
+  /** App-owned menu transition still owns input after its visible menu has closed. */
+  readonly isInputBlocked?: () => boolean;
   /** App-owned MasterMenu/overlay state exported through render_game_to_text. */
   readonly menuState?: () => {
     readonly menu: Record<string, unknown> | null;
@@ -283,6 +285,9 @@ export class DungeonNode {
   private heroXpRoot!: Container;
   private heroXpFrameWidth = 0;
   private locked = false;
+  private get inputLocked(): boolean {
+    return this.locked || this.deps.isInputBlocked?.() === true;
+  }
   private pendingAction: DungeonRoomEntryAction | undefined;
   private waypointSelectionState: WaypointSelectionState | undefined;
   private waypointKeyboardConfirm: (() => void) | undefined;
@@ -564,8 +569,7 @@ export class DungeonNode {
     // room portal opens native waypoint selection.
     menu.on("pointertap", (event: FederatedPointerEvent) => {
       event.stopPropagation();
-      if (this.locked) return;
-      void this.deps.onMenu();
+      this.requestMenu();
     });
 
     this.chrome.addChild(menu);
@@ -1201,7 +1205,7 @@ export class DungeonNode {
   }
 
   private async handleRoomTouch(roomId: string, worldPoint: Readonly<{ x: number; y: number }>): Promise<void> {
-    if (this.locked) return;
+    if (this.inputLocked) return;
     if (dungeonTouchRequiresRoomSelection(roomId, this.deps.session.state.currentRoomId)) {
       await this.selectRoom(roomId);
       return;
@@ -1237,7 +1241,7 @@ export class DungeonNode {
   }
 
   private async selectRoom(roomId: string): Promise<void> {
-    if (this.locked) return;
+    if (this.inputLocked) return;
     if (this.deps.onSelectRoom === undefined) {
       const selection = this.deps.session.selectMaterializedRoom(roomId);
       if (selection.kind === "changed-room") await this.animateRoomSelection(selection);
@@ -1491,7 +1495,7 @@ export class DungeonNode {
 
   /** Web-native equivalent of tapping the retained dungeon menu button. */
   requestMenu(): boolean {
-    if (this.locked) return false;
+    if (this.inputLocked) return false;
     void this.deps.onMenu();
     return true;
   }
@@ -1500,7 +1504,7 @@ export class DungeonNode {
    * presentation and entry-action processing as a pointer-selected adjacent room. */
   requestDirectionalMove(direction: DungeonDirection): boolean {
     if (
-      this.locked ||
+      this.inputLocked ||
       this.floorDetectionChat !== undefined ||
       PopupHost.for(this.popupRoot).modalDepth > 0 ||
       PopupHost.for(this.notifications).modalDepth > 0
@@ -1855,7 +1859,7 @@ export class DungeonNode {
       currentRoomId: floor.currentRoomId,
       availableDirections: this.deps.session.availableDirections(),
       remainingEncounters: this.deps.session.remainingEncounterCount(),
-      locked: this.locked,
+      locked: this.inputLocked,
       started: this.started,
       hero: {
         x: this.hero.x,

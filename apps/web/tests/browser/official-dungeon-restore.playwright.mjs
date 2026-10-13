@@ -8,6 +8,8 @@ import { chromium } from "playwright";
 import { createFrameCapture } from "./captureFrame.mjs";
 import { firstDifference, formatDifference } from "./firstDifference.mjs";
 import { stageGeometry } from "./stageGeometry.mjs";
+import { clickNativeLabel } from "./nativeLabelInput.mjs";
+import { installSessionRenewalProbe } from "./sessionRenewalProbe.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../../../..");
 const webUrl = process.env.DIB_WEB_URL ?? "http://localhost:5173";
@@ -22,7 +24,8 @@ const archive = path.resolve(
   process.env.DIB_CONTENT_ARCHIVE ??
     path.join(repositoryRoot, "Dragon_Island_Blue_1.1.0.ipa"),
 );
-const outputDirectory = path.join(repositoryRoot, "output/official-dungeon-restore");
+const outputDirectory = path.resolve(process.env.DIB_OFFICIAL_DUNGEON_OUTPUT ?? path.join(repositoryRoot, "output/official-dungeon-restore"));
+const portalPending = process.env.DIB_OFFICIAL_DUNGEON_PORTAL_PENDING === "1";
 assert(fs.existsSync(archive), `Missing operator-owned archive: ${archive}`);
 fs.mkdirSync(outputDirectory, { recursive: true });
 const statusPath = path.join(outputDirectory, "official-dungeon-status.log");
@@ -256,10 +259,14 @@ assert.deepEqual(committed.projection.location, {
 
 const browser = await chromium.launch({
   headless: process.env.DIB_HEADED !== "1",
-  args: ["--use-gl=angle", "--use-angle=swiftshader", "--mute-audio"],
+  ...(portalPending ? { channel: "chromium" } : {}),
+  args: portalPending ? ["--mute-audio", "--enable-unsafe-swiftshader"]
+    : ["--use-gl=angle", "--use-angle=swiftshader", "--mute-audio"],
 });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const sessionRenewalResult = process.env.DIB_TEST_SESSION_RENEWAL === "1"
+    ? await installSessionRenewalProbe(page) : undefined;
   const captureFrame = await createFrameCapture(page, outputDirectory);
   const captureScreenshot = (fileName) => captureFrame(fileName, { fullPage: true });
   const errors = [];
@@ -471,7 +478,71 @@ try {
   canvasBox = await page.locator("canvas").first().boundingBox();
   assert(canvasBox, "Official dungeon canvas disappeared after presentation restarts");
   geometry = await stageGeometry(page, canvasBox);
-  if (process.env.DIB_OFFICIAL_PRESENTATION_ONLY === "1") {
+  if (portalPending) {
+    const attempted = [];
+    page.on("request", request => {
+      if (new URL(request.url()).pathname.endsWith("/commands")) attempted.push(request.postDataJSON().command.type);
+    });
+    let release, held = false;
+    const gate = new Promise(resolve => { release = resolve; });
+    await page.route("**/api/game/slots/*/commands", async route => {
+      if (route.request().postDataJSON().command.type !== "world.useDirectTownReturn") return route.continue();
+      const response = await route.fetch();
+      assert.equal(response.status(), 200); held = true;
+      await gate; await route.fulfill({ response });
+    });
+    const current = snapshot.rooms.find(room => room.id === snapshot.currentRoomId);
+    const target = snapshot.rooms.find(room => current.links.some(link => link.targetRoomId === room.id));
+    assert(target, "Portal fixture needs an adjacent room for pointer arbitration");
+    const rect = { x: snapshot.camera.x + target.x * 60 * snapshot.camera.scale,
+      y: snapshot.camera.y - (target.y + target.height) * 60 * snapshot.camera.scale,
+      w: target.width * 60 * snapshot.camera.scale, h: target.height * 60 * snapshot.camera.scale };
+    const roomPoint = geometry.toCss({
+      x: (Math.max(12, rect.x + 5) + Math.min(snapshot.screenPt.w - 12, rect.x + rect.w - 5)) / 2,
+      y: (Math.max(40, rect.y + 5) + Math.min(snapshot.screenPt.h - 25, rect.y + rect.h - 5)) / 2 });
+    try {
+      assert(await clickNativeLabel(page, "dungeonMenuButton"));
+      await waitFor(value => value.menu?.config === "MasterMenu", "Dungeon menu did not open");
+      await advance(500);
+      assert(await clickNativeLabel(page, "worldMenu:townPortal"));
+      await waitFor(() => held, "Town Portal response was not held");
+      for (let i = 0; i < 3; i++) { await page.mouse.click(roomPoint.x, roomPoint.y); await advance(100); }
+      await page.keyboard.press("ArrowUp"); await page.keyboard.press("Escape"); await advance(300);
+      snapshot = await state();
+      const pointerHitPath = await page.evaluate(point => {
+        const app = window.__PIXI_APP__, box = app.canvas.getBoundingClientRect();
+        let node = app.renderer.events.rootBoundary.hitTest((point.x - box.x) * app.screen.width / box.width,
+          (point.y - box.y) * app.screen.height / box.height);
+        const labels = [];
+        for (; node; node = node.parent) if (node.label) labels.push(node.label);
+        return labels;
+      }, roomPoint);
+      fs.writeFileSync(path.join(outputDirectory, "portal-pending.json"), JSON.stringify({ snapshot, roomPoint, pointerHitPath, attempted }, null, 2));
+      assert(pointerHitPath.includes("dungeonPointRoot"), "Pointer probe did not reach the dungeon input surface");
+      assert.equal(snapshot.mode, "dungeon"); assert.equal(snapshot.locked, true);
+      assert.equal(snapshot.currentRoomId, current.id);
+      assert.deepEqual(attempted, ["world.useDirectTownReturn"]);
+      assert.deepEqual(errors, []); assert.deepEqual(commandFailures, []);
+      await captureScreenshot("portal-pending.png");
+      release();
+      snapshot = await waitFor(value => value.mode === "town" && !value.locked, "Town Portal did not finish");
+      await waitFor(value => !value.notifications?.dayNotification?.visible, "Town banner did not settle");
+      // First return may claim an authored town-arrival chat after the portal has completed.
+      assert.equal(attempted.filter(type => type === "world.useDirectTownReturn").length, 1);
+      assert(attempted.every(type => ["world.useDirectTownReturn", "player.claimDialog"].includes(type)),
+        `Unexpected command after portal: ${attempted.join(", ")}`);
+      assert.deepEqual(errors, []); assert.deepEqual(commandFailures, []);
+      await captureScreenshot("portal-returned.png");
+      fs.writeFileSync(path.join(outputDirectory, "portal-result.json"), JSON.stringify({
+        attempted, currentRoomId: current.id, pointerTargetRoomId: target.id, town: snapshot.town.name,
+        errors, commandFailures }, null, 2));
+      console.log("official-dungeon-portal-pending: PASS");
+      if (sessionRenewalResult) {
+        fs.writeFileSync(path.join(outputDirectory, "session-renewal.json"), JSON.stringify(sessionRenewalResult(), null, 2));
+        console.log("official-session-renewal: PASS");
+      }
+    } finally { release(); }
+  } else if (process.env.DIB_OFFICIAL_PRESENTATION_ONLY === "1") {
     await captureScreenshot("official-dungeon-presentation-restored.png");
     assert.equal(errors.length, 0, errors.join("\n"));
     assert.equal(commandFailures.length, 0, commandFailures.join("\n"));

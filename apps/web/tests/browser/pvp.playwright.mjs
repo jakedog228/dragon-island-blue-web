@@ -1,6 +1,6 @@
 import { nativePvpClick, nativePvpReady, nativePvpPoint, pickNativePvpTargets } from "./pvpCombatDriver.mjs";
 // Opt-in. Use an isolated file-backed API + fresh Vite server and an operator-owned archive.
-// DIB_PVP_HOST_TOKEN / DIB_PVP_GUEST_TOKEN optionally use disposable Official accounts (empty slots).
+// DIB_PVP_HOST_TOKEN / DIB_PVP_GUEST_TOKEN use disposable Official slots already in an Arena town.
 // No token means Offline. DIB_PVP_HOST_MOD may select a reviewed cosmetic package on the host only.
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -10,6 +10,7 @@ import { loadLocalContent } from "./localContent.mjs";
 import { tapPixiLabel, pixiLabelVisible } from "./pixiInput.mjs";
 import { stageGeometry } from "./stageGeometry.mjs";
 import { createFrameCapture } from "./captureFrame.mjs";
+import { installSessionRenewalProbe } from "./sessionRenewalProbe.mjs";
 
 const url = process.env.DIB_WEB_URL ?? "http://127.0.0.1:5173";
 const archive = process.env.DIB_CONTENT_ARCHIVE ?? path.resolve("Dragon_Island_Blue_1.1.0.ipa");
@@ -31,6 +32,7 @@ const evidence = { displayMode, reconnect, pollOutage, delayedInput, lostRespons
   statusAcknowledgments: 0,
   sources: tokens.map(token => token ? "official" : "offline") };
 const browsers = [];
+const renewalProbes = [];
 const read = async (page) => { await page.bringToFront(); return page.evaluate(() => JSON.parse(window.render_game_to_text())); };
 // Reuse the measured WebGL capture budget, including after cold reconnect. Ordinary
 // input/wait timeouts stay unchanged; every requested evidence frame remains fatal.
@@ -83,7 +85,11 @@ async function openArena(page) {
   const town = (await read(page)).town;
   const arena = town?.buildings.find((building) => building.className === "ArenaMenuItem" && building.enabled);
   if (arena) await click(page, `town:${town.name}:building:${arena.sourceIndex}`);
-  else await page.evaluate(() => { void window.__DIB_TEST_OPEN_ARENA__(); });
+  else {
+    assert(await page.evaluate(() => typeof window.__DIB_TEST_OPEN_ARENA__ === "function"),
+      "Official PvP fixtures must already be in an authored town with an enabled Arena; Official play has no test-only Arena hook");
+    await page.evaluate(() => { void window.__DIB_TEST_OPEN_ARENA__(); });
+  }
   await wait(page, async () => pixiLabelVisible(page, "guildQuestChatFinish"), "Arena greeting");
   await advance(page, 550); await tapPixiLabel(page, "guildQuestChat");
   await wait(page, (s) => s.overlay?.open && s.overlay?.buttons, "Arena menu");
@@ -105,6 +111,10 @@ async function launch(index, retainedContext) {
     width: Number(process.env.DIB_PVP_VIEWPORT_WIDTH ?? 1280), height: Number(process.env.DIB_PVP_VIEWPORT_HEIGHT ?? 800),
   } });
   const page = await context.newPage();
+  if (process.env.DIB_TEST_SESSION_RENEWAL === "1") {
+    assert(tokens[index], "Session renewal probe requires an isolated Official account");
+    renewalProbes.push(await installSessionRenewalProbe(page, { pvp: true }));
+  }
   // Windows can occlude even separate headless windows; model two foreground devices.
   const cdp = await context.newCDPSession(page);
   await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
@@ -415,8 +425,16 @@ try {
   }
   assert.deepEqual(errors, []);
   if (reconnect && !incompatible) assert.equal(evidence.reconnected, true);
+  if (renewalProbes.length) evidence.sessionRenewal = renewalProbes.map(probe => probe());
   fs.writeFileSync(path.join(output, "result.json"), JSON.stringify({ ...evidence, passed: true, errors }, null, 2));
 } catch (error) {
+  // Password fill timeout logs include their literal input. Fixture credentials stay private.
+  const redact = value => tokens.reduce((text, token) => token
+    ? text.replaceAll(token, "[redacted login token]") : text, String(value));
+  if (error instanceof Error) {
+    error.message = redact(error.message);
+    if (error.stack) error.stack = redact(error.stack);
+  }
   console.error(error);
   fs.writeFileSync(path.join(output, "result.json"), JSON.stringify({ ...evidence, passed: false,
     failure: error instanceof Error ? error.message : String(error), errors }, null, 2));

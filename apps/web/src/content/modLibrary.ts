@@ -268,6 +268,9 @@ export function showModManager(options: ModManagerOptions): void {
   const run = async (work: () => Promise<void>): Promise<void> => {
     if (busy) return;
     busy = true; progress.hidden = false; modalProgress.hidden = false; dialog.setAttribute("aria-busy", "true");
+    // run() rejects concurrent mutations. Reflect that ownership on already-rendered switches,
+    // including the initial catalog load, so a visible enabled toggle never drops its click.
+    for (const toggle of dialog.querySelectorAll<HTMLButtonElement>(".ml-switch")) toggle.disabled = true;
     try { await work(); }
     catch (error) { toaster.show(error instanceof Error ? error.message : String(error), "error"); }
     finally { busy = false; progress.hidden = true; modalProgress.hidden = true; dialog.removeAttribute("aria-busy"); render(); }
@@ -683,7 +686,7 @@ export function showModManager(options: ModManagerOptions): void {
     const toggle = el("button", "ml-switch", el("span", "ml-switch__thumb"));
     toggle.type = "button"; toggle.setAttribute("role", "switch"); toggle.setAttribute("aria-checked", String(enabled));
     toggle.setAttribute("aria-label", entry.displayName); toggle.title = enabled ? "Enabled" : "Disabled";
-    toggle.disabled = !storedAny;
+    toggle.disabled = busy || !storedAny;
     toggle.addEventListener("click", (event) => {
       event.stopPropagation();
       void run(() => enabled ? disable(entry) : enable(current.stored ? current.digest : entry.versions.find((version) => version.stored)!.digest));
