@@ -24,6 +24,8 @@ export interface BattleReplaySnapshotV1 {
     readonly fightingGroupSize?: number;
     readonly blockCapture?: boolean;
     readonly silver?: number;
+    /** Absent in historical snapshots, which retain the previous construction behavior. */
+    readonly sourceJobLevels?: boolean;
   };
   readonly commands: readonly BattleReplayCommandV1[];
 }
@@ -114,7 +116,10 @@ function restoreBattleReplayWithRng(
     value.teams[0].map(cloneSetup),
     value.teams[1].map(cloneSetup),
   ];
-  const session = new BattleSession(data, teams, rng, value.options);
+  const session = new BattleSession(data, teams, rng, {
+    ...value.options,
+    sourceJobLevels: value.options.sourceJobLevels ?? false,
+  });
   let step: BattleReplayStep = advanceThroughAutomaticTurns(session);
   for (const [index, command] of value.commands.entries()) {
     if (step.type !== "awaitingPlayer") {
@@ -264,6 +269,9 @@ function applyTurnCommand(
 }
 
 function validateSnapshot(value: BattleReplaySnapshotV1): void {
+  if (value.options.sourceJobLevels !== undefined && typeof value.options.sourceJobLevels !== "boolean") {
+    throw new Error("invalid battle replay Job construction rules");
+  }
   if (value.schemaVersion !== 1) {
     throw new Error(`unsupported battle replay schema ${String(value.schemaVersion)}`);
   }

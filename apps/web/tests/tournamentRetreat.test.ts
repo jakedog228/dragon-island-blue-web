@@ -17,7 +17,7 @@ describe("Tournament return reconciliation (Escape and Save Me)", () => {
     expect(calls).toEqual(["adopt", "events", "chat", "world"]);
   });
 
-  it.each(["official-game-v20", "official-game-v21", "official-game-v22", "official-game-v23", "official-game-v24", "official-game-v25", "official-game-v26"])(
+  it.each(["official-game-v20", "official-game-v21", "official-game-v22", "official-game-v23", "official-game-v24", "official-game-v25", "official-game-v26", "official-game-v27"])(
     "selects and orders the Official %s Tournament reconnect return",
     async (simulationVersion) => {
     const calls: string[] = [];

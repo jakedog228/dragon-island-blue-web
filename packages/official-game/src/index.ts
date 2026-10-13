@@ -40,6 +40,7 @@ import {
   generateQuestRewards,
   generateTournamentPrize,
   jobXpForLevel,
+  jobCreationLevel,
   parseDungeonRunSnapshot,
   replayableRng,
   restoreBattleReplay,
@@ -84,6 +85,7 @@ import {
   OFFICIAL_GAME_V24_SIMULATION_VERSION,
   OFFICIAL_GAME_V25_SIMULATION_VERSION,
   OFFICIAL_GAME_V26_SIMULATION_VERSION,
+  OFFICIAL_GAME_V27_SIMULATION_VERSION,
   OFFICIAL_EGG_POOL_MAX_ENTRIES,
   CollectionClaimsV1Schema,
   CurrentLogicPackDescriptorV1Schema,
@@ -105,6 +107,7 @@ import {
   OfficialGameProjectionV24Schema,
   OfficialGameProjectionV25Schema,
   OfficialGameProjectionV26Schema,
+  OfficialGameProjectionV27Schema,
   SlotProjectionV1Schema,
   CurrentGameCommandV1Schema,
   type GameCommandV1,
@@ -128,6 +131,7 @@ import {
   type OfficialGameProjectionBodyV24,
   type OfficialGameProjectionBodyV25,
   type OfficialGameProjectionBodyV26,
+  type OfficialGameProjectionBodyV27,
   type OfficialGameProjectionV13,
   type OfficialGameProjectionV14,
   type OfficialGameProjectionV15,
@@ -142,6 +146,7 @@ import {
   type OfficialGameProjectionV24,
   type OfficialGameProjectionV25,
   type OfficialGameProjectionV26,
+  type OfficialGameProjectionV27,
   type OfficialGameProjectionV12,
   type OfficialDefeatDecisionV1,
   type OfficialDungeonBattleReturnV1,
@@ -794,7 +799,11 @@ interface OfficialEggRewardRouter {
   readonly validateLoadedRewards: (rewards: readonly PlayerReward[]) => void;
 }
 
+const sourceJobLevelRules = Symbol("official-v27-job-levels");
+
 interface OfficialInternalReductionContext {
+  /** Internal symbol cannot be selected by JSON commands. */
+  readonly [sourceJobLevelRules]?: boolean;
   readonly eggRewardRouter?: OfficialEggRewardRouter;
   readonly deferDefeatRecovery?: boolean;
   /** v14-only: retain dungeon/Tournament progress until the recovery command chooses return or
@@ -2443,6 +2452,8 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
   private sourceDungeonPopulationInheritanceForCurrentReduction = false;
   /** Synchronous reduction-local v25 source story rules (see `sourceStoryRules`). */
   private sourceStoryRulesForCurrentReduction = false;
+  /** Synchronous, try/finally-scoped v27 construction/legacy-capture compatibility rule. */
+  private sourceJobLevelsForCurrentReduction = false;
   /** Parsed `Chats.plist` definitions; the catalog is immutable installed data. */
   private readonly encounterChatDefinitions = new Map<string, ChatDefinition>();
 
@@ -2586,6 +2597,9 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
     this.sourceDungeonPopulationInheritanceForCurrentReduction =
       (context as CommandReducerContext<OfficialGameStateV1> & OfficialInternalReductionContext)
         .sourceDungeonPopulationInheritance === true;
+    const previousJobRules = this.sourceJobLevelsForCurrentReduction;
+    this.sourceJobLevelsForCurrentReduction =
+      (context as CommandReducerContext<OfficialGameStateV1> & OfficialInternalReductionContext)[sourceJobLevelRules] === true;
     const previousStoryRules = this.sourceStoryRulesForCurrentReduction;
     this.sourceStoryRulesForCurrentReduction =
       (context as CommandReducerContext<OfficialGameStateV1> & OfficialInternalReductionContext)
@@ -2599,6 +2613,7 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       this.pendingSpiritQuestEvents = [];
       this.sourceDungeonPopulationInheritanceForCurrentReduction = previousPopulationBehavior;
       this.sourceStoryRulesForCurrentReduction = previousStoryRules;
+      this.sourceJobLevelsForCurrentReduction = previousJobRules;
     }
   }
 
@@ -3156,6 +3171,7 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       options: {
         fightingGroupSize: 3,
         silver: profile.snapshot().silver,
+        ...(this.sourceJobLevelsForCurrentReduction ? { sourceJobLevels: true } : {}),
       },
       commands: [],
     };
@@ -3385,6 +3401,7 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       options: {
         fightingGroupSize: 3,
         silver: profile.snapshot().silver,
+        ...(this.sourceJobLevelsForCurrentReduction ? { sourceJobLevels: true } : {}),
       },
       commands: [],
     };
@@ -4082,6 +4099,7 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       options: {
         fightingGroupSize: 3,
         silver: profile.snapshot().silver,
+        ...(this.sourceJobLevelsForCurrentReduction ? { sourceJobLevels: true } : {}),
       },
       commands: [],
     };
@@ -4654,7 +4672,12 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       const capturedIds = restored.session.capturedIds();
       reserveOfficialMonsterSequence(nextMonsterSequence, capturedIds.length, "battle capture");
       for (const id of capturedIds) {
-        const captured = restored.session.xpStateOf(id);
+        const historicalCapture = restored.session.xpStateOf(id);
+        // Migrated in-flight replays keep their committed levels/RNG. Apply the constructor
+        // bound only to the new durable award, so an old >150 capture cannot strand the slot.
+        const captured = this.sourceJobLevelsForCurrentReduction
+          ? { ...historicalCapture, level: jobCreationLevel(historicalCapture.level) }
+          : historicalCapture;
         const allocated = allocateOfficialMonsterSequence(nextMonsterSequence, "battle capture");
         nextMonsterSequence = allocated.nextSequence;
         const instanceId = allocated.instanceId;
@@ -5206,6 +5229,7 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
     quests: GuildQuestRuntime,
     events: UnsequencedPresentationEventV1[],
     chargeBattleSpiritEnergy: boolean,
+    sourceJobLevels = false,
   ): CommandReducerResult<OfficialGameStateV1> {
     if (prior.location.kind !== "battle" || prior.battle === undefined || prior.world === undefined) {
       throw new GameServiceError("STATE_CORRUPT", "Save Me restart requires its retained battle");
@@ -5227,6 +5251,7 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       options: {
         ...prior.battle.replay.options,
         silver: profile.snapshot().silver,
+        ...(sourceJobLevels ? { sourceJobLevels: true } : {}),
       },
       commands: [],
     };
@@ -5841,6 +5866,7 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
           ? { blockCapture: true }
           : {}),
         silver: profile.snapshot().silver,
+        ...(this.sourceJobLevelsForCurrentReduction ? { sourceJobLevels: true } : {}),
       },
       commands: [],
     };
@@ -7177,6 +7203,7 @@ export class OfficialGameV12Reducer implements GameCommandReducer<OfficialGameSt
         restored.quests,
         events,
         chargeBattleSpiritEnergy,
+        (context as CommandReducerContext<OfficialGameStateV12> & OfficialInternalReductionContext)[sourceJobLevelRules] === true,
       );
       const { pendingDefeat: _pendingDefeat, ...withoutPendingDefeat } = prior;
       const nextState = {
@@ -10626,6 +10653,106 @@ export class OfficialGameV26Reducer implements GameCommandReducer<OfficialGameSt
   }
 }
 
+/** v27 retains v26 state and wire shapes; new battles carry source Job construction rules. */
+export type OfficialGameStateV27 = OfficialGameStateV26;
+
+export function parseOfficialGameStateV27(
+  data: GameData,
+  quests: QuestCatalog,
+  value: unknown,
+  context: OfficialGameStateParseContext = {},
+): OfficialGameStateV27 {
+  return parseOfficialGameStateV26(data, quests, value, context);
+}
+
+export function cloneOfficialGameStateV27(
+  data: GameData,
+  quests: QuestCatalog,
+  state: unknown,
+  context: OfficialGameStateParseContext = {},
+): OfficialGameStateV27 {
+  return parseOfficialGameStateV27(data, quests, structuredClone(state), context);
+}
+
+export function parseOfficialGameProjectionV27(
+  value: unknown,
+): OfficialGameProjectionBodyV27 {
+  assertJsonSafeTree(value, "official v27 projection");
+  assertPlainObject(value, "official v27 projection");
+  for (const key of ["slotId", "revision", "updatedAt", "logicPackId", "simulationVersion", "trustTier"]) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      throw new Error(`official v27 projection body contains envelope field ${key}`);
+    }
+  }
+  const parsed = OfficialGameProjectionV27Schema.parse({
+    slotId: "slot-1",
+    revision: 1,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    logicPackId: `logic-v1:${"0".repeat(64)}`,
+    simulationVersion: OFFICIAL_GAME_V27_SIMULATION_VERSION,
+    trustTier: "official",
+    ...(value as Record<string, unknown>),
+  });
+  return structuredClone(
+    projectionBody(parsed as unknown as OfficialGameProjectionV27),
+  ) as unknown as OfficialGameProjectionBodyV27;
+}
+
+export function projectOfficialGameStateV27(
+  body: OfficialGameProjectionBodyV26,
+): OfficialGameProjectionBodyV27 {
+  return parseOfficialGameProjectionV27(body);
+}
+
+/** Preserve committed replay prefixes when moving the slot into the v27 namespace. */
+export function migrateOfficialGameV26ToV27(options: {
+  readonly data: GameData; readonly quests: QuestCatalog; readonly state: unknown;
+  readonly context?: OfficialGameStateParseContext;
+}): OfficialGameStateV27 {
+  return cloneOfficialGameStateV27(options.data, options.quests, options.state, options.context);
+}
+
+export function createOfficialGameV27LogicPackDescriptor(
+  logicPackId: LogicPackDescriptorV1["logicPackId"], support: OfficialGameV12SupportReport,
+): LogicPackDescriptorV1 {
+  return Object.freeze(CurrentLogicPackDescriptorV1Schema.parse({
+    ...createOfficialGameV26LogicPackDescriptor(logicPackId, support),
+    simulationVersion: OFFICIAL_GAME_V27_SIMULATION_VERSION,
+  }));
+}
+
+/** Source construction for new battles; replay-preserving migration and capture settlement. */
+export class OfficialGameV27Reducer implements GameCommandReducer<OfficialGameStateV27, OfficialGameProjectionBodyV27> {
+  constructor(private readonly v26: OfficialGameV26Reducer, private readonly v26Pack: LogicPackDescriptorV1) {
+    if (v26Pack.simulationVersion !== OFFICIAL_GAME_V26_SIMULATION_VERSION) {
+      throw new Error("OfficialGameV27Reducer requires the bound official-game-v26 delegate pack");
+    }
+  }
+  projectPersistedState(state: OfficialGameStateV27): OfficialGameProjectionBodyV27 {
+    return projectOfficialGameStateV27(this.v26.projectPersistedState(state));
+  }
+  validatePersistedRecord(record: AuthoritativeRecordValidationInput<OfficialGameStateV27, OfficialGameProjectionBodyV27>): void {
+    try {
+      if (record.projection.simulationVersion !== OFFICIAL_GAME_V27_SIMULATION_VERSION ||
+          canonicalJsonValue(this.projectPersistedState(record.state)) !== canonicalJsonValue(projectionBody(record.projection))) {
+        throw new Error("official v27 persisted projection disagrees with its restored state or version");
+      }
+      parseOfficialGameProjectionV27(projectionBody(record.projection));
+    } catch (error) {
+      if (error instanceof GameServiceError) throw error;
+      throw new GameServiceError("STATE_CORRUPT", error instanceof Error ? error.message : "invalid official v27 record");
+    }
+  }
+  apply(context: CommandReducerContext<OfficialGameStateV27>, command: GameCommandV1): CommandReducerResult<OfficialGameStateV27, OfficialGameProjectionBodyV27> {
+    if (context.pack.simulationVersion !== OFFICIAL_GAME_V27_SIMULATION_VERSION || context.pack.logicPackId !== this.v26Pack.logicPackId) {
+      throw new GameServiceError("PACK_UNAVAILABLE", "official v27 requires its bound v26 rules identity");
+    }
+    const delegated = { ...context, pack: this.v26Pack, [sourceJobLevelRules]: true };
+    const result = this.v26.apply(delegated, command);
+    return { ...result, projection: projectOfficialGameStateV27(result.projection) };
+  }
+}
+
 function replaceOfficialV12State(
   prior: OfficialGameStateV12,
   pendingEgg: OfficialEggContinuation | undefined,
@@ -11763,7 +11890,8 @@ function projectionBody<
     | OfficialGameProjectionV23
     | OfficialGameProjectionV24
     | OfficialGameProjectionV25
-    | OfficialGameProjectionV26,
+    | OfficialGameProjectionV26
+    | OfficialGameProjectionV27,
 >(
   projection: P,
 ): Omit<P, "slotId" | "revision" | "updatedAt" | "logicPackId" | "simulationVersion" | "trustTier"> {

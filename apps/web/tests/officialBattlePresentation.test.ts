@@ -51,6 +51,19 @@ function resistanceOpeningReplay(): {
 }
 
 describe("Official battle presentation mount", () => {
+  it.each([undefined, true, false])("keeps fresh and reconnected Job levels identical (source rules %s)", sourceJobLevels => {
+    const uncommitted: BattleReplaySnapshotV1 = { schemaVersion: 1,
+      teams: [[{ shortType: "FireTiger", level: 150 }], [{ shortType: "Centurion", level: 151 }]],
+      options: sourceJobLevels === undefined ? {} : { sourceJobLevels }, randomDraws: [], commands: [] };
+    const random = mulberry32(777);
+    const authority = restoreBattleReplay(data, uncommitted, { randomSource: () => random.next() });
+    const replay = { ...uncommitted, randomDraws: authority.randomDraws! };
+    for (const resume of [false, true]) {
+      const mounted = mountOfficialBattlePresentation(data, replay, replayableRng(replay.randomDraws), resume);
+      expect(mounted.session.levelOf("t1m0:Centurion")).toBe(sourceJobLevels ? 150 : 151);
+    }
+  });
+
   it("replays earned Reincarnation identically across archive and extracted dictionary order", () => {
     const reverseDictionaries = (value: unknown): unknown => Array.isArray(value)
       ? value.map(reverseDictionaries)

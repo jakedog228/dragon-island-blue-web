@@ -104,12 +104,16 @@ strict promoted-route archive validation and unit/component coverage. Online cla
 `collection.claim`, mirror only committed rewards and authority-minted monster IDs, restore claimed
 goal IDs from the projection, and route Egg rewards through the existing continuation.
 
+V27 pins the source 1..150 Job-construction rule in new battle replays and preserves
+active historical replay prefixes during migration. Future captures from those old battles
+receive a valid bounded durable level; the older namespace remains untouched.
+
 Official online is a token-gated, server-owned command subset with immutable logic identity and
 no client-authored state snapshots. Tokens are self-service: `POST /api/game/accounts` mints one
 per client address per five minutes with a username and a server-owned public-scoreboard
 preference (editable in-game under Options → Scores), and `pnpm game:cli invite` still issues
 them directly. The raw token is never stored either way. The shipped stack (`apps/game-server/src/cli.ts` installs the
-v26 descriptor over its immutable historical delegates) advertises 45 command types covering selected world, dungeon,
+v27 descriptor over its immutable historical delegates) advertises 45 command types covering selected world, dungeon,
 player, economy, Store, Arena, Tournament, quest, and Egg-hatch operations; anything else throws
 `CAPABILITY_UNSUPPORTED`. That is the count when operator data supplies every optional system —
 `dungeon.*`, `world.usePortal`, `tournament.*`, and `collection.claim` drop out of the advertised

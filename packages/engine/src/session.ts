@@ -154,7 +154,7 @@ export class BattleSession {
     data: GameData,
     teams: [TeamMemberSetup[], TeamMemberSetup[]],
     rng: Rng,
-    opts?: { fightingGroupSize?: number; blockCapture?: boolean; silver?: number; humanTeams?: readonly (0 | 1)[] },
+    opts?: { fightingGroupSize?: number; blockCapture?: boolean; silver?: number; humanTeams?: readonly (0 | 1)[]; sourceJobLevels?: boolean },
   ) {
     this.core = new BattleCore(data, teams, rng, opts);
     this.data = data;

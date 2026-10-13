@@ -5,7 +5,7 @@ export * from "./pvp.js";
 export const GAME_PROTOCOL_VERSION = "game-protocol-v1" as const;
 export const PRESENTATION_EVENT_VERSION = "presentation-events-v1" as const;
 /** Immutable identity of the currently installed Official authority. */
-export const OFFICIAL_GAME_SIMULATION_VERSION = "official-game-v26" as const;
+export const OFFICIAL_GAME_SIMULATION_VERSION = "official-game-v27" as const;
 /** Historical Official authority retained only for explicit v11 parsing/migration. */
 export const OFFICIAL_GAME_V11_SIMULATION_VERSION = "official-game-v11" as const;
 /**
@@ -43,8 +43,10 @@ export const OFFICIAL_GAME_V24_SIMULATION_VERSION = "official-game-v24" as const
  * `dialogsSeen`, zone-change conditions, per-death quest event 0, empty Drop Quests).
  */
 export const OFFICIAL_GAME_V25_SIMULATION_VERSION = "official-game-v25" as const;
-/** Current authority: automatic opening silver settlement, retaining the v25 wire shape. */
-export const OFFICIAL_GAME_V26_SIMULATION_VERSION = OFFICIAL_GAME_SIMULATION_VERSION;
+/** Historical authority: automatic opening silver settlement. */
+export const OFFICIAL_GAME_V26_SIMULATION_VERSION = "official-game-v26" as const;
+/** Current authority: source Job construction and replay-preserving capture repair. */
+export const OFFICIAL_GAME_V27_SIMULATION_VERSION = OFFICIAL_GAME_SIMULATION_VERSION;
 
 /**
  * The wire vocabulary: every command type an envelope is *allowed to name*. Membership here is not
@@ -1432,6 +1434,8 @@ const battleViewCommonShape = {
     fightingGroupSize: positiveInteger.optional(),
     blockCapture: z.boolean().optional(),
     silver: nonnegativeInteger.optional(),
+    /** Private authority-selected construction rule, carried for exact presentation replay. */
+    sourceJobLevels: z.boolean().optional(),
   }).strict(),
   /** Committed prefix only. There is no seed and no source for future draws. */
   randomDraws: z.array(unitRandomDraw).max(100_000),
@@ -2220,6 +2224,18 @@ export type OfficialGameProjectionBodyV26 = Omit<OfficialGameProjectionV26,
   "slotId" | "revision" | "updatedAt" | "logicPackId" | "simulationVersion" | "trustTier"
 > & { readonly __officialGameV26: true };
 
+/** v27 pins source Job construction in each newly created battle replay. */
+const officialGameProjectionV27Shape = {
+  ...officialGameProjectionV26Shape,
+  simulationVersion: z.literal(OFFICIAL_GAME_V27_SIMULATION_VERSION),
+} as const;
+export const OfficialGameProjectionV27Schema = z.object(officialGameProjectionV27Shape)
+  .strict().superRefine(refineOfficialGameProjectionV24Shape);
+export type OfficialGameProjectionV27 = z.infer<typeof OfficialGameProjectionV27Schema>;
+export type OfficialGameProjectionBodyV27 = Omit<OfficialGameProjectionV27,
+  "slotId" | "revision" | "updatedAt" | "logicPackId" | "simulationVersion" | "trustTier"
+> & { readonly __officialGameV27: true };
+
 const eventBase = {
   seq: positiveInteger,
 };
@@ -2506,6 +2522,11 @@ export const OfficialGameCommandResultV26Schema = z.object({
   projection: OfficialGameProjectionV26Schema,
 }).strict().superRefine(validateCommandResultCursor);
 export type OfficialGameCommandResultV26 = z.infer<typeof OfficialGameCommandResultV26Schema>;
+export const OfficialGameCommandResultV27Schema = z.object({
+  ...gameCommandResultShape,
+  projection: OfficialGameProjectionV27Schema,
+}).strict().superRefine(validateCommandResultCursor);
+export type OfficialGameCommandResultV27 = z.infer<typeof OfficialGameCommandResultV27Schema>;
 
 export const GameErrorCodeV1Schema = z.enum([
   "AUTH_REQUIRED",

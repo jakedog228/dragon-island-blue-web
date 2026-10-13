@@ -17,6 +17,7 @@ import {
   restoreBattleReplay,
   jobXpForLevel,
   type PlayerMonsterInstance,
+  type BattleReplaySnapshotV1,
 } from "@dib/engine";
 import {
   AuthoritativeGameService,
@@ -46,6 +47,9 @@ import {
   OfficialGameV24Reducer,
   OfficialGameV25Reducer,
   OfficialGameV26Reducer,
+  OfficialGameV27Reducer,
+  createOfficialGameV27LogicPackDescriptor,
+  migrateOfficialGameV26ToV27,
   createOfficialGameV26LogicPackDescriptor,
   migrateOfficialGameV25ToV26,
   createOfficialGameV12LogicPackDescriptor,
@@ -121,20 +125,23 @@ const v24 = new OfficialGameV24Reducer(new OfficialGameV23Reducer(new OfficialGa
 const v25 = new OfficialGameV25Reducer(v24, pack24);
 const pack26 = createOfficialGameV26LogicPackDescriptor(logicPackId, v12Support);
 const v26 = new OfficialGameV26Reducer(data, v25, pack25);
+const pack27 = createOfficialGameV27LogicPackDescriptor(logicPackId, v12Support);
+const v27 = new OfficialGameV27Reducer(v26, pack26);
 
-type Versioned = { readonly reducer: OfficialGameV24Reducer | OfficialGameV25Reducer | OfficialGameV26Reducer; readonly pack: LogicPackDescriptorV1 };
+type Versioned = { readonly reducer: OfficialGameV24Reducer | OfficialGameV25Reducer | OfficialGameV26Reducer | OfficialGameV27Reducer; readonly pack: LogicPackDescriptorV1 };
 const V24: Versioned = { reducer: v24, pack: pack24 };
 const V25: Versioned = { reducer: v25, pack: pack25 };
 const V26: Versioned = { reducer: v26, pack: pack26 };
+const V27: Versioned = { reducer: v27, pack: pack27 };
 
-function apply(version: Versioned, state: OfficialGameStateV24, command: GameCommandEnvelopeV1["command"]) {
+function apply(version: Versioned, state: OfficialGameStateV24, command: GameCommandEnvelopeV1["command"], now = "2026-10-06T00:00:00.000Z") {
   return version.reducer.apply({
     playerId: "v25-player",
     slotId: "slot-1",
     pack: version.pack,
     state,
     previousRevision: 1,
-    now: "2026-10-06T00:00:00.000Z",
+    now,
   }, command);
 }
 
@@ -619,5 +626,112 @@ describe("official-game-v26 opening wallet settlement", () => {
       expect(continued.state.profile.silver).toBe(restoreBattleReplay(data, continued.state.battle!.replay).session.silver);
       expect(continued.projection).toEqual(v26.projectPersistedState(continued.state));
     } finally { randomSource=()=>0; }
+  });
+});
+
+
+describe("official-game-v27 Job construction", () => {
+  it("marks Arena and Tournament openings, including Save Me after migration", () => {
+    const town = strongState({ kind: "town", worldId: "World_1-2", townId: "Capital_City" }, { finishedQuests: 5 });
+    expect(apply(V27, town, { type: "arena.startLicenseChallenge" }).state.battle!.replay.options.sourceJobLevels).toBe(true);
+    const party = new WorldTripParty(data, [{ ...member("m1", "BlueBabyDragon", 1), currentHp: 1 }], 6);
+    const profile = new PlayerProfile({ ...sourceNewGameProfileDefaults("BlueBabyDragon"),
+      heroLevel: 6, heroTotalHighestLevels: minimumHeroTotalForLevel(6), monsterPartyLevels: [1],
+      gold: 100, tutorialFlags: ["SaveMe"],
+    }, party);
+    const ready = { ...town, party: party.stateSnapshot(), profile: profile.stateSnapshot() };
+    const historical = apply(V26, ready, { type: "tournament.startBattle" });
+    expect(historical.state.pendingDefeat?.canSaveMe).toBe(true);
+    expect(historical.state.battle!.replay.options.sourceJobLevels).toBeUndefined();
+    expect(apply(V27, ready, { type: "tournament.startBattle" }).state.battle!.replay.options.sourceJobLevels).toBe(true);
+    const migrated = migrateOfficialGameV26ToV27({ data, quests, state: historical.state, context: { dungeonResources: source } });
+    const restarted = apply(V27, migrated, { type: "battle.resolveDefeat", battleId: migrated.battle!.battleId, recovery: "saveMe" });
+    expect(restarted.state.location.kind).toBe("town");
+    expect(restarted.state.battle).toBeUndefined();
+    expect(apply(V27, restarted.state, { type: "tournament.startBattle" }, "2026-10-08T00:00:00.000Z").state.battle!.replay.options.sourceJobLevels).toBe(true);
+    expect(restarted.projection).toEqual(v27.projectPersistedState(restarted.state));
+    expect(historical.state.battle!.replay.options.sourceJobLevels).toBeUndefined();
+  });
+  it("marks new world battles before automatic simulation and leaves historical delegates unchanged", () => {
+    const prior = strongState({ kind: "world", worldId: "World_1-1", poiId: "1-1_Field_2" });
+    const command = { type: "world.selectCurrentPoi" } as const;
+    const current = apply(V27, prior, command);
+    expect(current.state.battle).toBeDefined();
+    expect(current.state.battle!.replay.options.sourceJobLevels).toBe(true);
+    expect(current.projection.battle!.options.sourceJobLevels).toBe(true);
+    expect(current.projection).toEqual(v27.projectPersistedState(current.state));
+    const historical = apply(V26, prior, command);
+    expect(historical.state.battle!.replay.options.sourceJobLevels).toBeUndefined();
+    expect(historical.projection.battle!.options.sourceJobLevels).toBeUndefined();
+  });
+  it("migrates an active v26 battle without altering its committed replay", () => {
+    const prior = strongState({ kind: "world", worldId: "World_1-1", poiId: "1-1_Field_2" });
+    const state = apply(V26, prior, { type: "world.selectCurrentPoi" }).state;
+    expect(state.battle).toBeDefined();
+    const migrated = migrateOfficialGameV26ToV27({ data, quests, state, context: { dungeonResources: source } });
+    expect(migrated).toEqual(state);
+    expect(migrated).not.toBe(state);
+    expect(restoreBattleReplay(data, migrated.battle!.replay).events).toEqual(restoreBattleReplay(data, state.battle!.replay).events);
+    expect(v27.projectPersistedState(migrated).battle!.options.sourceJobLevels).toBeUndefined();
+  });
+});
+
+
+function overCapCaptureState(sourceJobLevels: boolean): OfficialGameStateV24 {
+  const state = worldBattleWithRewards([]);
+  if (state.battle!.encounter.kind !== "world") throw new Error("expected world fixture");
+  const encounter = { ...state.battle!.encounter, generated: { ...state.battle!.encounter.generated,
+    monsters: [{ type: "Centurion", level: 151 }],
+  } };
+  const party = new WorldTripParty(data, [member("m1", "FireTiger", 150)], 6);
+  const profile = new PlayerProfile({ ...sourceNewGameProfileDefaults("FireTiger"),
+    heroLevel: 50, heroTotalHighestLevels: minimumHeroTotalForLevel(50), monsterPartyLevels: [150],
+    captureCards: { 1: 0, 2: 0, 3: 1 },
+  }, party);
+  const pending: BattleReplaySnapshotV1 = { schemaVersion: 1, randomDraws: [], commands: [],
+    teams: [[{ shortType: "FireTiger", level: 150, sourceInstanceId: "m1" }], [{ shortType: "Centurion", level: 151 }]],
+    options: { silver: profile.snapshot().silver, ...(sourceJobLevels ? { sourceJobLevels: true } : {}) },
+  };
+  const opening = restoreBattleReplay(data, pending, { randomSource: () => 0 });
+  expect(opening.step.type).toBe("awaitingPlayer");
+  return { ...state, party: party.stateSnapshot(), profile: profile.stateSnapshot(),
+    battle: { ...state.battle!, encounter, replay: { ...pending, randomDraws: opening.randomDraws! } } };
+}
+
+describe("official v27 over-cap capture settlement", () => {
+  it.each([false, true])("settles once across duplicate delivery and service recreation (marked=%s)", async marked => {
+    const original = overCapCaptureState(marked);
+    const state = migrateOfficialGameV26ToV27({ data, quests, state: original, context: { dungeonResources: source } });
+    expect(state.battle!.replay).toEqual(original.battle!.replay);
+    const store = new InMemoryAuthoritativeSlotStore<OfficialGameStateV24, ReturnType<OfficialGameV27Reducer["projectPersistedState"]>>();
+    const updatedAt = "2026-10-09T00:00:00.000Z";
+    await store.transact("p", "slot-1", async () => ({ record: {
+      playerId: "p", slotId: "slot-1", logicPackId, simulationVersion: pack27.simulationVersion,
+      revision: 1, eventCursor: 0, updatedAt, state, receipts: new Map(),
+      projection: { slotId: "slot-1", revision: 1, updatedAt, logicPackId,
+        simulationVersion: pack27.simulationVersion, trustTier: "official", ...v27.projectPersistedState(state) } as never,
+    }, value: undefined }));
+    const service = () => new AuthoritativeGameService({ pack: pack27, reducer: v27, store,
+      validateRecord: record => v27.validatePersistedRecord(record) });
+    const first = service(), before = await first.bootstrap("p", "slot-1");
+    if (before.decision.type !== "battle.playerTurn") throw new Error("expected capture decision");
+    const command = { type: "battle.attemptCapture" as const, battleId: before.decision.battleId,
+      actorId: before.decision.actorId, targetId: "t1m0:Centurion", cardLevel: 3 as const };
+    if (!marked) expect(() => apply(V26, original, command)).toThrow(/level must be/);
+    const request: GameCommandEnvelopeV1 = { protocolVersion: GAME_PROTOCOL_VERSION,
+      commandId: "capture_cap_duplicate_0001", expectedRevision: 1,
+      expectedDecisionId: before.decision.decisionId, command };
+    const results = await Promise.all([first.execute("p", "slot-1", request), first.execute("p", "slot-1", request)]);
+    expect(results.map(r => r.idempotentReplay).sort()).toEqual([false, true]);
+    const committed = results.find(r => !r.idempotentReplay)!;
+    expect(committed.events).toContainEqual(expect.objectContaining({ type: "player.monsterAdded", monsterTypeId: "Centurion", level: 150 }));
+    expect(committed.projection.player.captureCards[3]).toBe(0);
+    expect(committed.projection.location.kind).not.toBe("battle");
+    expect(await service().execute("p", "slot-1", request)).toEqual({ ...committed, idempotentReplay: true });
+    expect(await service().bootstrap("p", "slot-1")).toEqual(committed.projection);
+    const persisted = (await store.read("p", "slot-1"))!.state;
+    const restored = migrateOfficialGameV26ToV27({ data, quests, state: persisted, context: { dungeonResources: source } });
+    const captured = WorldTripParty.fromStateSnapshot(data, restored.party).monsters().filter(m => m.shortType === "Centurion");
+    expect(captured).toHaveLength(1);expect(captured[0]!.level).toBe(150);
   });
 });

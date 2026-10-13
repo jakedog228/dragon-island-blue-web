@@ -26,6 +26,18 @@ describe("BattleRoster", () => {
     });
   });
 
+  it("uses constructed levels for display and capture without rewriting encounter or legacy facts", () => {
+    const encounter = { backgroundKey: "ForestCombat", playerTeam: [{ shortType: "FireCub", level: 150 }],
+      enemyTeam: [{ shortType: "Centurion", level: 151 }] };
+    const current = new BattleRoster(encounter, 0, () => 150);
+    expect(current.entryOf("t1m0:Centurion").setup.level).toBe(150);
+    expect(encounter.enemyTeam[0]!.level).toBe(151);
+    const historical = new BattleRoster(encounter, 0, id => id.startsWith("t1") ? 151 : 150);
+    expect(historical.entryOf("t1m0:Centurion").setup.level).toBe(151);
+    const guest = new BattleRoster(encounter, 1, id => id.startsWith("t0") ? 149 : 150);
+    expect(guest.entryOf("t0m0:Centurion").setup.level).toBe(149);
+  });
+
   it("fails loudly for an id outside the encounter", () => {
     const roster = new BattleRoster({
       backgroundKey: "ForestCombat",

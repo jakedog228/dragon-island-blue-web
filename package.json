@@ -51,6 +51,7 @@
     "scenario:enemy-entrance": "node apps/web/tests/browser/enemy-entrance-capture-idle.playwright.mjs",
     "scenario:enemy-analyze": "node apps/web/tests/browser/enemy-analyze-reserves.playwright.mjs",
     "scenario:analyze-turn-continuation": "node apps/web/tests/browser/analyze-turn-continuation.playwright.mjs",
+    "scenario:job-level-capture": "node apps/web/tests/browser/job-level-capture.playwright.mjs",
     "scenario:capture": "node apps/web/tests/browser/capture-cards.playwright.mjs",
     "scenario:battle-end-audio": "node apps/web/tests/browser/battle-end-audio.playwright.mjs",
     "scenario:combat-modifiers": "node apps/web/tests/browser/combat-modifiers.playwright.mjs",

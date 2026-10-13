@@ -23,7 +23,7 @@ export class BattleRoster {
   private readonly rosterEntries: BattleRosterEntry[];
   private readonly byId: Map<string, BattleRosterEntry>;
 
-  constructor(encounter: EncounterConfig, playerTeam: 0 | 1 = 0) {
+  constructor(encounter: EncounterConfig, playerTeam: 0 | 1 = 0, constructedLevel?: (id: string) => number) {
     const entries: BattleRosterEntry[] = [];
     const teams: ReadonlyArray<readonly [0 | 1, readonly BattleTeamMemberSetup[]]> = [
       [0, encounter.playerTeam],
@@ -31,11 +31,14 @@ export class BattleRoster {
     ];
     for (const [team, members] of teams) {
       members.forEach((setup, constructionIndex) => {
+        const id = battleLivingId(team === 0 ? playerTeam : playerTeam === 0 ? 1 : 0, constructionIndex, setup.shortType);
         entries.push({
-          id: battleLivingId(team === 0 ? playerTeam : playerTeam === 0 ? 1 : 0, constructionIndex, setup.shortType),
+          id,
           team,
           constructionIndex,
-          setup: { ...setup },
+          // Read the constructed living: capture settlement, info and spirit charging must
+          // share its Job level. Historical Official replays may retain the old raw level.
+          setup: { ...setup, level: constructedLevel?.(id) ?? setup.level },
           createdMidBattle: false,
         });
       });

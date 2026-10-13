@@ -70,7 +70,7 @@ export function mountOfficialBattlePresentation(
         replay.teams[1].map((member) => structuredClone(member)),
       ],
       rng,
-      replay.options,
+      { ...replay.options, sourceJobLevels: replay.options.sourceJobLevels ?? false },
     ),
     resumedStep: undefined,
     historyEvents: [],

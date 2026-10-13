@@ -746,7 +746,7 @@ export class BattleNode {
     // only knows the encounter's initial setups — a rematch must not carry last battle's summon
     // ids into buildSnapshots' session lookups. Rebuilt here because Rematch stands in for the
     // original's new-BattleNode construction (see start()'s music note above).
-    this.roster = new BattleRoster(this.encounter, this.multiplayer?.you);
+    this.roster = new BattleRoster(this.encounter, this.multiplayer?.you, id => this.session.levelOf(id));
     const restoredIdentities = restoredRosterIdentities(this.restoredPresentationEvents);
     for (const identity of restoredIdentities) {
       this.roster.registerMidBattle(identity.id, identity.team, {

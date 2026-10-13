@@ -14,6 +14,7 @@ import {
 } from "./ability.js";
 import { parseAbilityArgument } from "./abilityArgs.js";
 import { baseStat, baseStatRaw } from "./stats.js";
+import { jobCreationLevel } from "./jobLevel.js";
 import { spiritCombatLevel } from "./spirit.js";
 import { soulStoneBonusForStat } from "./soulStone.js";
 import { applyDamage, rollDamage } from "./damage.js";
@@ -218,6 +219,8 @@ export class BattleCore {
   /** `UserSavedData`'s silver — a single global player-save wallet in the binary, spent by
    *  SpendSilverAbilityComponent regardless of which side casts (components-full.md §6). */
   private silverAmount: number;
+  /** False only for historical replay rules that retained unclamped Job levels. */
+  private readonly sourceJobLevels: boolean;
   /** `Battle` ivar[9] (battle.md "guaranteed retreat"): armed by `notifyAbilityEvent:1`
    *  (EscapeAbilityComponent), consumed right after the arming ability completes. */
   private pendingGuaranteedRetreat = false;
@@ -233,10 +236,11 @@ export class BattleCore {
     data: GameData,
     teams: [TeamMemberSetup[], TeamMemberSetup[]],
     rng: Rng,
-    opts?: { fightingGroupSize?: number; blockCapture?: boolean; silver?: number; humanTeams?: readonly (0 | 1)[] },
+    opts?: { fightingGroupSize?: number; blockCapture?: boolean; silver?: number; humanTeams?: readonly (0 | 1)[]; sourceJobLevels?: boolean },
   ) {
     this.data = data;
     this.rng = rng;
+    this.sourceJobLevels = opts?.sourceJobLevels ?? true;
     this.fightingGroupSize = opts?.fightingGroupSize ?? 3;
     this.blockCapture = opts?.blockCapture ?? false;
     this.humanTeams = new Set(opts?.humanTeams ?? [0]);
@@ -250,6 +254,7 @@ export class BattleCore {
     for (const teamNum of [0, 1] as const) {
       teams[teamNum].forEach((setup, idx) => {
         const monster = data.monsterByShortType(setup.shortType);
+        const level = this.constructedJobLevel(setup.level);
         const id = battleLivingId(teamNum, idx, setup.shortType);
         const baseStatsRaw = {} as Record<StatName, number>;
         for (const stat of STAT_NAMES) {
@@ -261,7 +266,7 @@ export class BattleCore {
             );
           }
           baseStatsRaw[stat] = Math.fround(
-            baseStatRaw(monster, stat, setup.level) + Math.fround(flatBonus),
+            baseStatRaw(monster, stat, level) + Math.fround(flatBonus),
           );
         }
         // An equipped stone joins the valueForCachedStat accumulator as an ordinary child
@@ -310,7 +315,7 @@ export class BattleCore {
           team: teamNum,
           shortType: setup.shortType,
           monster,
-          level: setup.level,
+          level,
           baseStatsRaw,
           soulStone,
           playerBuffs,
@@ -1206,6 +1211,10 @@ export class BattleCore {
     return living.captureAttemptMade ? "alreadyTried" : "available";
   }
 
+  private constructedJobLevel(requestedLevel: number): number {
+    return this.sourceJobLevels ? jobCreationLevel(requestedLevel) : requestedLevel;
+  }
+
   captureChanceOf(id: string, cardLevel: CaptureCardLevel, partyLevel: number): number {
     const living = this.livingOrThrow(id);
     if (this.captureStatusOf(id) !== "available") return 0;
@@ -1549,7 +1558,7 @@ export class BattleCore {
     const summoner = this.livingOrThrow(summonerId);
     const team = summoner.team;
     const monster = this.data.monsterByShortType(shortType);
-    const level = summoner.level; // (int)[abilitySource level]
+    const level = this.constructedJobLevel(summoner.level); // (int)[abilitySource level]
     const baseStatsRaw = {} as Record<StatName, number>;
     for (const stat of STAT_NAMES) baseStatsRaw[stat] = baseStatRaw(monster, stat, level);
     const maxHp = baseStat(monster, "MaxHP", level);
@@ -1642,6 +1651,8 @@ export class BattleCore {
       throw new Error("BattleCore.summonSpirit: battle has ended");
     }
     const monster = this.data.monsterByShortType(shortType);
+    // Spirits are constructed at level 1, then explicitly increased for saved XP.
+    // The constructor's clamp does not apply to those subsequent increaseLevel calls.
     const level = spiritCombatLevel(monster, savedXp);
     const baseStatsRaw = {} as Record<StatName, number>;
     for (const stat of STAT_NAMES) baseStatsRaw[stat] = baseStatRaw(monster, stat, level);
@@ -1736,7 +1747,7 @@ export class BattleCore {
     const caster = this.livingOrThrow(casterId);
     const team = holder.team;
     const monster = this.data.monsterByShortType(stone.sourceType); // fail-loud on unknown species
-    const level = caster.level; // (int)[abilitySource level] — NOT the stone's level
+    const level = this.constructedJobLevel(caster.level); // (int)[abilitySource level] — NOT the stone's level
     const baseStatsRaw = {} as Record<StatName, number>;
     for (const stat of STAT_NAMES) baseStatsRaw[stat] = baseStatRaw(monster, stat, level);
     const id = battleLivingId(team, this.nextConstructionIndex[team]++, stone.sourceType);
