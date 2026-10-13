@@ -13,7 +13,7 @@ export function easeBarStep(current: number, target: number, growSpeed = BAR_GRO
 
 export function hpTint(hp: number, max: number): number {
   const g = Math.trunc((1 - hp / max) * 255);
-  return (255 << 16) | (g << 8);
+  return 0xff0000 | ((g & 0xff) << 8) | ((g >>> 8) & 0xff);
 }
 
 /** Pixel-space rect, top-left/Y-down (the convention `tools/dib_extract`'s atlas JSON already uses,

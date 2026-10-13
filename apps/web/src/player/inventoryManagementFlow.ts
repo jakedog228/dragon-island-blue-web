@@ -309,6 +309,12 @@ export async function showInventoryManagement(
           await runMutation(async () => {
             const entry = await requireSelected();
             if (entry === undefined) return;
+            // Refuse the known license restriction before an Official round trip. The authority
+            // still validates admitted commands; the source refusal is a local read-only popup.
+            if (!entry.equipped && entry.item.kind === "gem" && entry.item.slot >= opts.profile.licenseGemSlots) {
+              await showNamedMessage(opts, "NoSlotEquipFailure");
+              return;
+            }
             try {
               await mutate(opts, entry.equipped ? "unequip" : "equip", entry.id);
               await reopen();

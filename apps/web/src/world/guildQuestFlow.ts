@@ -102,8 +102,10 @@ export interface GuildQuestFlowOptions {
 
 
 
-  readonly onClaimQuest?: (quest: QuestDefinition) => Promise<() => void | Promise<void>>;
-  readonly onClaimReward: (quest: QuestDefinition) => void | Promise<void>;
+  readonly onClaimQuest?: (quest: QuestDefinition) => Promise<(onPresented: () => void) => void | Promise<void>>;
+  readonly onClaimReward: (quest: QuestDefinition, onPresented: () => void) => void | Promise<void>;
+  /** Local-only: hold durable state before completeQuest until all reward continuations settle. */
+  readonly beginRewardCheckpoint?: () => (() => void);
   readonly onStateChanged: () => void;
   readonly onClose: () => void;
 }
@@ -123,6 +125,7 @@ export class GuildQuestFlow {
   private availableBadge: Text | undefined;
   private completedBadge: Text | undefined;
   private disposed = false;
+  private actionPending = false;
   private mode: "tavern" | "quests" = "quests";
 
   private constructor(private readonly options: GuildQuestFlowOptions) {}
@@ -161,6 +164,7 @@ export class GuildQuestFlow {
       popupHost.dismissTop();
       return;
     }
+    if (this.actionPending) return;
     this.dispose();
   }
 
@@ -183,6 +187,7 @@ export class GuildQuestFlow {
       tavernOpen: this.tavernRoot !== undefined,
       questListOpen: this.questPopup !== undefined && !this.questPopup.isDismissed,
       chatOpen: this.activeChat !== undefined,
+      actionPending: this.actionPending,
       activeQuestNames: this.options.runtime.activeQuestNames(),
       completedQuestNames: this.options.runtime.completedActiveQuestNames(),
       availableCount: this.options.townName === undefined
@@ -334,6 +339,7 @@ export class GuildQuestFlow {
     close.cursor = "pointer";
     close.on("pointertap", (event) => {
       event.stopPropagation();
+      if (this.actionPending) return;
       this.options.audio.playSfx("click");
       this.dispose();
     });
@@ -387,7 +393,16 @@ export class GuildQuestFlow {
   }
 
   private async activateTavernAction(action: TavernAction): Promise<void> {
-    if (this.disposed || this.activeChat !== undefined || this.questPopup !== undefined) return;
+    if (this.disposed || this.actionPending || this.activeChat !== undefined || this.questPopup !== undefined) return;
+    this.actionPending = true;
+    try {
+      await this.performTavernAction(action);
+    } finally {
+      this.actionPending = false;
+    }
+  }
+
+  private async performTavernAction(action: TavernAction): Promise<void> {
     switch (action) {
       case "newQuest":
         await this.newQuest();
@@ -447,12 +462,15 @@ export class GuildQuestFlow {
       return;
     }
     const quest = this.options.runtime.catalog.requireQuest(name);
-    let presentRewards: () => void | Promise<void>;
+    const finishCheckpoint = this.options.onClaimQuest === undefined
+      ? this.options.beginRewardCheckpoint?.()
+      : undefined;
+    let presentRewards: (onPresented: () => void) => void | Promise<void>;
     if (this.options.onClaimQuest === undefined) {
       if (!this.options.runtime.completeQuest(name)) {
         throw new Error(`Tavern failed to claim completed quest ${name}`);
       }
-      presentRewards = () => this.options.onClaimReward(quest);
+      presentRewards = (onPresented) => this.options.onClaimReward(quest, onPresented);
     } else {
       presentRewards = await this.options.onClaimQuest(quest);
       if (this.options.runtime.activeQuestNames().includes(name)) {
@@ -471,17 +489,22 @@ export class GuildQuestFlow {
 
 
 
-    this.startRewardPresentation(presentRewards);
-    await this.showNamedChat("TavernQuestFinished");
-  }
-
-  /**
-   * Starts a claim's reward presentation and leaves it running underneath the Guild chat. Failures
-   * surface the same way as the other detached presentations this flow starts.
-   */
-  private startRewardPresentation(present: () => void | Promise<void>): void {
-    const running = present();
-    if (running !== undefined) void running;
+    let markPresented!: () => void;
+    const presented = new Promise<void>((resolve) => { markPresented = resolve; });
+    const finished = Promise.resolve(presentRewards(markPresented));
+    // Keep Tavern actions/close locked through asynchronous loot -> Egg construction and its
+    // committed finish. A missing notification layer between those mounts is not a new decision.
+    await Promise.all([finished, (async () => {
+      // Source constructors mount synchronously. Browser asset loading can otherwise insert the
+      // loot AFTER this chat and hide it. Wait only for mounting, never for collecting the reward.
+      await Promise.race([presented, finished]);
+      await this.showNamedChat("TavernQuestFinished");
+    })()]);
+    // Errors deliberately leave the pre-claim checkpoint intact for reload/recovery.
+    if (finishCheckpoint !== undefined) {
+      finishCheckpoint();
+      this.options.onStateChanged();
+    }
   }
 
   private async openQuestList(returnToTavern: boolean): Promise<void> {

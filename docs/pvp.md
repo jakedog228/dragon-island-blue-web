@@ -219,6 +219,22 @@ Every run writes `result.json`; successful matches also write `match.json`. The 
 both clients' complete battle transcripts after every move and at settlement, and checks campaign
 preservation and native result dismissal. A gameplay-mod rejection permits only its expected
 409 console message from `/api/pvp/matches/current`; other browser errors still fail the run.
+Status panels from sleep/skip chains are acknowledged with real battle-centre taps and counted
+in `statusAcknowledgments`. Waiting only for ability controls can time out while these ordinary
+continuation panels are visible.
+
+The 2026-10-07 combined Offline/Offline stress rerun passed against the Reincarnation fix:
+38 turns, natural defeat settlement, both spirits, lost response, three failed polls, delayed
+duplicate clicks, cold reconnect and three invite cycles. Clients agreed after every move,
+campaign saves were unchanged and browser errors were empty. Evidence is in
+`output/pvp-reincarnation-recheck-status`; its earlier driver timeout remains separately in
+`output/pvp-reincarnation-recheck`.
+
+The subsequent summon-input-fix rerun also passed on iPad geometry: 32 turns to natural
+defeat settlement, both spirits, four failed polls, lost-response retry, delayed duplicate
+clicks, cold guest reconnect and three invite cycles. Both clients agreed on all 34 committed
+commands (revision 35); campaign saves were unchanged and browser errors were empty. Evidence
+is in `output/pvp-summon-input-recheck`; reconnect, outage and victory frames were inspected.
 
 ## Demo video
 

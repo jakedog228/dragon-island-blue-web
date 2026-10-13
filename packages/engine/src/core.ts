@@ -1785,10 +1785,18 @@ export class BattleCore {
   }
 
 
+
+
+
+
+
+
+
   private randomSummonType(minStars: number): string {
     const pool = this.data
       .allMonsters()
-      .filter((m) => m.category === "Normal" && (minStars < 1 || m.stars >= minStars));
+      .filter((m) => m.category === "Normal" && (minStars < 1 || m.stars >= minStars))
+      .sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
     if (pool.length === 0) {
       throw new Error(`CallMonsterAbilityComponent: empty summon pool (minStars ${minStars})`);
     }

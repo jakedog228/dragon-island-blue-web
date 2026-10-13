@@ -139,7 +139,8 @@ try {
   let rematch;
   for (let i = 0; i < 600; i++) {
     rematch = await state();
-    if (rematch.mode === "battle" && rematch.monsters.length > 0 && rematch.presentation.state !== "battleEnded") break;
+    if (rematch.mode === "battle" && rematch.monsters.length > 0 &&
+      rematch.presentation.state === "awaitingPlayerChoice" && rematch.panelVisible) break;
     await advance(50);
   }
   assert.equal(
@@ -148,6 +149,8 @@ try {
     `rematch never rebuilt a battle: ${JSON.stringify(rematch?.presentation)} errors=${JSON.stringify(errors)}`,
   );
   assert.notEqual(rematch.presentation.state, "battleEnded", "rematch stayed on the ended battle");
+  assert.equal(rematch.presentation.state, "awaitingPlayerChoice", "rebuilt battle never became playable");
+  assert(rematch.panelVisible, "rebuilt battle has no player controls");
   // Fresh roster: only the encounter's initial members — battle 1's summon must not leak in.
   assert(
     !rematch.monsters.some((m) => m.id === "t0m1:Minotaur"),

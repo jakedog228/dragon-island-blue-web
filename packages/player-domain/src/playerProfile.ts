@@ -1219,6 +1219,10 @@ export class PlayerProfile {
         : {}),
       spiritReadiness: snapshot.spiritEnergy / HERO_SPIRIT_MAX_ENERGY,
     }, party);
+    // Restore the stored meter itself. Dividing by 100 for constructor readiness and multiplying
+    // back introduces fractional noise (e.g. 7 -> 7.000000000000001), which corrupts an otherwise
+    // integral Official projection. Preserve valid fractional imported meters exactly as well.
+    profile.spiritEnergyValue = snapshot.spiritEnergy;
     for (const [shortType, savedXp] of Object.entries(snapshot.spiritSavedXp)) {
       if (shortType.length === 0 || !Number.isSafeInteger(savedXp) || savedXp < 0) {
         throw new Error(`PlayerProfile: invalid saved spirit ${shortType} XP ${savedXp}`);

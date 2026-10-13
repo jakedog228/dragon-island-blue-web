@@ -28,9 +28,14 @@ describe("hpTint", () => {
     expect(hpTint(33, 100)).toBe((255 << 16) | (g << 8));
   });
 
-  it("UNVERIFIED: left unclamped for hp > max (no clamp documented in the RE notes)", () => {
-    // 1 - 150/100 = -0.5 -> trunc(-0.5*255) = trunc(-127.5) = -127 (toward zero).
-    expect(hpTint(150, 100)).toBe((255 << 16) | (-127 << 8));
+  it("converts all three native packed bytes when HP exceeds its current maximum", () => {
+
+    expect(hpTint(150, 100)).toBe(0xff81ff);
+  });
+
+  it("preserves the native blue-byte carry below zero HP rather than clamping the gradient", () => {
+
+    expect(hpTint(-50, 100)).toBe(0xff7e01);
   });
 });
 

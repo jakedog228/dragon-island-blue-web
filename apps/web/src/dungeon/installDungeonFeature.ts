@@ -391,6 +391,7 @@ type DungeonSceneEntry =
     readonly kind: "restore";
     /** A renderer-only rebuild is not a native new DungeonNode scene entry. */
     readonly presentationResume?: boolean;
+    readonly onSceneReady?: () => Promise<void>;
     readonly actions?: undefined;
   }
   | {
@@ -398,6 +399,7 @@ type DungeonSceneEntry =
     readonly actions: readonly DungeonRoomEntryAction[] | null;
     /** Port-only cold bootstrap after the terminal command committed in another document. */
     readonly documentRestore?: boolean;
+    readonly onSceneReady?: () => Promise<void>;
   };
 
 /**
@@ -541,6 +543,7 @@ export class DungeonFeatureController<ShellMode extends string> {
     options: {
       readonly presentationResume?: boolean;
       readonly pendingBattleRewardKeys?: Readonly<Record<string, string>>;
+      readonly onSceneReady?: () => Promise<void>;
     } = {},
   ): Promise<void> {
     if (this.localTerminalContinuation.hasCommitted()) {
@@ -599,6 +602,7 @@ export class DungeonFeatureController<ShellMode extends string> {
     await this.startDungeonScene({
       kind: "restore",
       ...(options.presentationResume === true ? { presentationResume: true } : {}),
+      ...(options.onSceneReady === undefined ? {} : { onSceneReady: options.onSceneReady }),
     });
   }
 
@@ -663,11 +667,13 @@ export class DungeonFeatureController<ShellMode extends string> {
    * the outgoing scene. Room actions and checkpoint ownership remain identical to battleReturn. */
   async restorePreparedAuthoritativeBattleReturn(
     outcome: "victory" | "retreat",
+    onSceneReady?: () => Promise<void>,
   ): Promise<DungeonNode> {
     const run = this.requireRun();
     this.insideDungeon = true;
     const actions = officialDungeonBattleReturnActions(outcome, run.session);
-    return this.startDungeonScene({ kind: "battleReturn", actions, documentRestore: true });
+    return this.startDungeonScene({ kind: "battleReturn", actions, documentRestore: true,
+      ...(onSceneReady === undefined ? {} : { onSceneReady }) });
   }
 
   clear(): void {
@@ -1481,6 +1487,12 @@ export class DungeonFeatureController<ShellMode extends string> {
       await tween(this.host.stage.app.ticker, 250, (t) => { shade.alpha = 1 - t; });
       shade.destroy();
     });
+    if ("onSceneReady" in entry && entry.onSceneReady !== undefined) {
+      // A restored room can immediately await Take All. Reveal the prepared scene before those
+      // player-owned entry actions; waiting for start() first deadlocks behind the startup shade.
+      await node.prepareStart(initialActions);
+      await entry.onSceneReady();
+    }
     await node.start(initialActions);
 
 

@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "teams": [
+    [
+      {
+        "shortType": "GiantTurtle",
+        "level": 15,
+        "currentHp": 271,
+        "sourceInstanceId": "monster-10",
+        "playerBuffs": {
+          "MaxHP": 2,
+          "Attack": 2,
+          "Speed": 9
+        }
+      },
+      {
+        "shortType": "BlueDragonling",
+        "level": 15,
+        "currentHp": 226,
+        "sourceInstanceId": "monster-1",
+        "playerBuffs": {
+          "MaxHP": 2,
+          "Attack": 2,
+          "Speed": 9
+        }
+      },
+      {
+        "shortType": "Mutation",
+        "level": 14,
+        "currentHp": 185,
+        "sourceInstanceId": "monster-6",
+        "playerBuffs": {
+          "MaxHP": 2,
+          "Attack": 2,
+          "Speed": 9
+        }
+      },
+      {
+        "shortType": "Treehead",
+        "level": 13,
+        "currentHp": 145,
+        "sourceInstanceId": "monster-9",
+        "playerBuffs": {
+          "MaxHP": 2,
+          "Attack": 2,
+          "Speed": 9
+        }
+      },
+      {
+        "shortType": "FlameWing",
+        "level": 12,
+        "currentHp": 165,
+        "sourceInstanceId": "monster-2",
+        "playerBuffs": {
+          "MaxHP": 2,
+          "Attack": 2,
+          "Speed": 9
+        }
+      },
+      {
+        "shortType": "Slime",
+        "level": 12,
+        "currentHp": 146,
+        "sourceInstanceId": "monster-4",
+        "playerBuffs": {
+          "MaxHP": 2,
+          "Attack": 2,
+          "Speed": 9
+        }
+      },
+      {
+        "shortType": "Goblin",
+        "level": 12,
+        "currentHp": 128,
+        "sourceInstanceId": "monster-8",
+        "playerBuffs": {
+          "MaxHP": 2,
+          "Attack": 2,
+          "Speed": 9
+        }
+      },
+      {
+        "shortType": "GiantAnt",
+        "level": 11,
+        "currentHp": 121,
+        "sourceInstanceId": "monster-12",
+        "playerBuffs": {
+          "MaxHP": 2,
+          "Attack": 2,
+          "Speed": 9
+        }
+      },
+      {
+        "shortType": "Sludge",
+        "level": 6,
+        "currentHp": 54,
+        "sourceInstanceId": "monster-5",
+        "playerBuffs": {
+          "MaxHP": 2,
+          "Attack": 2,
+          "Speed": 9
+        }
+      }
+    ],
+    [
+      {
+        "shortType": "Bones",
+        "level": 13
+      },
+      {
+        "shortType": "DevilWorm",
+        "level": 14
+      },
+      {
+        "shortType": "DevilWorm",
+        "level": 15
+      },
+      {
+        "shortType": "SerpentKnight",
+        "level": 15
+      },
+      {
+        "shortType": "SerpentKnight",
+        "level": 13
+      }
+    ]
+  ],
+  "options": {
+    "fightingGroupSize": 3,
+    "silver": 4453
+  },
+  "randomDraws": [
+    0.48367589312405657,
+    0.16487555607076032,
+    0.4832751595892665,
+    0.9285033291084616,
+    0.9370138834160201,
+    0.41955129237356126,
+    0.30640342873650617,
+    0.6253715203966177,
+    0.2124699221545665,
+    0.8051888185743576,
+    0.7285785127129663,
+    0.11020213382939181,
+    0.0032745601035784055,
+    0.6331485752404875,
+    0.7789633707470334,
+    0.1834238226373086,
+    0.9666734035922242,
+    0.9929986038287029,
+    0.23295842857752436,
+    0.11329279539992576,
+    0.4488657305567515,
+    0.4272069171642908,
+    0.49425926520322305,
+    0.8304789845322608,
+    0.5945840054498126,
+    0.15036970029385943,
+    0.8233673509245317,
+    0.5868259895537907,
+    0.29533314237314956,
+    0.7963222412127672,
+    0.2209506384734644,
+    0.44163557947387555,
+    0.9017119600426355,
+    0.4945036794921882,
+    0.9476615122917688,
+    0.9107906661123809,
+    0.3710951057295433,
+    0.5607888474617141,
+    0.0948781036587113,
+    0.85298212144185,
+    0.06693198219518992,
+    0.9256915619229718,
+    0.9461463282983714,
+    0.6806806965147096,
+    0.9087254616451329,
+    0.0705920547204334,
+    0.679244050807105,
+    0.8510033988241753,
+    0.9177284523146892,
+    0.40812916267779553,
+    0.6890318965633415,
+    0.020523215486181412,
+    0.6938321874450697,
+    0.629501272697987,
+    0.6749300377292877,
+    0.717473868299984,
+    0.4488214574114452,
+    0.05867312976225214,
+    0.959370820118731,
+    0.35694251615326555,
+    0.8193803685951354,
+    0.07299497103912189,
+    0.9607282405078675,
+    0.790577797230845,
+    0.2798729147826906,
+    0.8138184787849871,
+    0.5562065872709082,
+    0.1201500569566013,
+    0.5899663808846108,
+    0.6087877132459616,
+    0.09737852421085935,
+    0.890573974376627,
+    0.6697805213344968
+  ],
+  "commands": [
+    {
+      "type": "ability",
+      "actorId": "t0m1:BlueDragonling",
+      "slot": "usable1",
+      "targetIds": [
+        "t1m0:Bones"
+      ]
+    },
+    {
+      "type": "ability",
+      "actorId": "t0m2:Mutation",
+      "slot": "usable3",
+      "targetIds": [
+        "t1m0:Bones"
+      ]
+    },
+    {
+      "type": "ability",
+      "actorId": "t0m0:GiantTurtle",
+      "slot": "usable1",
+      "targetIds": [
+        "t1m1:DevilWorm"
+      ]
+    },
+    {
+      "type": "ability",
+      "actorId": "t0m1:BlueDragonling",
+      "slot": "usable1",
+      "targetIds": [
+        "t1m1:DevilWorm"
+      ]
+    },
+    {
+      "type": "ability",
+      "actorId": "t0m1:BlueDragonling",
+      "slot": "usable3",
+      "targetIds": [
+        "t1m1:DevilWorm"
+      ]
+    },
+    {
+      "type": "ability",
+      "actorId": "t0m0:GiantTurtle",
+      "slot": "usable1",
+      "targetIds": [
+        "t1m4:SerpentKnight"
+      ]
+    },
+    {
+      "type": "ability",
+      "actorId": "t0m2:Mutation",
+      "slot": "usable1",
+      "targetIds": [
+        "t1m4:SerpentKnight"
+      ]
+    }
+  ]
+}

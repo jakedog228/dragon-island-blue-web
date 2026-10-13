@@ -82,6 +82,7 @@ import { StoreFlow } from "./player/storeFlow.js";
 import { purchaseStoreStock } from "@dib/player-domain";
 import { earnedLicenseWinDialogs } from "./player/licenseDialogRepair.js";
 import { SaveHealthMonitor } from "./player/saveHealth.js";
+import { LocalRewardCheckpoint } from "./player/localRewardCheckpoint.js";
 import { installSaveHealthBanner } from "./ui/saveHealthBanner.js";
 import {
   describeStoragePersistence,
@@ -804,24 +805,30 @@ async function boot(options: BootOptions = {}): Promise<void> {
         );
       }
     }
-    guildQuestDebugState = () => ({
-      activeQuestNames: initialGuildQuests.activeQuestNames(),
-      activeQuests: initialGuildQuests.activeQuests().map((quest) => ({
-        name: quest.name,
-        title: guildQuestTitle(game.strings, quest),
-        progress: guildQuestProgress(game.strings, initialGuildQuests, quest),
-        complete: initialGuildQuests.isComplete(quest.name),
-      })),
-      completedActiveQuestNames: initialGuildQuests.completedActiveQuestNames(),
-      finishedQuestNames: initialGuildQuests.finishedQuestNames(),
-      usableQuestKeys: initialGuildQuests.activeQuests()
-        .map(({ questKey }) => questKey)
-        .filter((key): key is string => key !== undefined && initialGuildQuests.canUseQuestKey(key)),
-      notification: questNotificationHost?.debugState.questNotification,
-      queuedNotificationCount:
-        questNotificationHost?.debugState.queuedNotificationCount ??
-        pendingQuestNotifications.length,
-    });
+    guildQuestDebugState = () => {
+      // Dungeon terminal commits and Official adoption replace the runtime. Diagnostics must
+      // follow the same live aggregate as the Guild UI instead of retaining the boot snapshot.
+      const runtime = guildQuests;
+      if (runtime === undefined) throw new Error("Guild quest diagnostics lost their runtime");
+      return {
+        activeQuestNames: runtime.activeQuestNames(),
+        activeQuests: runtime.activeQuests().map((quest) => ({
+          name: quest.name,
+          title: guildQuestTitle(game.strings, quest),
+          progress: guildQuestProgress(game.strings, runtime, quest),
+          complete: runtime.isComplete(quest.name),
+        })),
+        completedActiveQuestNames: runtime.completedActiveQuestNames(),
+        finishedQuestNames: runtime.finishedQuestNames(),
+        usableQuestKeys: runtime.activeQuests()
+          .map(({ questKey }) => questKey)
+          .filter((key): key is string => key !== undefined && runtime.canUseQuestKey(key)),
+        notification: questNotificationHost?.debugState.questNotification,
+        queuedNotificationCount:
+          questNotificationHost?.debugState.queuedNotificationCount ??
+          pendingQuestNotifications.length,
+      };
+    };
   }
   const standalonePlayer = useWorldDemo
     ? undefined
@@ -1186,10 +1193,11 @@ async function boot(options: BootOptions = {}): Promise<void> {
       ...(pendingBattleRewardKeys === undefined ? {} : { pendingBattleRewardKeys }),
     };
   };
+  const localRewardCheckpoint = new LocalRewardCheckpoint<PlayerGameStateSnapshot | undefined>();
   const persistCheckpoint = async (
     override: { readonly dungeon?: DungeonRunSnapshot | null } = {},
   ): Promise<void> => {
-    const state = currentGameStateSnapshot(override);
+    const state = localRewardCheckpoint.snapshot(() => currentGameStateSnapshot(override));
     if (state === undefined) return;
     try {
       await saveSession.save(state);
@@ -3254,6 +3262,9 @@ async function boot(options: BootOptions = {}): Promise<void> {
       },
       onNotificationHostReady: attachQuestNotificationHost,
       onStateChanged: checkpoint,
+      ...(officialSlot === undefined ? {
+        beginLocalRewardCheckpoint: () => localRewardCheckpoint.begin(currentGameStateSnapshot()),
+      } : {}),
       openGoldStore: (parent, owner, runtime, checkpointAfter) => openGoldStoreHandoff(
         runtime,
         () => ({ parent, owner }),
@@ -4005,6 +4016,10 @@ async function boot(options: BootOptions = {}): Promise<void> {
 
 
   let startupBattleNode: BattleNode | undefined;
+  const revealRestoredScene = async (): Promise<void> => {
+    stopStartupModeSync();
+    await startup.finishTransition();
+  };
   /**
    * Rebuild the definition for an in-flight dungeon battle from the route the projection already
    * carries. The route names a mechanical dungeon file, never a resource, and the definition it
@@ -4261,6 +4276,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
       dungeonFeature.prepareAuthoritativeBattleReturn(reconnectDungeonBattleReturn);
       await dungeonFeature.restorePreparedAuthoritativeBattleReturn(
         reconnectDungeonBattleReturn.outcome,
+        revealRestoredScene,
       );
       pendingDungeonRestore = undefined;
     } else if (pendingDungeonRestore !== undefined) {
@@ -4269,6 +4285,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
       if (dungeonFeature === undefined) throw new Error("saved dungeon feature is unavailable");
       try {
         await dungeonFeature.restore(pendingDungeonRestore, {
+          onSceneReady: revealRestoredScene,
           presentationResume: options.presentationResumeMode === "dungeon",
           ...(restoredSave?.pendingBattleRewardKeys === undefined
             ? {}
@@ -4363,6 +4380,10 @@ async function boot(options: BootOptions = {}): Promise<void> {
 
 
 
+    if (officialSlot?.coordinator.projection.pendingEgg !== undefined) {
+      // The continuation needs player input; the boot shade cannot wait for its completion.
+      await revealRestoredScene();
+    }
     await runOfficialEggHatch({
       parent: stage.root,
       owner: scenes.current ?? stage.root,

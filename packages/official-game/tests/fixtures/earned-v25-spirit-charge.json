@@ -1,0 +1,707 @@
+{
+  "schemaVersion": 1,
+  "profile": {
+    "schemaVersion": 8,
+    "hero": {
+      "level": 8,
+      "totalHighestLevels": 215
+    },
+    "silver": 3253,
+    "gold": 80,
+    "inventory": {
+      "schemaVersion": 1,
+      "nextItemSequence": 6,
+      "looseItems": [
+        {
+          "kind": "gem",
+          "id": "item-4",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 7,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-3",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 7,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Speed"
+          ]
+        }
+      ],
+      "equippedGems": {
+        "0": {
+          "kind": "gem",
+          "id": "item-5",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 20,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Magic"
+          ]
+        }
+      }
+    },
+    "licenseType": "Apprentice",
+    "skillPoints": {
+      "MaxHP": 3,
+      "Attack": 3,
+      "Magic": 0,
+      "Speed": 2,
+      "Defense": 0,
+      "Resist": 0
+    },
+    "highestCapturedLevels": {
+      "BlueBabyDragon": 6,
+      "Bitewing": 11,
+      "BatSquirrel": 6,
+      "Sludge": 9,
+      "Mutation": 15,
+      "Wolf": 2,
+      "BlueDragonling": 16,
+      "Goblin": 12,
+      "Treehead": 13,
+      "GiantTurtle": 17,
+      "BabyNessie": 5,
+      "GiantAnt": 12,
+      "Slime": 12,
+      "FlameWing": 13,
+      "Bones": 19,
+      "Manticore": 18,
+      "Imp": 15,
+      "BeastKnight": 17,
+      "SunPriest": 16,
+      "DevilWorm": 19
+    },
+    "learnedCombineRecipes": [],
+    "tutorialFlags": [
+      "FirstCharacterDisplay",
+      "FirstGemFlash",
+      "FirstTavernFlash",
+      "RevistPOI",
+      "Tutorial0",
+      "Tutorial1",
+      "Tutorial2",
+      "Tutorial4",
+      "flashTownExit"
+    ],
+    "catchQuestsDone": [],
+    "dungeonWaypoints": {},
+    "infiniteDungeonHighestLevel": 0,
+    "tournament": {
+      "schemaVersion": 1,
+      "index": 0,
+      "round": 0,
+      "status": 0
+    },
+    "spiritEnergy": 0,
+    "spiritSavedXp": {
+      "Resistance": 265
+    },
+    "spiritsUsedThisTrip": [
+      "Resistance"
+    ]
+  },
+  "party": {
+    "schemaVersion": 1,
+    "battingOrderSize": 9,
+    "monsters": [
+      {
+        "instanceId": "monster-19",
+        "shortType": "DevilWorm",
+        "level": 19,
+        "cumulativeXp": 252791,
+        "currentHp": 224
+      },
+      {
+        "instanceId": "monster-13",
+        "shortType": "Bones",
+        "level": 19,
+        "cumulativeXp": 297374,
+        "currentHp": 196
+      },
+      {
+        "instanceId": "monster-18",
+        "shortType": "Manticore",
+        "level": 18,
+        "cumulativeXp": 201490,
+        "currentHp": 187
+      },
+      {
+        "instanceId": "monster-10",
+        "shortType": "GiantTurtle",
+        "level": 17,
+        "cumulativeXp": 161615,
+        "currentHp": 304
+      },
+      {
+        "instanceId": "monster-16",
+        "shortType": "BeastKnight",
+        "level": 17,
+        "cumulativeXp": 182863,
+        "currentHp": 218
+      },
+      {
+        "instanceId": "monster-1",
+        "shortType": "BlueDragonling",
+        "level": 16,
+        "cumulativeXp": 144926,
+        "currentHp": 241
+      },
+      {
+        "instanceId": "monster-17",
+        "shortType": "SunPriest",
+        "level": 16,
+        "cumulativeXp": 122213,
+        "currentHp": 176
+      },
+      {
+        "instanceId": "monster-6",
+        "shortType": "Mutation",
+        "level": 15,
+        "cumulativeXp": 121655,
+        "currentHp": 197
+      },
+      {
+        "instanceId": "monster-15",
+        "shortType": "Imp",
+        "level": 15,
+        "cumulativeXp": 94586,
+        "currentHp": 185
+      },
+      {
+        "instanceId": "monster-14",
+        "shortType": "Manticore",
+        "level": 14,
+        "cumulativeXp": 76405,
+        "currentHp": 150
+      },
+      {
+        "instanceId": "monster-2",
+        "shortType": "FlameWing",
+        "level": 13,
+        "cumulativeXp": 60833,
+        "currentHp": 178
+      },
+      {
+        "instanceId": "monster-9",
+        "shortType": "Treehead",
+        "level": 13,
+        "cumulativeXp": 65559,
+        "currentHp": 146
+      },
+      {
+        "instanceId": "monster-4",
+        "shortType": "Slime",
+        "level": 12,
+        "cumulativeXp": 42372,
+        "currentHp": 147
+      },
+      {
+        "instanceId": "monster-12",
+        "shortType": "GiantAnt",
+        "level": 12,
+        "cumulativeXp": 36115,
+        "currentHp": 131
+      },
+      {
+        "instanceId": "monster-8",
+        "shortType": "Goblin",
+        "level": 12,
+        "cumulativeXp": 47120,
+        "currentHp": 129
+      },
+      {
+        "instanceId": "monster-5",
+        "shortType": "Sludge",
+        "level": 6,
+        "cumulativeXp": 1909,
+        "currentHp": 55
+      },
+      {
+        "instanceId": "monster-3",
+        "shortType": "BatSquirrel",
+        "level": 6,
+        "cumulativeXp": 2077,
+        "currentHp": 44
+      },
+      {
+        "instanceId": "monster-11",
+        "shortType": "BabyNessie",
+        "level": 5,
+        "cumulativeXp": 945,
+        "currentHp": 62
+      }
+    ],
+    "ownedSoulStones": [
+      {
+        "element": "Earth",
+        "level": 3,
+        "sourceType": "Wolf"
+      }
+    ]
+  },
+  "quests": {
+    "schemaVersion": 1,
+    "activeQuestNames": [
+      "BeatRigel",
+      "BeatCyrus",
+      "CyrusBattle3"
+    ],
+    "finishedQuestNames": [
+      "MacworldCatch",
+      "Defeat20Monsters",
+      "Evolution",
+      "MakeASoulstone",
+      "CatchBabyNessie",
+      "AntSwarmBattle",
+      "ChristaBattle",
+      "CyrusBattle2",
+      "FionaBattle",
+      "MazarineBattle",
+      "GoToDundean"
+    ],
+    "progressByQuestName": {},
+    "dialogsSeen": [
+      "AdinaIntro1",
+      "Christa",
+      "ChristaDefeated",
+      "Cyrus2",
+      "Cyrus3",
+      "CyrusDefeated2",
+      "DrakeDefeated",
+      "Enya",
+      "EnyaDefeated",
+      "EnyaIntro1",
+      "EnyaIntro2",
+      "Fiona",
+      "FionaDefeated",
+      "Giselle",
+      "GiselleDefeated",
+      "GiselleIntro1",
+      "GiselleIntro2",
+      "Harald",
+      "HaraldDefeated",
+      "Jubal",
+      "JubalIntro1",
+      "Leslie",
+      "LeslieFindDragon",
+      "LeslieFindDragon2",
+      "LeslieIntro1",
+      "LeslieIntro10",
+      "LeslieIntro13",
+      "LeslieIntro2",
+      "LeslieIntro2.5",
+      "LeslieIntro3",
+      "LeslieIntro4",
+      "LeslieIntro5",
+      "LeslieIntro5.5",
+      "LeslieIntro7",
+      "LeslieIntro8",
+      "LeslieIntro9",
+      "LeslieSaved",
+      "Mazarine",
+      "MazarineDefeated",
+      "Rigel",
+      "al-RashidIntro1"
+    ],
+    "completedFixedEncounterKeys": [],
+    "receivedBattleRewardKeys": [
+      "BeatMazarine"
+    ]
+  },
+  "location": {
+    "kind": "battle",
+    "worldId": "World_2-3",
+    "poiId": "2-3_Forest_1",
+    "battleId": "battle-146"
+  },
+  "world": {
+    "schemaVersion": 1,
+    "worldId": "World_2-3",
+    "currentPoiId": "2-3_Forest_1",
+    "lastTownId": "Valley_City",
+    "dayNumber": 27,
+    "occurrenceByPoi": {
+      "2-3_Field_14": false,
+      "2-3_Field_15": false,
+      "2-3_Field_16": false
+    },
+    "completedPoiIds": [
+      "2-3_Field_14",
+      "2-3_Field_15",
+      "2-3_Field_16",
+      "Valley_City"
+    ],
+    "poiWins": {
+      "1-1_Beach_1": 47,
+      "1-1_Field_1": 4,
+      "1-1_Field_2": 2,
+      "1-1_Field_3": 2,
+      "1-1_Field_4": 1,
+      "1-2_Field_1": 2,
+      "1-2_Field_3": 1,
+      "1-2_Field_4": 5,
+      "1-2_Field_5": 2,
+      "1-2_Field_6": 1,
+      "1-2_Field_7": 1,
+      "1-3_Field_1": 1,
+      "2-3_Field_10": 3,
+      "2-3_Field_11": 3,
+      "2-3_Field_14": 1,
+      "2-3_Field_15": 2,
+      "2-3_Field_16": 2,
+      "2-3_Field_8": 2,
+      "Breeder_Hut_3": 1
+    },
+    "everCompletedPoiIds": [
+      "1-1_Beach_1",
+      "1-1_Field_1",
+      "1-1_Field_2",
+      "1-1_Field_3",
+      "1-1_Field_4",
+      "1-1_Turtorial_Hut_1",
+      "1-1_Zone_Change_1",
+      "1-1_Zone_Change_2",
+      "1-2_Field_1",
+      "1-2_Field_2",
+      "1-2_Field_3",
+      "1-2_Field_4",
+      "1-2_Field_5",
+      "1-2_Field_6",
+      "1-2_Field_7",
+      "1-2_Zone_Change_1",
+      "1-2_Zone_Change_2",
+      "1-2_Zone_Change_3",
+      "1-2_Zone_Change_4",
+      "1-3_Field_1",
+      "1-3_Zone_Change_1",
+      "1-3_Zone_Change_2",
+      "2-2_Zone_Change_1",
+      "2-3_Field_10",
+      "2-3_Field_11",
+      "2-3_Field_14",
+      "2-3_Field_15",
+      "2-3_Field_16",
+      "2-3_Field_8",
+      "2-3_Zone_Change_1",
+      "Breeder_Hut_3",
+      "Capital_City",
+      "Dungeon_1",
+      "Dungeon_4",
+      "First_City",
+      "Valley_City"
+    ],
+    "visitedTownIds": [
+      "Capital_City",
+      "First_City",
+      "Valley_City"
+    ]
+  },
+  "battle": {
+    "schemaVersion": 1,
+    "battleId": "battle-146",
+    "origin": {
+      "kind": "world",
+      "worldId": "World_2-3",
+      "poiId": "2-3_Forest_1"
+    },
+    "encounter": {
+      "kind": "world",
+      "generated": {
+        "kind": "fixed",
+        "poiName": "2-3_Forest_1",
+        "forced": false,
+        "tableKey": "1",
+        "poiWinsBeforeEncounter": 0,
+        "challengeLevel": 15,
+        "monsters": [
+          {
+            "type": "FlameWing",
+            "level": 18
+          },
+          {
+            "type": "FairyQueen",
+            "level": 18
+          },
+          {
+            "type": "FlameWing",
+            "level": 18
+          },
+          {
+            "type": "FireCub",
+            "level": 22
+          },
+          {
+            "type": "SnowCub",
+            "level": 22
+          },
+          {
+            "type": "IceYeti",
+            "level": 22
+          },
+          {
+            "type": "SteelSnake",
+            "level": 22
+          }
+        ],
+        "questKey": "BeatCyrus3",
+        "startEvent": {
+          "className": "ChatGameFlowEvent",
+          "chat": {
+            "name": "Cyrus3",
+            "alwaysShow": true,
+            "messageKeys": []
+          }
+        },
+        "winEvent": {
+          "className": "ChatGameFlowEvent",
+          "chat": {
+            "name": "CyrusDefeated3",
+            "alwaysShow": true,
+            "messageKeys": []
+          }
+        },
+        "breeder": {
+          "type": "Normal",
+          "arguments": {
+            "stats": {
+              "MaxHP": 5
+            },
+            "xpBonus": 3
+          }
+        }
+      },
+      "allowRetreat": true,
+      "breederXpBonus": 3,
+      "rewards": []
+    },
+    "replay": {
+      "schemaVersion": 1,
+      "randomDraws": [
+        0.041293771842664695,
+        0.494505467872814,
+        0.5997064215679399,
+        0.8166613490739688,
+        0.35157278741128395,
+        0.16741159636449598,
+        0.5978367427598203,
+        0.35498787744754445,
+        0.8228408564882965,
+        0.6229159749320862,
+        0.20711774220650336,
+        0.31815948646860237,
+        0.602074196266341,
+        0.42488876318535407,
+        0.9497263179117372,
+        0.6422046974315309,
+        0.10017446554590592,
+        0.5765149117006583,
+        0.6707907849593718,
+        0.6490262540634749,
+        0.2714935223415531,
+        0.12574747326437818,
+        0.1744949267816932
+      ],
+      "teams": [
+        [
+          {
+            "shortType": "DevilWorm",
+            "level": 19,
+            "currentHp": 224,
+            "sourceInstanceId": "monster-19",
+            "playerBuffs": {
+              "MaxHP": 3,
+              "Attack": 3,
+              "Magic": 20,
+              "Speed": 2
+            }
+          },
+          {
+            "shortType": "Bones",
+            "level": 19,
+            "currentHp": 196,
+            "sourceInstanceId": "monster-13",
+            "playerBuffs": {
+              "MaxHP": 3,
+              "Attack": 3,
+              "Magic": 20,
+              "Speed": 2
+            }
+          },
+          {
+            "shortType": "Manticore",
+            "level": 18,
+            "currentHp": 187,
+            "sourceInstanceId": "monster-18",
+            "playerBuffs": {
+              "MaxHP": 3,
+              "Attack": 3,
+              "Magic": 20,
+              "Speed": 2
+            }
+          },
+          {
+            "shortType": "GiantTurtle",
+            "level": 17,
+            "currentHp": 304,
+            "sourceInstanceId": "monster-10",
+            "playerBuffs": {
+              "MaxHP": 3,
+              "Attack": 3,
+              "Magic": 20,
+              "Speed": 2
+            }
+          },
+          {
+            "shortType": "BeastKnight",
+            "level": 17,
+            "currentHp": 218,
+            "sourceInstanceId": "monster-16",
+            "playerBuffs": {
+              "MaxHP": 3,
+              "Attack": 3,
+              "Magic": 20,
+              "Speed": 2
+            }
+          },
+          {
+            "shortType": "BlueDragonling",
+            "level": 16,
+            "currentHp": 241,
+            "sourceInstanceId": "monster-1",
+            "playerBuffs": {
+              "MaxHP": 3,
+              "Attack": 3,
+              "Magic": 20,
+              "Speed": 2
+            }
+          },
+          {
+            "shortType": "SunPriest",
+            "level": 16,
+            "currentHp": 176,
+            "sourceInstanceId": "monster-17",
+            "playerBuffs": {
+              "MaxHP": 3,
+              "Attack": 3,
+              "Magic": 20,
+              "Speed": 2
+            }
+          },
+          {
+            "shortType": "Mutation",
+            "level": 15,
+            "currentHp": 197,
+            "sourceInstanceId": "monster-6",
+            "playerBuffs": {
+              "MaxHP": 3,
+              "Attack": 3,
+              "Magic": 20,
+              "Speed": 2
+            }
+          },
+          {
+            "shortType": "Imp",
+            "level": 15,
+            "currentHp": 185,
+            "sourceInstanceId": "monster-15",
+            "playerBuffs": {
+              "MaxHP": 3,
+              "Attack": 3,
+              "Magic": 20,
+              "Speed": 2
+            }
+          }
+        ],
+        [
+          {
+            "shortType": "FlameWing",
+            "level": 18,
+            "flatStatBonuses": {
+              "MaxHP": 5
+            },
+            "capturable": false
+          },
+          {
+            "shortType": "FairyQueen",
+            "level": 18,
+            "flatStatBonuses": {
+              "MaxHP": 5
+            },
+            "capturable": false
+          },
+          {
+            "shortType": "FlameWing",
+            "level": 18,
+            "flatStatBonuses": {
+              "MaxHP": 5
+            },
+            "capturable": false
+          },
+          {
+            "shortType": "FireCub",
+            "level": 22,
+            "flatStatBonuses": {
+              "MaxHP": 5
+            },
+            "capturable": false
+          },
+          {
+            "shortType": "SnowCub",
+            "level": 22,
+            "flatStatBonuses": {
+              "MaxHP": 5
+            },
+            "capturable": false
+          },
+          {
+            "shortType": "IceYeti",
+            "level": 22,
+            "flatStatBonuses": {
+              "MaxHP": 5
+            },
+            "capturable": false
+          },
+          {
+            "shortType": "SteelSnake",
+            "level": 22,
+            "flatStatBonuses": {
+              "MaxHP": 5
+            },
+            "capturable": false
+          }
+        ]
+      ],
+      "options": {
+        "fightingGroupSize": 3,
+        "silver": 3253
+      },
+      "commands": [
+        {
+          "type": "summonSpirit",
+          "actorId": "t0m0:DevilWorm",
+          "shortType": "Resistance",
+          "savedXp": 232
+        }
+      ]
+    }
+  },
+  "nextMonsterSequence": 20,
+  "nextBattleSequence": 147,
+  "collectionClaims": {
+    "schemaVersion": 1,
+    "claimedGoalIds": []
+  },
+  "nextContinuationSequence": 31
+}

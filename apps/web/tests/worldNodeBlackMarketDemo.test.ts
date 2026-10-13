@@ -128,7 +128,7 @@ function makeNodeFixture() {
       imageLoader: image.loader,
       opener: { open } satisfies ExternalPageOpener,
     },
-    authority,
+    authority: { ...authority, egg: { pendingEgg: () => undefined } },
     onStateChanged,
   };
   const construct = WorldNode as unknown as new (deps: never) => WorldNode;

@@ -332,6 +332,39 @@ describe("M7: reducer faults are certain non-commits", () => {
 });
 
 describe("official-game-v25 source story rules", () => {
+  it("commits earned post-summon spirit recharge without corrupting the integer projection", () => {
+    const state = JSON.parse(readFileSync(new URL("./fixtures/earned-v25-spirit-charge.json", import.meta.url), "utf8")) as OfficialGameStateV24;
+    const result = apply(V25, state, { type: "battle.chooseAbility", battleId: "battle-146",
+      actorId: "t0m0:DevilWorm", slot: "usable1", targetIds: ["t1m0:FlameWing"] });
+    expect(result.state.profile.spiritEnergy).toBeGreaterThan(0);
+    expect(Number.isInteger(result.state.profile.spiritEnergy)).toBe(true);
+    expect(result.projection.player.spirit.energy).toBe(result.state.profile.spiritEnergy);
+    expect(result.projection).toEqual(v25.projectPersistedState(result.state));
+    // Which automatic attacks land changes the recharge total. Every valid integer must survive
+    // the persisted projection path, including 7/14/28/29/56/57/58 percentage-round-trip edges.
+    for (let energy = 0; energy <= 100; energy++) {
+      const charged = { ...result.state, profile: { ...result.state.profile, spiritEnergy: energy } };
+      expect(v25.projectPersistedState(charged).player.spirit.energy).toBe(energy);
+    }
+  });
+
+  it("projects a fainted participant's durable stats after earned victory and XP", () => {
+    // Captured from ordinary Official browser play: Giant Wasp poisoned Enya's dragon, Wolf
+    // fainted, then Blue Baby Dragon's Water Mother ended the encounter. No credential/record
+    // envelope is retained. The live dead Wolf has lost its player buff; durable restore reapplies
+    // the profile's MaxHP skill, as it already does between every authoritative command.
+    const state = JSON.parse(readFileSync(new URL("./fixtures/earned-v25-enya-terminal.json", import.meta.url), "utf8")) as OfficialGameStateV24;
+    const result = apply(V25, state, { type: "battle.chooseAbility", battleId: "battle-4",
+      actorId: "t0m0:BlueBabyDragon", slot: "usable2", targetIds: ["t1m0:RedBabyDragon"] });
+    expect(result.events).toContainEqual({ type: "battle.ended", battleId: "battle-4", outcome: "victory" });
+    expect(result.projection.player.party.find(monster => monster.shortType === "Wolf"))
+      .toMatchObject({ hp: 0, level: 2, maxHp: 39 });
+    expect(result.projection).toEqual(v25.projectPersistedState(result.state));
+    // The fix must not heal/revive the dead participant or alter its earned XP.
+    expect(result.state.party.monsters.find(monster => monster.shortType === "Wolf"))
+      .toMatchObject({ currentHp: 0, level: 2, cumulativeXp: 191 });
+  });
+
   it("is a distinct current identity with the unchanged v24 command allowlist", () => {
     expect(pack25.simulationVersion).toBe(OFFICIAL_GAME_V25_SIMULATION_VERSION);
     expect(pack25.capabilities.commandTypes).toEqual(pack24.capabilities.commandTypes);

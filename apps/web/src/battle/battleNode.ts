@@ -1630,13 +1630,14 @@ export class BattleNode {
         resolve({ kind: "cancelled" });
       };
       const finish = (choice: PlayerChoice, targets: string[]): void => {
-        if (settled || this.multiplayer?.busy) return;
+        if (settled || this.multiplayer?.busy || this.spiritSelectionPending) return;
         settled = true;
         clearPendingCancel();
         resolve({ kind: "ability", choice, targets });
       };
 
       this.panel.onPick((choice, via, gestureMidpoint) => {
+        if (this.spiritSelectionPending) return;
         // Tap reaches here only for self-targeting (auto-queued, no picker); swipe reaches here for
         // any swipeable ability and fires against the ability's default valid target(s), which the
         // panel has no data to resolve (monsterTurnPanel.ts's handleSwipe doc) — resolved here.
@@ -1655,7 +1656,7 @@ export class BattleNode {
         finish(choice, targets);
       });
       this.panel.onNeedsTargets((choice) => {
-        if (settled || this.multiplayer?.busy) return;
+        if (settled || this.multiplayer?.busy || this.spiritSelectionPending) return;
         this.picking = true;
         this.friendlyDisplay.setSummonSelectMode(true);
         this.setPresentationState("targetPicking");
@@ -1706,7 +1707,7 @@ export class BattleNode {
         // A panel build resolves assets asynchronously, so never trust a rendered hit proxy as
         // authority. `capturePressed:` still opens the chooser for nonzero capture status;
         // `capture:` owns the final rejection without spending a card.
-        if (!this.activeCapturePopup && this.capturePopupKind === null && !settled) {
+        if (!this.activeCapturePopup && this.capturePopupKind === null && !settled && !this.spiritSelectionPending) {
           void this.openCaptureChooser(
             step.actorId,
             targetId,
@@ -1726,7 +1727,7 @@ export class BattleNode {
         }
       });
       this.panel.onDelayTap(() => {
-        if (settled || this.multiplayer?.busy || this.secondaryPopupKind !== null) return;
+        if (settled || this.multiplayer?.busy || this.spiritSelectionPending || this.secondaryPopupKind !== null) return;
         const commit = (): void => {
           if (settled) return;
           this.hasConfirmedSkip = true;
@@ -1741,6 +1742,7 @@ export class BattleNode {
         }
       });
       this.panel.onRetreatTap(() => {
+        if (this.spiritSelectionPending) return;
         if (this.multiplayer) { this.requestMultiplayerForfeit(); return; }
         if (settled || this.secondaryPopupKind !== null) return;
         if (this.encounter.allowRetreat !== true) {
@@ -2424,6 +2426,7 @@ export class BattleNode {
 
   private readonly handleKeyboardShortcut = ({ key }: Pick<KeyboardShortcut, "key">): boolean => {
     if (!this.keyboardActive || !this.built) return false;
+    if (this.spiritSelectionPending) return true;
     if (key === "escape") {
 
 
@@ -3255,8 +3258,13 @@ export class BattleNode {
     events: readonly BattleEvent[],
     assetWarmups: ReadonlyMap<string, Promise<void>> = new Map(),
   ): Promise<void> {
+    // Reincarnation emits monsterAdded while the row is full, then sacrifices its caster. The
+    // session already exposes the final promoted roster during this replay. Do not mistake that
+    // later promotion for an immediate field join: handleDeaths must free the outgoing display
+    // (and its color slot) before reconciling additions. Register identity/assets here regardless.
+    const deferAddedDisplays = events.some((event) => event.type === "died" || event.type === "captured");
     for (const e of events) {
-      if (e.type === "monsterAdded") await this.handleMonsterAdded(e, assetWarmups.get(e.shortType));
+      if (e.type === "monsterAdded") await this.handleMonsterAdded(e, assetWarmups.get(e.shortType), deferAddedDisplays);
       else if (e.type === "switched") this.handleSwitched(e);
       else if (e.type === "summonChanged") {
         await this.handleSummonChanged(
@@ -3334,6 +3342,7 @@ export class BattleNode {
   private async handleMonsterAdded(
     e: Extract<BattleEvent, { type: "monsterAdded" }>,
     assetWarmup?: Promise<void>,
+    deferFieldPresentation = false,
   ): Promise<void> {
     // Info popups / ability-info / view-party all resolve identity through the roster registry —
     // a summon must be registered before any of those can be tapped for it.
@@ -3344,6 +3353,7 @@ export class BattleNode {
     this.hp.set(e.living, this.session.hpOf(e.living));
     await (assetWarmup ?? this.preloadDynamicRosterType(e.shortType));
     if (this.lifecycle.disposed) return;
+    if (deferFieldPresentation) return;
     // `Team.addNewMonster:` bench-appends first; the front line only gains the summon when a slot
     // was open (components-full.md §1). A BENCHED summon (full front line) must not appear on the
     // field — its assets are still loaded above so a later death-promotion (handleDeaths' roster
@@ -3749,6 +3759,9 @@ export class BattleNode {
 
   private async selectSpirit(item: SpiritMenuItemModel): Promise<void> {
     if (item.kind !== "spirit" || item.shortType === undefined || this.spiritSelectionPending) return;
+    // The committed living enters the engine before async texture/card registration completes.
+    // Keep the current player decision owned until both the display and TU entry exist; native
+    // construction is synchronous, so it never exposes this intermediate targetable-id hole.
     this.spiritSelectionPending = true;
     try {
       // Native order: Team.setSummon first, then Player.spiritSummoned (+33 XP/spend/lock), then

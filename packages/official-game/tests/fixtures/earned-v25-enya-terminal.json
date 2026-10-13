@@ -1,0 +1,340 @@
+{
+  "schemaVersion": 1,
+  "profile": {
+    "schemaVersion": 8,
+    "hero": {
+      "level": 1,
+      "totalHighestLevels": 4
+    },
+    "silver": 1000,
+    "gold": 100,
+    "inventory": {
+      "schemaVersion": 1,
+      "nextItemSequence": 3,
+      "looseItems": [],
+      "equippedGems": {}
+    },
+    "licenseType": "Novice",
+    "skillPoints": {
+      "MaxHP": 1,
+      "Attack": 0,
+      "Magic": 0,
+      "Speed": 0,
+      "Defense": 0,
+      "Resist": 0
+    },
+    "highestCapturedLevels": {
+      "BlueBabyDragon": 2,
+      "GiantWasp": 1,
+      "Wolf": 1
+    },
+    "learnedCombineRecipes": [],
+    "tutorialFlags": [
+      "FirstTavernFlash",
+      "Tutorial0",
+      "Tutorial1",
+      "Tutorial2",
+      "Tutorial4",
+      "flashTownExit"
+    ],
+    "catchQuestsDone": [],
+    "dungeonWaypoints": {},
+    "infiniteDungeonHighestLevel": 0,
+    "tournament": {
+      "schemaVersion": 1,
+      "index": 0,
+      "round": 0,
+      "status": 0
+    },
+    "spiritEnergy": 100,
+    "spiritSavedXp": {},
+    "spiritsUsedThisTrip": []
+  },
+  "party": {
+    "schemaVersion": 1,
+    "battingOrderSize": 5,
+    "monsters": [
+      {
+        "instanceId": "monster-1",
+        "shortType": "BlueBabyDragon",
+        "level": 2,
+        "cumulativeXp": 180,
+        "currentHp": 44
+      },
+      {
+        "instanceId": "monster-3",
+        "shortType": "Wolf",
+        "level": 1,
+        "cumulativeXp": 27,
+        "currentHp": 22
+      },
+      {
+        "instanceId": "monster-2",
+        "shortType": "GiantWasp",
+        "level": 1,
+        "cumulativeXp": 27,
+        "currentHp": 28
+      }
+    ],
+    "ownedSoulStones": []
+  },
+  "quests": {
+    "schemaVersion": 1,
+    "activeQuestNames": [
+      "Defeat20Monsters",
+      "BeatRigel",
+      "BeatCyrus"
+    ],
+    "finishedQuestNames": [
+      "MacworldCatch"
+    ],
+    "progressByQuestName": {
+      "Defeat20Monsters": {
+        "quantity": 1
+      }
+    },
+    "dialogsSeen": [
+      "Enya",
+      "Leslie",
+      "LeslieIntro1",
+      "LeslieIntro2",
+      "LeslieIntro2.5",
+      "LeslieSaved"
+    ],
+    "completedFixedEncounterKeys": [],
+    "receivedBattleRewardKeys": []
+  },
+  "location": {
+    "kind": "battle",
+    "worldId": "World_1-1",
+    "poiId": "1-1_Field_3",
+    "battleId": "battle-4"
+  },
+  "world": {
+    "schemaVersion": 1,
+    "worldId": "World_1-1",
+    "currentPoiId": "1-1_Field_3",
+    "lastTownId": "First_City",
+    "dayNumber": 3,
+    "occurrenceByPoi": {
+      "1-1_Field_1": false,
+      "1-1_Field_2": true
+    },
+    "completedPoiIds": [
+      "1-1_Field_1",
+      "1-1_Field_2",
+      "1-1_Turtorial_Hut_1",
+      "First_City"
+    ],
+    "poiWins": {
+      "1-1_Field_1": 2,
+      "1-1_Field_2": 1
+    },
+    "everCompletedPoiIds": [
+      "1-1_Field_1",
+      "1-1_Field_2",
+      "1-1_Turtorial_Hut_1",
+      "First_City"
+    ],
+    "visitedTownIds": [
+      "First_City"
+    ]
+  },
+  "battle": {
+    "schemaVersion": 1,
+    "battleId": "battle-4",
+    "origin": {
+      "kind": "world",
+      "worldId": "World_1-1",
+      "poiId": "1-1_Field_3"
+    },
+    "encounter": {
+      "kind": "world",
+      "generated": {
+        "kind": "fixed",
+        "poiName": "1-1_Field_3",
+        "forced": false,
+        "tableKey": "1",
+        "poiWinsBeforeEncounter": 0,
+        "challengeLevel": 2,
+        "monsters": [
+          {
+            "type": "RedBabyDragon",
+            "level": 2
+          }
+        ],
+        "achievement": "DIBlueEnya",
+        "startEvent": {
+          "className": "ChatGameFlowEvent",
+          "chat": {
+            "name": "Enya",
+            "alwaysShow": true,
+            "messageKeys": []
+          }
+        },
+        "winEvent": {
+          "className": "ChatGameFlowEvent",
+          "chat": {
+            "name": "EnyaDefeated",
+            "alwaysShow": true,
+            "messageKeys": []
+          }
+        },
+        "breeder": {
+          "type": "Normal",
+          "arguments": {
+            "stats": {
+              "MaxHP": 1
+            },
+            "xpBonus": 6
+          }
+        },
+        "rewards": [
+          {
+            "kind": "gem",
+            "level": 7,
+            "quality": 0,
+            "slot": 0,
+            "enabledStats": [
+              "Magic"
+            ]
+          }
+        ]
+      },
+      "allowRetreat": true,
+      "breederXpBonus": 6,
+      "rewards": [
+        {
+          "kind": "gem",
+          "level": 7,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Magic"
+          ]
+        }
+      ]
+    },
+    "replay": {
+      "schemaVersion": 1,
+      "randomDraws": [
+        0.7113369208808593,
+        0.7679410978297905,
+        0.7285739814035527,
+        0.9267951718441768,
+        0.4587884710524933,
+        0.9692379089240316,
+        0.19682182632788447,
+        0.7839333603145153,
+        0.9759619266306515,
+        0.3581386023428841,
+        0.38414144148591634,
+        0.40868274406364113,
+        0.7234826254140776,
+        0.4792310998106988,
+        0.6149692932803296,
+        0.4773326472758219,
+        0.21823391825679783,
+        0.4059367750001268,
+        0.08712739416617099,
+        0.34708105482107,
+        0.6755825576439889,
+        0.8328245580132637
+      ],
+      "teams": [
+        [
+          {
+            "shortType": "BlueBabyDragon",
+            "level": 2,
+            "currentHp": 44,
+            "sourceInstanceId": "monster-1",
+            "playerBuffs": {
+              "MaxHP": 1
+            }
+          },
+          {
+            "shortType": "Wolf",
+            "level": 1,
+            "currentHp": 22,
+            "sourceInstanceId": "monster-3",
+            "playerBuffs": {
+              "MaxHP": 1
+            }
+          },
+          {
+            "shortType": "GiantWasp",
+            "level": 1,
+            "currentHp": 28,
+            "sourceInstanceId": "monster-2",
+            "playerBuffs": {
+              "MaxHP": 1
+            }
+          }
+        ],
+        [
+          {
+            "shortType": "RedBabyDragon",
+            "level": 2,
+            "flatStatBonuses": {
+              "MaxHP": 1
+            },
+            "capturable": false
+          }
+        ]
+      ],
+      "options": {
+        "fightingGroupSize": 3,
+        "silver": 1000
+      },
+      "commands": [
+        {
+          "type": "ability",
+          "actorId": "t0m2:GiantWasp",
+          "slot": "usable1",
+          "targetIds": [
+            "t1m0:RedBabyDragon"
+          ]
+        },
+        {
+          "type": "ability",
+          "actorId": "t0m0:BlueBabyDragon",
+          "slot": "usable1",
+          "targetIds": [
+            "t1m0:RedBabyDragon"
+          ]
+        },
+        {
+          "type": "ability",
+          "actorId": "t0m1:Wolf",
+          "slot": "usable1",
+          "targetIds": [
+            "t1m0:RedBabyDragon"
+          ]
+        },
+        {
+          "type": "ability",
+          "actorId": "t0m0:BlueBabyDragon",
+          "slot": "usable1",
+          "targetIds": [
+            "t1m0:RedBabyDragon"
+          ]
+        },
+        {
+          "type": "ability",
+          "actorId": "t0m2:GiantWasp",
+          "slot": "usable1",
+          "targetIds": [
+            "t1m0:RedBabyDragon"
+          ]
+        }
+      ]
+    }
+  },
+  "nextMonsterSequence": 4,
+  "nextBattleSequence": 5,
+  "collectionClaims": {
+    "schemaVersion": 1,
+    "claimedGoalIds": []
+  },
+  "nextContinuationSequence": 5
+}

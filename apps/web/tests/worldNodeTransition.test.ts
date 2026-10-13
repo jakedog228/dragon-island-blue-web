@@ -21,6 +21,59 @@ class TransitionTicker {
 }
 
 describe("WorldNode inter-world marker transition", () => {
+  it("releases the Official input lock on refusal and preserves the actual navigation failure", async () => {
+    const poi = { name: "Field", randomPopulators: [] };
+    const receiver = {
+      locked: false, walking: false, modalOpening: false, hasModal: () => false,
+      transitionFailure: undefined, requirePoi: () => poi,
+      deps: { trip: { currentPoiName: "Field", poiState: () => 0, navigate: vi.fn() },
+        authority: { navigate: vi.fn(async () => { throw new Error("navigation refused"); }) },
+        party: { projectAliveBattingPrefix: () => [{ level: 5 }] },
+        poiRouting: { route: () => ({ kind: "navigate" }) }, audio: { playSfx: vi.fn() } },
+      cancelMovement: vi.fn(), settleMarkerAt: vi.fn(),
+    };
+    const tap = (WorldNode.prototype as unknown as { handlePoiTap(this: typeof receiver, name: string): Promise<void> }).handlePoiTap;
+    await tap.call(receiver, "Field");
+    expect(receiver.locked).toBe(false);
+    expect(receiver.transitionFailure).toEqual({ route: "navigate Field", message: "navigation refused" });
+    expect(receiver.deps.trip.navigate).not.toHaveBeenCalled();
+    expect(receiver.settleMarkerAt).toHaveBeenCalledWith(poi, true);
+  });
+
+  it.each(["town", "field"])("keeps Official %s navigation locked until its response commits", async (kind) => {
+    const previous = { name: "Before", position: { x: 0, y: 0 }, randomPopulators: [] };
+    const target = { name: "After", position: { x: 10, y: 0 }, randomPopulators: [] };
+    let resolve!: (value: { movement: "walk"; randomDraws: number[] }) => void;
+    const pending = new Promise<{ movement: "walk"; randomDraws: number[] }>(done => { resolve = done; });
+    const navigate = vi.fn((_name: string, accepted: () => void) => { accepted(); return pending; });
+    const localNavigate = vi.fn(() => ({ kind: "none", reason: "no-encounter-table", movement: { kind: "walk", adjacent: true } }));
+    const receiver = {
+      locked: false, walking: false, modalOpening: false, hasModal: () => false,
+      transitionFailure: undefined, requirePoi: (name: string) => name === "Before" ? previous : target,
+      deps: { trip: { currentPoiName: "Before", poiState: () => 0, navigate: localNavigate },
+        authority: { navigate }, party: { projectAliveBattingPrefix: () => [{ level: 5 }] },
+        world: { connections: [{ poi1: "Before", poi2: "After" }] },
+        poiRouting: { route: () => kind === "town"
+          ? { kind: "scene", sceneId: "town", arrivalPresentation: "immediate-hidden-marker" } : { kind: "navigate" } },
+        onStateChanged: vi.fn(), onSceneRequest: vi.fn(), audio: { playSfx: vi.fn() } },
+      // Completing reversible geometry must not release the authoritative command's input lock.
+      playMovement: vi.fn(async () => ({ kind: "completed" })), refreshPoiStates: vi.fn(),
+      cancelMovement: vi.fn(), settleMarkerAt: vi.fn(), dispatchOwnedTransition: vi.fn(),
+    };
+    const tap = (WorldNode.prototype as unknown as { handlePoiTap(this: typeof receiver, name: string): Promise<void> }).handlePoiTap;
+    const first = tap.call(receiver, "After");
+    await Promise.resolve();
+    const lockedDuringRequest = receiver.locked;
+    const second = tap.call(receiver, "After");
+    resolve({ movement: "walk", randomDraws: [] });
+    await Promise.all([first, second]);
+    expect(lockedDuringRequest).toBe(true);
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(localNavigate).toHaveBeenCalledTimes(1);
+    expect(receiver.transitionFailure).toBeUndefined();
+    expect(receiver.locked).toBe(kind === "town");
+  });
+
   it("starts the hidden marker's 0.5-second fade only when the transition owner releases it", async () => {
     const ticker = new TransitionTicker();
     const marker = { visible: false, alpha: 0, destroyed: false };

@@ -10454,10 +10454,21 @@ export class OfficialGameV25Reducer implements GameCommandReducer<
   ): CommandReducerResult<OfficialGameStateV25, OfficialGameProjectionBodyV25> {
     this.requireV25Pack(context.pack);
     const result = this.v24.applyForV25({ ...context, pack: this.v24Pack }, command);
+    const projection = projectOfficialGameStateV25(result.projection);
+    // Battle teardown removes permanent player buffs from members that left the Team. Those
+    // children are intentionally not serialized; the authority's existing restore path reapplies
+    // the profile on its next command. Publish the durable party view at this boundary rather
+    // than the transient teardown view (a fainted member's maxHp can otherwise disagree and
+    // reject an earned victory as STATE_CORRUPT). State, events, RNG and settlement stay unchanged.
+    const terminalParty = result.events.some(event => event.type === "battle.ended")
+      ? this.projectPersistedState(result.state).player.party
+      : undefined;
     return {
       ...result,
       state: result.state,
-      projection: projectOfficialGameStateV25(result.projection),
+      projection: terminalParty === undefined ? projection : {
+        ...projection, player: { ...projection.player, party: terminalParty },
+      },
     };
   }
 }

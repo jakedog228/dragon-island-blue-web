@@ -342,6 +342,8 @@ export interface WorldNodeDeps {
   onNotificationHostReady?: (host: WorldNotificationHost) => void;
   /** App-owned checkpoint hook after WorldTrip accepts a POI move and updates its caches. */
   onStateChanged: () => void;
+  /** Offline autosave boundary for a claim whose items are still in modal presentation. */
+  beginLocalRewardCheckpoint?: () => (() => void);
   /** Director-level category-3 Store mount for an unaffordable paid Egg repeat. */
   openGoldStore: (
     parent: Container,
@@ -1168,6 +1170,7 @@ export class WorldNode {
     this.activePartyEditor?.update(deltaMs);
     this.activeMonsterpedia?.update(deltaMs);
     this.activeCollection?.update(deltaMs);
+    this.flushDeferredTownEntryNotifications();
     if (
       !this.drainingLegacyEggs &&
       this.deps.authority === undefined &&
@@ -1282,7 +1285,9 @@ export class WorldNode {
         localizedRenderableName(this.deps.game.strings, [display.poi.name]),
         "townNamePlate",
       );
-      this.startTownTutorialFlash(townDisplay);
+      this.scheduleTownEntryNotifications(() => {
+        if (this.activeTown?.poi.name === poiName) this.startTownTutorialFlash(townDisplay);
+      });
       if (this.townMenuAbort === menuAbort) this.townMenuAbort = undefined;
       return;
     }
@@ -1376,8 +1381,11 @@ export class WorldNode {
 
 
 
-      void this.presentTownEnterChat(townDefinition.enterChats);
-      this.startTownTutorialFlash(townDisplay);
+      this.scheduleTownEntryNotifications(() => {
+        if (this.activeTown?.poi.name !== poiName) return;
+        void this.presentTownEnterChat(townDefinition.enterChats);
+        this.startTownTutorialFlash(townDisplay);
+      });
       if (this.townMenuAbort === menuAbort) this.townMenuAbort = undefined;
     })();
   }
@@ -2795,10 +2803,13 @@ export class WorldNode {
                   event.type === "player.monsterAdded" && event.reason === "reward"
                     ? [event.instanceId]
                     : []);
-                return () => this.presentQuestRewards(quest, reward.rewards, joinedIds);
+                return (onPresented: () => void) => this.presentQuestRewards(quest, reward.rewards, joinedIds, onPresented);
               },
             }),
-        onClaimReward: (quest) => this.presentQuestRewards(quest),
+        onClaimReward: (quest, onPresented) => this.presentQuestRewards(quest, undefined, [], onPresented),
+        ...(this.deps.beginLocalRewardCheckpoint === undefined ? {} : {
+          beginRewardCheckpoint: this.deps.beginLocalRewardCheckpoint,
+        }),
         onStateChanged: () => this.deps.onStateChanged(),
         onClose: () => {
           if (this.activeGuildQuests === flow) this.activeGuildQuests = undefined;
@@ -2825,7 +2836,7 @@ export class WorldNode {
       audio: this.deps.audio,
       ticker: this.deps.stage.app.ticker,
       runtime,
-      onClaimReward: (quest) => this.presentQuestRewards(quest),
+      onClaimReward: (quest, onPresented) => this.presentQuestRewards(quest, undefined, [], onPresented),
       onStateChanged: () => this.deps.onStateChanged(),
       onClose: () => {
         if (this.activeGuildQuests === flow) this.activeGuildQuests = undefined;
@@ -2842,6 +2853,7 @@ export class WorldNode {
     quest: QuestDefinition,
     committedRewards?: readonly PlayerReward[],
     committedMonsterIds: readonly string[] = [],
+    onPresented?: () => void,
   ): Promise<void> {
     const rewards = committedRewards ?? generateQuestRewards(
       parseDungeonTreasureData(
@@ -2853,7 +2865,7 @@ export class WorldNode {
       quest.challengeLevel,
       this.deps.questRewardRng,
     );
-    if (rewards.length === 0) return;
+    if (rewards.length === 0) { onPresented?.(); return; }
     let joinedIndex = 0;
     await showDungeonLootManagement({
       parent: this.pointRoot,
@@ -2887,7 +2899,7 @@ export class WorldNode {
           this.deps.onStateChanged();
         }
       }
-    });
+    }, onPresented);
   }
 
   private async claimTournamentPrize(
@@ -3364,8 +3376,29 @@ export class WorldNode {
         : { kind: "townEnterChat", chatName: this.activeTownEnterChatName });
   }
 
+  private deferredTownEntryNotifications: (() => void) | undefined;
+
+  private scheduleTownEntryNotifications(present: () => void): void {
+    // Reload may rebuild the town underneath an authoritative Egg continuation. Its phase
+    // admits only Egg commands, including before the external hatch UI has mounted.
+    if (this.deps.authority?.egg.pendingEgg() !== undefined) {
+      this.deferredTownEntryNotifications = present;
+    } else {
+      present();
+    }
+  }
+
+  private flushDeferredTownEntryNotifications(): void {
+    if (this.deferredTownEntryNotifications === undefined || this.lifecycle.disposed ||
+      this.locked || this.modalOpening || this.hasModal()) return;
+    const present = this.deferredTownEntryNotifications;
+    this.deferredTownEntryNotifications = undefined;
+    present();
+  }
+
   private hasModal(): boolean {
-    return this.sourceSceneFade !== undefined ||
+    return this.deps.authority?.egg.pendingEgg() !== undefined ||
+      this.sourceSceneFade !== undefined ||
       this.activeBigMap !== undefined ||
       this.activePartyEditor !== undefined ||
       this.activeMonsterpedia !== undefined ||
@@ -3931,6 +3964,9 @@ export class WorldNode {
       route.kind === "navigate" ||
       (route.kind === "scene" && route.sceneId === "town");
     if (this.deps.authority !== undefined && requiresAuthorityNavigation) {
+      // Own input through the committed response, including town routes with no optimistic
+      // movement and field animations that finish before a slow response arrives.
+      this.locked = true;
       try {
         authorityArrival = await this.deps.authority.navigate(poiName, () => {
           // Field travel and the same-POI repeat fade begin on pointer acceptance and mask
@@ -3960,6 +3996,9 @@ export class WorldNode {
           message: error instanceof Error ? error.message : String(error),
         };
         return;
+      } finally {
+        // The synchronous continuation below acquires its scene/encounter lock where needed.
+        this.locked = false;
       }
     }
     const result = this.deps.trip.navigate(poiName, active.slice(0, 3).map((member) => member.level));

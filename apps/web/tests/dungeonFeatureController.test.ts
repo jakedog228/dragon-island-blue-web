@@ -353,6 +353,47 @@ describe("Official dungeon Egg handoff", () => {
   });
 });
 
+describe("Dungeon document restore presentation", () => {
+  it.each(["restore", "battleReturn"] as const)("reveals %s after preparation but before player-owned loot settlement", async kind => {
+    const order: string[] = [];
+    let prepared!: () => void, collected!: () => void;
+    const preparation = new Promise<void>(resolve => { prepared = resolve; });
+    const loot = new Promise<void>(resolve => { collected = resolve; });
+    const node = {
+      lifecycleSignal: new AbortController().signal, onDestroy: vi.fn(),
+      prepareStart: vi.fn(() => preparation),
+      start: vi.fn(async () => { order.push("entry"); await loot; }),
+    };
+    const create = vi.spyOn(DungeonNode, "create").mockResolvedValue(node as unknown as DungeonNode);
+    const scenes = { current: undefined as unknown, replace: vi.fn(async (incoming: unknown) => {
+      scenes.current = incoming; order.push("activate");
+    }) };
+    const host = {
+      player: () => ({ party: {}, profile: {} }), game: {}, audio: {}, content: { hasDungeonCapability: true }, scenes,
+      stage: { app: { ticker: { add: vi.fn(), remove: vi.fn() } } },
+      keyboard: { register: vi.fn(() => vi.fn()) }, checkpoint: vi.fn(),
+    } as unknown as DungeonFeatureHost<"shell">;
+    const controller = new DungeonFeatureController(host) as unknown as {
+      run: unknown; startDungeonScene: (entry: object) => Promise<unknown>;
+    };
+    controller.run = { session: {}, route: {}, definition: {} };
+    const ready = vi.fn(async () => { expect(scenes.current).toBe(node); order.push("reveal"); });
+    try {
+      let finished = false;
+      const restoration = controller.startDungeonScene({ kind, actions: [], documentRestore: true, onSceneReady: ready })
+        .then(() => { finished = true; });
+      await vi.waitFor(() => expect(node.prepareStart).toHaveBeenCalled());
+      expect(ready).not.toHaveBeenCalled();
+      prepared();
+      await vi.waitFor(() => expect(node.start).toHaveBeenCalled());
+      expect(order).toEqual(["activate", "reveal", "entry"]);
+      expect(finished).toBe(false); // The reward still owns its normal completion boundary.
+      collected(); await restoration;
+      expect(finished).toBe(true);
+    } finally { create.mockRestore(); }
+  });
+});
+
 describe("Volcano infinite progression proof gate", () => {
   it("proves the production callback/wiring seam for repeated Volcano scenes and excludes other dungeons", async () => {
     // This is the controller-only wiring seam: the durable `infiniteHighestLevel` decision, the

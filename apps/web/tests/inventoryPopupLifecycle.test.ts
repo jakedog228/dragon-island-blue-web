@@ -164,7 +164,7 @@ function tapPopupButton(root: Container, label: string): void {
 // same-direction Next -> Next always has somewhere to go regardless of the runtime display mode.
 const GEMS_FOR_THREE_PAGES = 11;
 
-function harness(gemCount = GEMS_FOR_THREE_PAGES) {
+function harness(gemCount = GEMS_FOR_THREE_PAGES, licenseType: "Novice" | "Apprentice" = "Apprentice") {
   const parent = new Container();
   const host = PopupHost.for(parent);
   const ticker = manualTicker();
@@ -172,6 +172,7 @@ function harness(gemCount = GEMS_FOR_THREE_PAGES) {
   let atlasGate: Promise<void> | undefined;
 
   const profile = new PlayerProfile({
+    licenseType,
     heroLevel: 10,
     monsterPartyLevels: [1],
     silver: 0,
@@ -470,6 +471,20 @@ describe("inventory mutations serialize at flow level", () => {
   function selectFirstRow(h: ReturnType<typeof harness>): void {
     tap(topmost(h.host, "gemInventoryItems"));
   }
+
+  it("shows the Novice slot refusal without submitting an authority mutation", async () => {
+    const h = harness(1, "Novice");
+    await openSettled(h);
+    selectFirstRow(h);
+    const before = h.options.profile.stateSnapshot();
+    tap(topmost(h.host, "popupButton:EquipGemKey"));
+    await settle();
+    await h.ticker.frame(200);
+    expect(h.commands).toHaveLength(0);
+    expect(h.host.modalDepth).toBe(2);
+    expect(findAllByLabel(h.host, "popupButton:OkButtonKey")).toHaveLength(1);
+    expect(h.options.profile.stateSnapshot()).toEqual(before);
+  });
 
   it("refuses a second command from a page built while the first is in flight", async () => {
     const h = harness();

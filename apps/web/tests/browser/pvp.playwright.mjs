@@ -27,6 +27,7 @@ const lobbyCycles = Number(process.env.DIB_PVP_LOBBY_CYCLES ?? 0);
 assert.ok(Number.isInteger(lobbyCycles) && lobbyCycles >= 0 && lobbyCycles <= 10);
 const evidence = { displayMode, reconnect, pollOutage, delayedInput, lostResponse, spirits,
   fullBattle, lobbyCycles, turns: 0, failedPolls: 0, commandRequests: 0, expectedRejections: 0,
+  statusAcknowledgments: 0,
   sources: tokens.map(token => token ? "official" : "offline") };
 const browsers = [];
 const read = async (page) => { await page.bringToFront(); return page.evaluate(() => JSON.parse(window.render_game_to_text())); };
@@ -36,6 +37,14 @@ async function wait(page, predicate, description) {
   const end = Date.now() + 60000;
   while (Date.now() < end) {
     const state = await read(page); if (await predicate(state)) return state;
+    const board = state.overlay?.pvp?.board;
+    if (board?.statusText?.visible) {
+      // Sleep/skip chains show the ordinary tap-to-continue battle status panel. Both players
+      // must acknowledge their own presentation before the next native controls can appear.
+      const point = await nativePvpPoint(page, { x: board.screenPt.w / 2, y: board.screenPt.h / 2 });
+      await page.mouse.click(point.x, point.y);
+      evidence.statusAcknowledgments++;
+    }
     await advance(page); await page.waitForTimeout(20);
   }
   throw new Error(`${description}: ${JSON.stringify(await read(page))}; ${errors.join(" | ")}`);

@@ -9,7 +9,8 @@ import { loadLocalContent } from "./localContent.mjs";
 
 const url = process.env.DIB_WEB_URL ?? "http://localhost:5173";
 const displayMode = process.env.DIB_DISPLAY_MODE ?? "iphone";
-const claimEggReward = process.env.DIB_GUILD_EGG_CLAIM === "1";
+const verifyDurability = process.env.DIB_GUILD_DURABILITY === "1";
+const claimEggReward = process.env.DIB_GUILD_EGG_CLAIM === "1" || verifyDurability;
 assert(
   displayMode === "iphone" || displayMode === "ipad",
   `DIB_DISPLAY_MODE must be iphone or ipad, got ${displayMode}`,
@@ -20,8 +21,9 @@ const outputDir = path.resolve(
 );
 fs.mkdirSync(outputDir, { recursive: true });
 const browser = await chromium.launch({
+  channel: "chromium",
   headless: process.env.DIB_HEADED !== "1",
-  args: ["--use-gl=angle", "--use-angle=swiftshader", "--mute-audio"],
+  args: ["--enable-unsafe-swiftshader", "--mute-audio", "--disable-gpu-vsync", "--disable-frame-rate-limit"],
 });
 
 try {
@@ -51,6 +53,11 @@ try {
   await loadLocalContent(page);
 
   const state = () => page.evaluate(() => JSON.parse(window.render_game_to_text()));
+  const durable = () => page.evaluate(() => {
+    const entry = Object.entries(localStorage).find(([key]) => key.startsWith("dib-save-v1:") && key.endsWith(":slot-1"));
+    if (!entry) throw new Error("Missing durable Offline slot-1");
+    return JSON.parse(entry[1]);
+  });
   const advance = (ms) => page.evaluate((value) => window.advanceTime(value), ms);
   const waitForState = async (predicate, description, iterations = 180) => {
     for (let i = 0; i < iterations; i++) {
@@ -400,6 +407,13 @@ try {
       takeAll = await boundsForLabel("popupButton:Take All");
     }
     assert(takeAll, "claimed Guild reward did not open the shared loot provider");
+    if (verifyDurability) {
+      await page.waitForTimeout(100);
+      const saved = await durable();
+      fs.writeFileSync(path.join(outputDir, "pending-loot-save.json"), JSON.stringify(saved, null, 2));
+      assert(saved.state.quests.activeQuestNames.includes("MacworldCatch"), "Offline save consumed the quest before its reward was collected");
+      assert(!saved.state.quests.finishedQuestNames.includes("MacworldCatch"));
+    }
 
 
     await waitForState(
@@ -506,6 +520,50 @@ try {
       `Egg did not mount on CCDirector.notificationNode counterpart: ${JSON.stringify(layering)}`,
     );
     assert.deepEqual(errors, [], errors.join(" | "));
+    if (verifyDurability) {
+      const pending = await durable();
+      assert(pending.state.quests.activeQuestNames.includes("MacworldCatch"), "Egg continuation must retain the pre-claim recovery snapshot");
+      fs.writeFileSync(path.join(outputDir, "pending-egg-save.json"), JSON.stringify(pending, null, 2));
+      await page.screenshot({ path: path.join(outputDir, "pending-egg.png") });
+      const reelBounds = await boundsForLabel("eggHatch:silver");
+      assert(reelBounds);
+      await page.mouse.move(box.x + reelBounds.x + reelBounds.w / 2, box.y + reelBounds.y + reelBounds.h / 2);
+      await page.mouse.down();
+      await advance(1_600);
+      await page.mouse.up();
+      for (let i = 0; i < 1000; i++) {
+        const saved = await durable();
+        if (saved.state.quests.finishedQuestNames.includes("MacworldCatch")) break;
+        const label = (await boundsForLabel("popupButton:Keep")) ? "popupButton:Keep"
+          : (await boundsForLabel("popupButton:No")) ? "popupButton:No"
+          : (await boundsForLabel("popupButton:Ok")) ? "popupButton:Ok" : null;
+        await advance(100);
+        await page.waitForTimeout(2);
+        if (label) { await advance(300); await clickLabel(label); }
+      }
+      const settled = await durable();
+      fs.writeFileSync(path.join(outputDir, "settlement-state.json"), JSON.stringify(await state(), null, 2));
+      await page.screenshot({ path: path.join(outputDir, "settlement-state.png") });
+      assert(settled.state.quests.finishedQuestNames.includes("MacworldCatch"), "Claim did not persist after the Egg settled");
+      assert(!settled.state.quests.activeQuestNames.includes("MacworldCatch"));
+      assert.notDeepEqual(settled.state.player, pending.state.player, "Claim persisted without its Egg prize");
+      fs.writeFileSync(path.join(outputDir, "settled-egg-save.json"), JSON.stringify(settled, null, 2));
+      await page.screenshot({ path: path.join(outputDir, "settled-egg.png") });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await loadLocalContent(page);
+      await waitForState(s => s.startup?.phase === "title", "reloaded title");
+      await advance(500); await page.keyboard.press("Enter");
+      await waitForState(s => s.startup?.phase === "save-select", "reloaded save selector");
+      await advance(300); await clickLabel("sourcePopupButton:slot-1");
+      const resumed = await waitForState(s => s.guildQuests !== undefined, "reloaded quest state", 600);
+      assert(resumed.guildQuests.finishedQuestNames.includes("MacworldCatch"));
+      const restored = await durable();
+      assert.deepEqual(restored.state.player.profile.inventory, settled.state.player.profile.inventory);
+      assert.equal(restored.state.player.profile.silver, settled.state.player.profile.silver);
+      assert.equal(restored.state.player.profile.gold, settled.state.player.profile.gold);
+      assert.deepEqual(errors, []);
+      console.log("guild-quest-ui: PASS (Offline pending loot/Egg recovery snapshot, atomic settlement, reload)");
+    }
     console.log(`guild-quest-ui: PASS (${displayMode}; live-Tavern Egg layering + immediate badge commit)`);
   } else {
     // My Quests and the world MasterMenu share the same source-shaped list/description flow.

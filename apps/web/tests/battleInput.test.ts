@@ -31,10 +31,13 @@ type SwipeMatch = { name: string; midpoint: { x: number; y: number } };
 
 interface InternalPanel {
   choicesBySlot: Map<number, PlayerChoice>;
+  handleTap(choice: PlayerChoice): void;
   handleSwipeMatch(match: SwipeMatch): void;
 }
 
 interface ChoiceResultHarness {
+  readonly node: object;
+  readonly beginTargets: ReturnType<typeof vi.fn>;
   readonly audio: { playSfx: ReturnType<typeof vi.fn> };
   readonly panel: MonsterTurnPanel;
   readonly panelInternal: InternalPanel;
@@ -59,6 +62,7 @@ function makeChoiceResultHarness(input: {
   const setPanelShown = vi.fn();
   const friendlyAttack = vi.fn();
   const showMessagePopup = vi.fn(async () => {});
+  const beginTargets = vi.fn(async () => {});
   const node = Object.create(BattleNode.prototype) as unknown as {
     panel: MonsterTurnPanel;
     audio: typeof audio;
@@ -78,7 +82,8 @@ function makeChoiceResultHarness(input: {
     showPanel: typeof showPanel;
     setPanelShown: typeof setPanelShown;
     friendlyDisplay: { setSummonSelectMode: typeof friendlyAttack };
-    targetPicker: { showMessagePopup: typeof showMessagePopup };
+    targetPicker: { showMessagePopup: typeof showMessagePopup; begin: typeof beginTargets };
+    setPresentationState: ReturnType<typeof vi.fn>;
     awaitPlayerChoice(step: { actorId: string; choices: readonly PlayerChoice[] }): Promise<unknown>;
   };
   node.panel = panel;
@@ -101,9 +106,12 @@ function makeChoiceResultHarness(input: {
   node.showPanel = showPanel;
   node.setPanelShown = setPanelShown;
   node.friendlyDisplay = { setSummonSelectMode: friendlyAttack };
-  node.targetPicker = { showMessagePopup };
+  node.targetPicker = { showMessagePopup, begin: beginTargets };
+  node.setPresentationState = vi.fn();
 
   return {
+    node,
+    beginTargets,
     audio,
     panel,
     panelInternal,
@@ -114,6 +122,46 @@ function makeChoiceResultHarness(input: {
     awaitChoice: (choice) => node.awaitPlayerChoice({ actorId: "hero", choices: [choice] }),
   };
 }
+
+describe("Spirit summon input handoff", () => {
+  it("keeps tap, self-cast and swipe choices pending until the summon display and queue are registered", async () => {
+    const h = makeChoiceResultHarness({ queueIds: ["enemy"], targetableIds: ["enemy"] });
+    let releaseDisplay!: () => void;
+    let releaseQueue!: () => void;
+    const display = new Promise<void>(resolve => { releaseDisplay = resolve; });
+    const queue = new Promise<void>(resolve => { releaseQueue = resolve; });
+    const register = vi.fn(() => display);
+    const queueAdd = vi.fn(() => queue);
+    Object.assign(h.node, {
+      profile: { spiritSavedXp: () => 10, useSpirit: vi.fn() },
+      submitAuthoritative: vi.fn(async () => {}),
+      requireAuthoritativeBattleId: () => "earned-spirit-race",
+      session: { summonSpirit: () => ({ id: "spirit", events: [] }),
+        queueOrder: () => ["enemy"], teamOf: () => 1, targetableIdsOf: () => ["enemy"] },
+      applyRosterEvents: register,
+      turnOrder: { notifyTeamAddedMonsters: queueAdd },
+      lifecycle: { disposed: false },
+    });
+    const node = h.node as { selectSpirit(item: object): Promise<void> };
+    const choice = h.awaitChoice(ENEMY_CHOICE);
+    h.panelInternal.choicesBySlot.set(1, ENEMY_CHOICE);
+    const summoning = node.selectSpirit({ kind: "spirit", shortType: "Resistance" });
+    await vi.waitFor(() => expect(register).toHaveBeenCalledOnce());
+    h.panelInternal.handleTap(ENEMY_CHOICE);
+    h.panelInternal.handleTap({ ...ENEMY_CHOICE, targeting: { kind: "self" } });
+    swipe(h.panelInternal);
+    expect(h.beginTargets).not.toHaveBeenCalled();
+    await expectPending(choice);
+    releaseDisplay();
+    await vi.waitFor(() => expect(queueAdd).toHaveBeenCalledOnce());
+    h.panelInternal.handleTap(ENEMY_CHOICE);
+    expect(h.beginTargets).not.toHaveBeenCalled();
+    releaseQueue();
+    await summoning;
+    h.panelInternal.handleTap(ENEMY_CHOICE);
+    expect(h.beginTargets).toHaveBeenCalledOnce();
+  });
+});
 
 async function expectPending(choiceResult: Promise<unknown>): Promise<void> {
   let settled = false;

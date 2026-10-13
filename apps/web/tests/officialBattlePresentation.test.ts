@@ -6,7 +6,9 @@ import {
   type BattleEvent,
   type BattleReplaySnapshotV1,
 } from "@dib/engine";
-import { loadGameData } from "@dib/gamedata";
+import { GameData, loadGameData, loadRawJson } from "@dib/gamedata";
+import { resolveDataDir } from "../../../packages/gamedata/src/dataDir.js";
+import earnedReincarnation from "./fixtures/earned-official-reincarnation-replay.json";
 import {
   mountOfficialBattlePresentation,
   restoredAnalyzeEnabled,
@@ -49,6 +51,64 @@ function resistanceOpeningReplay(): {
 }
 
 describe("Official battle presentation mount", () => {
+  it("replays earned Reincarnation identically across archive and extracted dictionary order", () => {
+    const reverseDictionaries = (value: unknown): unknown => Array.isArray(value)
+      ? value.map(reverseDictionaries)
+      : value !== null && typeof value === "object"
+        ? Object.fromEntries(Object.entries(value).reverse().map(([key, child]) => [key, reverseDictionaries(child)]))
+        : value;
+    const directory = resolveDataDir();
+    const reordered = GameData.fromRaw({
+      monsters: reverseDictionaries(loadRawJson(directory, "Monsters.json")) as ReturnType<typeof loadRawJson>,
+      jobs: loadRawJson(directory, "Jobs.json"),
+      abilities: loadRawJson(directory, "Abilities.json"),
+      abilityComponents: loadRawJson(directory, "AbilityComponents.json"),
+      buffs: loadRawJson(directory, "Buffs.json"),
+    });
+    const replay = earnedReincarnation as unknown as BattleReplaySnapshotV1;
+    const authority = restoreBattleReplay(data, replay);
+    // This is the existing server candidate order: the fix must preserve its saved outcomes.
+    const paths = data.allMonsters().filter(monster => monster.category === "Normal").map(monster => monster.path);
+    expect(paths).toEqual([...paths].sort());
+    expect(authority.events).toContainEqual(expect.objectContaining({
+      type: "monsterAdded", shortType: "Sludge", team: 1,
+    }));
+    const tape = replayableRng(replay.randomDraws!);
+    const mounted = mountOfficialBattlePresentation(reordered, replay, tape, true);
+    expect(mounted.resumedStep).toEqual(authority.step);
+    expect(mounted.historyEvents).toEqual(authority.events);
+    expect(tape.cursor).toBe(replay.randomDraws!.length);
+
+    // Also play from turn zero with only each committed prefix available, like the live browser.
+    const prefix = (count: number) => {
+      const tape = replayableRng(replay.randomDraws!);
+      const restored = restoreBattleReplay(data, { ...replay, commands: replay.commands.slice(0, count) }, { replayRng: tape });
+      return { restored, draws: replay.randomDraws!.slice(0, tape.cursor) };
+    };
+    const opening = prefix(0);
+    const liveTape = replayableRng(opening.draws);
+    const live = mountOfficialBattlePresentation(reordered,
+      { ...replay, commands: [], randomDraws: opening.draws }, liveTape, false);
+    const advance = () => {
+      let step = live.session.advanceForPresentation();
+      while (step.type === "awaitingEnemy") {
+        live.session.submitEnemyAction();
+        step = live.session.advanceForPresentation();
+      }
+      return step;
+    };
+    expect(advance()).toEqual(opening.restored.step);
+    for (const [index, command] of replay.commands.entries()) {
+      if (command.type !== "ability") throw new Error("earned fixture has an unexpected command");
+      const expected = prefix(index + 1);
+      liveTape.appendCommittedDraws(expected.draws.slice(liveTape.draws.length));
+      live.session.submitPlayerAction(command.slot, [...command.targetIds]);
+      expect(advance()).toEqual(expected.restored.step);
+      expect(live.session.events).toEqual(expected.restored.events);
+      expect(liveTape.cursor).toBe(expected.draws.length);
+    }
+  });
+
   it("presents the committed Resistance opening from turn zero instead of skipping to Spark", () => {
     const { replay, authority } = resistanceOpeningReplay();
     expect(authority.step).toMatchObject({ type: "awaitingPlayer", actorId: "t0m2:Spark" });

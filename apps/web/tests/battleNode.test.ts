@@ -42,6 +42,12 @@ const handleSwitched = (BattleNode.prototype as unknown as {
 const handleDeaths = (BattleNode.prototype as unknown as {
   handleDeaths(this: object, events: readonly object[]): Promise<void>;
 }).handleDeaths;
+const applyRosterEvents = (BattleNode.prototype as unknown as {
+  applyRosterEvents(this: object, events: readonly object[]): Promise<void>;
+}).applyRosterEvents;
+const handleMonsterAdded = (BattleNode.prototype as unknown as {
+  handleMonsterAdded(this: object, event: object, warmup?: Promise<void>, defer?: boolean): Promise<void>;
+}).handleMonsterAdded;
 const settleDisplayRegistrations = (BattleNode.prototype as unknown as {
   settleDisplayRegistrations(this: object): Promise<void>;
 }).settleDisplayRegistrations;
@@ -175,6 +181,45 @@ describe("BattleNode source-overlapped Switch presentation", () => {
 });
 
 describe("BattleNode promoted-reserve display registration", () => {
+  it.each([0, 1] as const)("releases a sacrificed team-%i display before presenting its Reincarnation replacement", async (team) => {
+    const displayed = new Set(["a", "caster", "c"]);
+    const order: string[] = [];
+    let finishDeath!: () => void;
+    const removal = new Promise<void>(resolve => { finishDeath = resolve; });
+    const notifyDied = vi.fn((id: string) => { displayed.delete(id); order.push(`remove:${id}`); return removal; });
+    const add = vi.fn((snapshots: readonly { id: string }[]) => {
+      for (const { id } of snapshots) {
+        expect(displayed.size, "the full row still owns all display slots").toBeLessThan(3);
+        displayed.add(id); order.push(`add:${id}`);
+      }
+      return Promise.resolve();
+    });
+    const display = { notifyDied, hasMonster: (id: string) => displayed.has(id), notifyAddedMany: add,
+      notifyAddedManyPhases: (snapshots: readonly { id: string }[]) => ({ registered: add(snapshots), entrance: Promise.resolve() }),
+      setBenchCount: vi.fn() };
+    const empty = { ...display, notifyAddedMany: vi.fn(() => Promise.resolve()),
+      notifyAddedManyPhases: vi.fn(() => ({ registered: Promise.resolve(), entrance: Promise.resolve() })) };
+    const harness = {
+      roster: { registerMidBattle: vi.fn(() => order.push("register:new")) }, hp: { set: vi.fn() },
+      session: { hpOf: () => 153, teamOf: () => team, benchCountOf: () => 0,
+        activeIdsOf: (which: number) => which === team ? ["a", "c", "new"] : [] },
+      lifecycle: { disposed: false }, preloadDynamicRosterType: async () => {}, handleMonsterAdded,
+      friendlyDisplay: team === 0 ? display : empty, enemyDisplay: team === 1 ? display : empty,
+      friendlySnapshotOf: (id: string) => ({ id }), enemySnapshotOf: (id: string) => ({ id }),
+      statusOverlays: { refreshHostsFor: vi.fn() }, trackDisplayRegistration: vi.fn(), startPresentationTask: vi.fn(),
+    };
+    // Exact Reincarnation order: add is initially benched, then caster sacrifice promotes it.
+    const events = [{ type: "monsterAdded", living: "new", shortType: "ThunderMage", level: 20, team, summoner: "caster" },
+      { type: "died", living: "caster" }];
+    await applyRosterEvents.call(harness, events);
+    expect(order).toEqual(["register:new"]);
+    const settled = handleDeaths.call(harness, events);
+    expect(order).toEqual(["register:new", "remove:caster", "add:new"]);
+    expect(displayed).toEqual(new Set(["a", "c", "new"]));
+    finishDeath(); await settled;
+    expect(notifyDied).toHaveBeenCalledOnce();
+  });
+
   // Regression: `EnemyTeamDisplay.nodeOf: unknown monster id "t1mN:..."` thrown from showPanel's
   // capture-host build. A promoted reserve's display construction used to ride entirely on the
   // fire-and-forget entrance task, so the next turn panel could resolve a live enemy id whose

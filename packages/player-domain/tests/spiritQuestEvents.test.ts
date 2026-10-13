@@ -22,6 +22,19 @@ function recorded(player: PlayerProfile): Array<[string, number]> {
 }
 
 describe("spirit experience quest-event seam", () => {
+  it("restores every integral meter value exactly without percentage round-trip drift", () => {
+    const base = profile().stateSnapshot();
+    for (let energy = 0; energy <= 100; energy++) {
+      let snapshot = { ...base, spiritEnergy: energy };
+      for (let restore = 0; restore < 3; restore++) {
+        const player = PlayerProfile.fromStateSnapshot(snapshot, [1]);
+        expect(player.spiritSnapshot().energy).toBe(energy);
+        snapshot = player.stateSnapshot();
+        expect(snapshot.spiritEnergy).toBe(energy);
+      }
+    }
+  });
+
   it("reports a totem pickup, awarding 1 the first time and 100 afterwards", () => {
     const player = profile();
     const seen = recorded(player);

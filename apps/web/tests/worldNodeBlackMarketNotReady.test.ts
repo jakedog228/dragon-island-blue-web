@@ -114,7 +114,7 @@ function makeNodeFixture(overrides: Record<string, unknown> = {}) {
     keyboard: { register: vi.fn() },
     audio,
     poiRouting: createWorldPoiRoutingPolicy(),
-    authority,
+    authority: { ...authority, egg: { pendingEgg: () => undefined } },
     onStateChanged,
     ...overrides,
   };

@@ -138,8 +138,9 @@ export async function showDungeonLootManagement(
   context: DungeonDialogContext,
   loot: readonly DungeonLoot[],
   onTakeAll: DungeonLootTakeAll<DungeonLoot>,
+  onPresented?: () => void,
 ): Promise<void> {
-  await showLootManagement(context, loot, onTakeAll);
+  await showLootManagement(context, loot, onTakeAll, onPresented);
 }
 
 /** Store checkout has already committed these Item/Gem objects. This presentation never transfers
@@ -156,8 +157,9 @@ async function showLootManagement<T extends LootPageItem>(
   context: DungeonDialogContext,
   loot: readonly T[],
   onTakeAll: DungeonLootTakeAll<T>,
+  onPresented?: () => void,
 ): Promise<void> {
-  if (loot.length === 0) return;
+  if (loot.length === 0) { onPresented?.(); return; }
 
   const [inventory, general, rightArrowTexture, takeAllTexture] = await Promise.all([
     context.game.assets.atlas("InventoryItemFrames-hd"),
@@ -356,7 +358,7 @@ async function showLootManagement<T extends LootPageItem>(
 
     hidesWhenNotOnTop: false,
     topInset: POPUP_TOP_INSET,
-    onPresent: () => context.ticker.add(pulseTick),
+    onPresent: () => { context.ticker.add(pulseTick); onPresented?.(); },
     onDismiss: () => {
       context.ticker.remove(pulseTick);
       resolveDismissed();
