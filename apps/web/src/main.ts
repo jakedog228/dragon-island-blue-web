@@ -328,6 +328,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
   let playerDebugState: (() => unknown) | undefined;
   let modStartupDebugState: (() => unknown) | undefined;
   let defeatRecoveryDebugState: (() => unknown) | undefined;
+  let externalEggHatch: EggHatchFlow | undefined;
   let questNotificationHost: WorldNotificationHost | undefined;
   const pendingQuestNotifications: Array<
     GuildQuestNotificationState | LocalizedMessageNotificationState
@@ -381,6 +382,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
       ...(defeatRecoveryDebugState === undefined
         ? {}
         : { defeatRecovery: defeatRecoveryDebugState() }),
+      ...(externalEggHatch === undefined ? {} : { eggHatch: externalEggHatch.debugState }),
       ...(scenarioRuntime === undefined
         ? {}
         : {
@@ -1962,7 +1964,12 @@ async function boot(options: BootOptions = {}): Promise<void> {
         "Purchases are unavailable while an Official Egg decision is pending.",
       ),
     });
-    await flow.finished;
+    externalEggHatch = flow;
+    try {
+      await flow.finished;
+    } finally {
+      if (externalEggHatch === flow) externalEggHatch = undefined;
+    }
   };
 
   const nextBattleSeed = (): number | Rng =>
@@ -4383,12 +4390,14 @@ async function boot(options: BootOptions = {}): Promise<void> {
     if (officialSlot?.coordinator.projection.pendingEgg !== undefined) {
       // The continuation needs player input; the boot shade cannot wait for its completion.
       await revealRestoredScene();
+      const scene = scenes.current;
+      if (scene === undefined) throw new Error("Restored Egg has no gameplay scene");
+      await runOfficialEggHatch({
+        parent: scene.notificationParent,
+        owner: scene,
+        instanceIdPrefix: "resumed-egg",
+      });
     }
-    await runOfficialEggHatch({
-      parent: stage.root,
-      owner: scenes.current ?? stage.root,
-      instanceIdPrefix: "resumed-egg",
-    });
   } else {
     if (standalonePlayer === undefined) throw new Error("standalone player state is missing");
     const standaloneEncounter = withWorldBattleSaveMePolicy(encounter, {

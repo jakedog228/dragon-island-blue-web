@@ -11,6 +11,7 @@ function harness(official = true) {
   let pending: object | undefined = { phase: "spinning" };
   const node = Object.assign(Object.create(WorldNode.prototype), {
     deps: { authority: official ? { egg: { pendingEgg: () => pending } } : undefined },
+    tutorialClaims: new Map(),
     lifecycle: { disposed: false }, locked: false, modalOpening: false,
   }) as {
     scheduleTownEntryNotifications(present: () => void): void;

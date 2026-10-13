@@ -161,6 +161,7 @@ export class PartyEditorFlow {
   private disposed = false;
   private committed = false;
   private closing = false;
+  private inputEnabled = true;
   /** Serializes popup-driven actions so a second tap can't open a duplicate picker/confirm. */
   private busy = false;
   /** Set while a screen that asked for its own modal band is open (see `popupEnvironment`). */
@@ -275,6 +276,12 @@ export class PartyEditorFlow {
     this.node.close();
   }
 
+  /** First-use tutorial settlement owns input before its modal has finished mounting. */
+  setInputEnabled(enabled: boolean): void {
+    this.inputEnabled = enabled;
+    if (!this.disposed) this.node.eventMode = enabled ? "static" : "none";
+  }
+
   private popupEnvironment() {
     return {
       parent: this.popupHost,
@@ -300,6 +307,7 @@ export class PartyEditorFlow {
     return {
       open: true,
       screen: "partyEditor",
+      inputEnabled: this.inputEnabled,
       style: this.opts.style,
       titleVisible: editorHasTownTitle(this.opts.style),
       reserveRowVisible: editorHasReserveRow(this.opts.style, reserveIds.length),
@@ -539,7 +547,7 @@ export class PartyEditorFlow {
   }
 
   private async handleClose(): Promise<void> {
-    if (this.disposed || this.committed || this.closing) return;
+    if (!this.inputEnabled || this.disposed || this.committed || this.closing) return;
     this.closing = true;
     try {
       this.captureSelections();

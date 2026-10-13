@@ -649,7 +649,9 @@ export class EggHatchFlow {
     const glowAlpha = dungeonGemGlowAlpha(this.gemGlowClock.elapsedMs);
     for (const glow of this.gemGlows) glow.alpha = glowAlpha;
     this.applyReelLayout();
-    if (!state.stopped) return;
+    // A slow release reply can outlast the fastest provisional coast. Its stopped slot is only
+    // presentation; neither a prize nor a settlement command may precede the actual commitment.
+    if (!state.stopped || this.commitment === undefined) return;
     this.opts.ticker.remove(this.tick);
     const selected = this.entries[state.centerIndex]!.prize;
     this.selectedPrize = selected;

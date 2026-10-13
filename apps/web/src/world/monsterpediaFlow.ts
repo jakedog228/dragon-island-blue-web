@@ -1877,9 +1877,23 @@ export class MonsterpediaFlow {
     if (this.disposed) return;
     const flag = this.category === 5 ? "FirstAllMonsterpedia" : "FirstMonsterpedia";
     if (this.opts.profile.hasTutorialFlag(flag)) return;
-    await this.opts.claimTutorialFlag?.(flag);
-    if (!this.opts.profile.claimTutorialFlag(flag)) return;
-    await this.showMessage(flag);
+    // present() starts this outside rebuildPage's busy scope. The first-use claim must
+    // own tabs, swipes and close too, or a second page can submit another claim mid-flight.
+    const ownsBusy = !this.busy;
+    if (ownsBusy) {
+      this.busy = true;
+      this.strokeRecognizer.setEnabled(false);
+    }
+    try {
+      await this.opts.claimTutorialFlag?.(flag);
+      if (this.disposed || !this.opts.profile.claimTutorialFlag(flag)) return;
+      await this.showMessage(flag);
+    } finally {
+      if (ownsBusy && !this.disposed) {
+        this.busy = false;
+        this.strokeRecognizer.setEnabled(!this.expanded && this.category !== 5);
+      }
+    }
   }
 
   private async handleClose(): Promise<void> {

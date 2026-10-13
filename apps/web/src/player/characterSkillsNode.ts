@@ -67,6 +67,7 @@ export class CharacterSkillsNode extends Container {
   private armed = false;
   private closed = false;
   private changeMade = false;
+  private mutating = false;
 
   private constructor(private readonly opts: CharacterSkillsNodeOptions) {
     super();
@@ -98,6 +99,7 @@ export class CharacterSkillsNode extends Container {
       open: !this.closed,
       pointsFree: this.opts.profile.skillPointsAvailable,
       changeMade: this.changeMade,
+      mutating: this.mutating,
       stats: CHARACTER_STAT_ORDER.map((stat) => ({
         stat,
         invested: this.opts.profile.skillValue(stat),
@@ -118,6 +120,7 @@ export class CharacterSkillsNode extends Container {
       this.opts.assets.sprite("minus-hd"),
       this.opts.assets.atlas("General-hd"),
     ]);
+    if (this.closed) return;
 
     const background = sourceFullscreenSprite(backgroundTexture, DISPLAY_MODE, "HeroScreen");
     background.eventMode = "none";
@@ -348,6 +351,9 @@ export class CharacterSkillsNode extends Container {
     action: "increment" | "decrement",
     stat: PlayerStatName,
   ): Promise<void> {
+    // Keep one allocation in flight through both authority settlement and the display rebuild.
+    // The profile still shows the old allocation while an Official response is pending.
+    if (this.closed || this.mutating) return;
     const success = action === "increment"
       ? this.opts.profile.skillPointsAvailable > 0
       : this.opts.profile.skillValue(stat) > 0;
@@ -358,15 +364,21 @@ export class CharacterSkillsNode extends Container {
       );
       return;
     }
-    this.opts.onClick();
-    if (this.opts.mutate === undefined) {
-      if (action === "increment") this.opts.profile.incrementSkill(stat);
-      else this.opts.profile.decrementSkill(stat);
-    } else {
-      await this.opts.mutate(action, stat);
+    this.mutating = true;
+    try {
+      this.opts.onClick();
+      if (this.opts.mutate === undefined) {
+        if (action === "increment") this.opts.profile.incrementSkill(stat);
+        else this.opts.profile.decrementSkill(stat);
+      } else {
+        await this.opts.mutate(action, stat);
+      }
+      this.changeMade = true;
+      // Close remains available during a slow response. Never rebuild its destroyed screen.
+      if (!this.closed) await this.rebuild();
+    } finally {
+      this.mutating = false;
     }
-    this.changeMade = true;
-    await this.rebuild();
   }
 
   private async showNamedMessage(name: string): Promise<void> {

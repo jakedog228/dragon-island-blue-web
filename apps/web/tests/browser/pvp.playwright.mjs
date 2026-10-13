@@ -9,6 +9,7 @@ import { chromium } from "playwright";
 import { loadLocalContent } from "./localContent.mjs";
 import { tapPixiLabel, pixiLabelVisible } from "./pixiInput.mjs";
 import { stageGeometry } from "./stageGeometry.mjs";
+import { createFrameCapture } from "./captureFrame.mjs";
 
 const url = process.env.DIB_WEB_URL ?? "http://127.0.0.1:5173";
 const archive = process.env.DIB_CONTENT_ARCHIVE ?? path.resolve("Dragon_Island_Blue_1.1.0.ipa");
@@ -31,7 +32,14 @@ const evidence = { displayMode, reconnect, pollOutage, delayedInput, lostRespons
   sources: tokens.map(token => token ? "official" : "offline") };
 const browsers = [];
 const read = async (page) => { await page.bringToFront(); return page.evaluate(() => JSON.parse(window.render_game_to_text())); };
-const pageScreenshot = (page, name) => page.screenshot({ path: path.join(output, name) });
+// Reuse the measured WebGL capture budget, including after cold reconnect. Ordinary
+// input/wait timeouts stay unchanged; every requested evidence frame remains fatal.
+const frameCaptures = new WeakMap();
+async function pageScreenshot(page, name) {
+  if (!frameCaptures.has(page)) frameCaptures.set(page, await createFrameCapture(page, output));
+  await page.bringToFront();
+  return frameCaptures.get(page)(name);
+}
 const advance = (page, ms = 25) => page.evaluate((ms) => window.advanceTime(ms), ms);
 async function wait(page, predicate, description) {
   const end = Date.now() + 60000;
@@ -81,12 +89,12 @@ async function openArena(page) {
   await wait(page, (s) => s.overlay?.open && s.overlay?.buttons, "Arena menu");
   assert.ok((await read(page)).overlay.buttons.some(button => button.action === "pvp"));
   await page.waitForTimeout(200); await advance(page);
-  await page.screenshot({ path: path.join(output, "arena-entry.png") });
+  await pageScreenshot(page, "arena-entry.png");
   await click(page, "arena:pvp");
   await wait(page, s => s.overlay?.pvp, "PvP opened");
   await wait(page, (s) => s.overlay?.pvp?.busy === false, "PvP ready");
   await page.waitForTimeout(150); await advance(page);
-  await page.screenshot({ path: path.join(output, "lobby.png") });
+  await pageScreenshot(page, "lobby.png");
 }
 async function launch(index, retainedContext) {
   console.log(`Launching player ${index + 1}`);
@@ -230,7 +238,7 @@ try {
       ["awaitingPlayerChoice", "awaitingOpponent"].includes(s.overlay.pvp.board.presentation.state), "Initial board ready");
     await advance(page);
     assert.equal((await read(page)).overlay.pvp.board.renderer, "BattleNode");
-    await page.screenshot({ path: path.join(output, `initial-${index}.png`) });
+    await pageScreenshot(page, `initial-${index}.png`);
   }
   let interceptedBody; const commandRequests = [];
   for (const { context } of players) await context.route("**/api/pvp/matches/*/commands", async (route) => {
@@ -361,7 +369,7 @@ try {
     }
   }
   for (const [index, page] of pages.entries()) {
-    await advance(page, 1250); await page.screenshot({ path: path.join(output, `battle-${index}.png`) });
+    await advance(page, 1250); await pageScreenshot(page, `battle-${index}.png`);
     fs.writeFileSync(path.join(output, `state-${index}.json`), JSON.stringify(await read(page), null, 2));
   }
   assert.deepEqual((await read(pages[0])).overlay.pvp.match.battle, (await read(pages[1])).overlay.pvp.match.battle);
@@ -387,7 +395,7 @@ try {
   await advance(pages[0], 400);
   // Let Chromium composite the modal backdrop over the final manually rendered canvas.
   await pages[0].waitForTimeout(150); await advance(pages[0]);
-  await pages[0].screenshot({ path: path.join(output, "result.png") });
+  await pageScreenshot(pages[0], "result.png");
   for (const [index, page] of pages.entries()) {
     const s = await read(page);
     assert.deepEqual({ player: s.player, party: s.party }, campaigns[index], "PvP must preserve the campaign");
@@ -415,7 +423,7 @@ try {
   for (const [index, context] of browsers.flatMap((browser) => browser.contexts()).entries()) {
     const page = context.pages()[0];
     if (!page) continue;
-    await page.screenshot({ path: path.join(output, `failure-${index}.png`) }).catch(() => {});
+    await pageScreenshot(page, `failure-${index}.png`).catch(() => {});
     fs.writeFileSync(path.join(output, `failure-${index}.json`), JSON.stringify(await read(page).catch(() => null), null, 2));
   }
   fs.writeFileSync(path.join(output, "errors.json"), JSON.stringify(errors, null, 2));

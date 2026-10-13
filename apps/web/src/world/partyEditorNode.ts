@@ -458,7 +458,7 @@ export class PartyEditorNode extends Container {
     const abort = new AbortController();
     this.nativeCloseAbort = abort;
     const contains = (event: PointerEvent): boolean => {
-      if (this.closed || this.closeRect === undefined) return false;
+      if (this.closed || this.eventMode === "none" || this.closeRect === undefined) return false;
       const point = this.toLocal(bridge.toRendererPoint(event));
       return this.closeRect.contains(point.x, point.y);
     };

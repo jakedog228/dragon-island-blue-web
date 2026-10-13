@@ -465,6 +465,9 @@ let worldNodeDebugSerial = 0;
  * hero marker, all authored in Cocos point space under the same x2 stage mount as battle. */
 export class WorldNode {
   readonly sceneKind = "world" as const;
+
+  /** Point-scaled parent shared by ordinary and restored reward presentations. */
+  get notificationParent(): Container { return this.pointRoot; }
   private readonly debugSceneInstanceId = ++worldNodeDebugSerial;
   private readonly lifecycle = new LifecycleScope();
   private readonly pointRoot = new Container();
@@ -2401,13 +2404,7 @@ export class WorldNode {
         onClose: () => {
           if (this.activeArena === flow) this.activeArena = undefined;
         },
-        onChallenge: (license) => this.deps.onArenaChallenge({
-          license,
-          townName: this.activeTown!.poi.name,
-          ...(definition.questGiver === undefined
-            ? {}
-            : { questGiver: definition.questGiver }),
-        }),
+        onChallenge: (license) => this.startArenaChallenge(license, definition.questGiver),
         onTournament: async () => {
           if (this.lifecycle.disposed || this.activeTown === undefined) return;
           let tournamentFlow: TournamentFlow | undefined;
@@ -2514,6 +2511,19 @@ export class WorldNode {
     } finally {
       this.modalOpening = false;
     }
+  }
+
+  private startArenaChallenge(license: LicenseDef, questGiver?: string): void {
+    const town = this.activeTown;
+    if (this.lifecycle.disposed || this.locked || town === undefined) return;
+    // ArenaFlow retires its menu before handing off. Own the exposed town immediately,
+    // including the Official command and asset preload, until SceneCoordinator retires us.
+    this.locked = true;
+    this.dispatchOwnedTransition("arena-license-challenge", town.poi, () => this.deps.onArenaChallenge({
+      license,
+      townName: town.poi.name,
+      ...(questGiver === undefined ? {} : { questGiver }),
+    }));
   }
 
   private async purchaseStoreItem(
@@ -2661,37 +2671,10 @@ export class WorldNode {
             this.activeCharacterManagement = undefined;
           }
         },
-        onFirstGemDisplay: async () => {
-          const claimed = await this.claimTutorialFlag("FirstCharacterDisplay");
-          if (claimed !== "claimed" || this.lifecycle.disposed) return;
-          await showMonsterHatchPopup({
-            parent: this.pointRoot,
-            owner: this,
-            assets: this.deps.game.assets,
-            scale9: this.deps.game.scale9,
-            ticker: this.deps.stage.app.ticker,
-            zIndex: 1200,
-            sfx: {
-              onButtonPress: () => this.deps.audio.playSfx("click"),
-              onButtonBlocked: () => this.deps.audio.playSfx("notAllowed"),
-            },
-          }, {
-            title: localizedString(
-              this.deps.game.strings,
-              "FirstCharacterDisplayTitleKey",
-            ),
-            content: buildMonsterHatchMessageBlock(localizedString(
-              this.deps.game.strings,
-              "FirstCharacterDisplayMessageKey",
-            )).root,
-            buttons: [{
-              label: localizedString(this.deps.game.strings, "OkButtonKey"),
-              onPress: () => undefined,
-            }],
-          });
-        },
+        onFirstGemDisplay: () => this.showFirstGemDisplay(),
         mutateInventory: (action, itemId) => this.mutateInventory(action, itemId),
         mutateSkill: (action, stat) => this.mutateSkill(action, stat),
+        isMutationPending: () => this.locked,
       });
       if (this.lifecycle.disposed) {
         flow.dispose();
@@ -2700,6 +2683,43 @@ export class WorldNode {
       this.activeCharacterManagement = flow;
     } finally {
       this.modalOpening = false;
+    }
+  }
+
+  private async showFirstGemDisplay(): Promise<void> {
+    // Closing either retained menu must not release town input while its first-use
+    // flag is still being committed. The mounted tutorial takes modal ownership next.
+    this.locked = true;
+    try {
+      const claimed = await this.claimTutorialFlag("FirstCharacterDisplay");
+      if (claimed !== "claimed" || this.lifecycle.disposed) return;
+      await showMonsterHatchPopup({
+        parent: this.pointRoot,
+        owner: this,
+        assets: this.deps.game.assets,
+        scale9: this.deps.game.scale9,
+        ticker: this.deps.stage.app.ticker,
+        zIndex: 1200,
+        sfx: {
+          onButtonPress: () => this.deps.audio.playSfx("click"),
+          onButtonBlocked: () => this.deps.audio.playSfx("notAllowed"),
+        },
+      }, {
+        title: localizedString(
+          this.deps.game.strings,
+          "FirstCharacterDisplayTitleKey",
+        ),
+        content: buildMonsterHatchMessageBlock(localizedString(
+          this.deps.game.strings,
+          "FirstCharacterDisplayMessageKey",
+        )).root,
+        buttons: [{
+          label: localizedString(this.deps.game.strings, "OkButtonKey"),
+          onPress: () => undefined,
+        }],
+      });
+    } finally {
+      this.locked = false;
     }
   }
 
@@ -2712,28 +2732,40 @@ export class WorldNode {
       : action === "equip"
         ? { type: "player.equipGem" as const, itemId }
         : { type: "player.unequipGem" as const, itemId };
-    await this.deps.authority?.submitPlayer(command);
-    if (action === "drop") this.deps.playerRuntime.profile.inventory.drop(itemId);
-    // Equipping runs through the runtime so the party's permanent buff children are rebuilt and
-    // healed with the new Gem, exactly as `-[InventoryPageProvider equipItem:]` does.
-    else if (action === "equip") this.deps.playerRuntime.equipGem(itemId);
-    else this.deps.playerRuntime.profile.unequipGem(itemId);
-    this.deps.onStateChanged();
+    this.locked = true;
+    try {
+      await this.deps.authority?.submitPlayer(command);
+      if (action === "drop") this.deps.playerRuntime.profile.inventory.drop(itemId);
+      // Equipping runs through the runtime so the party's permanent buff children are rebuilt and
+      // healed with the new Gem, exactly as `-[InventoryPageProvider equipItem:]` does.
+      else if (action === "equip") this.deps.playerRuntime.equipGem(itemId);
+      else this.deps.playerRuntime.profile.unequipGem(itemId);
+      this.deps.onStateChanged();
+    } finally {
+      this.locked = false;
+    }
   }
 
   private async mutateSkill(
     action: "increment" | "decrement",
     stat: PlayerStatName,
   ): Promise<void> {
-    await this.deps.authority?.submitPlayer({
-      type: action === "increment" ? "player.incrementSkill" : "player.decrementSkill",
-      stat,
-    });
-    // Through the runtime: a changed allocation rebuilds the party's hero-skill buff children and
-    // heals to the new MaxHP (`-[CharacterSkillsNode finished:]`'s full restore).
-    const changed = this.deps.playerRuntime.mutateSkill(action, stat);
-    if (!changed) throw new Error(`Character skill ${action} rejected for ${stat}`);
-    this.deps.onStateChanged();
+    // The Skills child can close during a slow response. Keep its retained menu and the town
+    // from starting another command until the allocation has settled.
+    this.locked = true;
+    try {
+      await this.deps.authority?.submitPlayer({
+        type: action === "increment" ? "player.incrementSkill" : "player.decrementSkill",
+        stat,
+      });
+      // Through the runtime: a changed allocation rebuilds the party's hero-skill buff children
+      // and heals to the new MaxHP (`-[CharacterSkillsNode finished:]`'s full restore).
+      const changed = this.deps.playerRuntime.mutateSkill(action, stat);
+      if (!changed) throw new Error(`Character skill ${action} rejected for ${stat}`);
+      this.deps.onStateChanged();
+    } finally {
+      this.locked = false;
+    }
   }
 
   private async openTownMonsterManagement(): Promise<void> {
@@ -3165,7 +3197,13 @@ export class WorldNode {
       partyManagementShowsFirstUseTutorial(style) &&
       hasSourceTutorialTopicSurface(this.deps.game, tutorial)
     ) {
-      await this.presentIntroTutorial(tutorial.key, tutorial.images);
+      editor.setInputEnabled(false);
+      try {
+        await this.presentIntroTutorial(tutorial.key, tutorial.images);
+        await this.activePlotTutorial?.done;
+      } finally {
+        editor.setInputEnabled(true);
+      }
     }
   }
 
@@ -3397,7 +3435,8 @@ export class WorldNode {
   }
 
   private hasModal(): boolean {
-    return this.deps.authority?.egg.pendingEgg() !== undefined ||
+    return this.tutorialClaims.size > 0 ||
+      this.deps.authority?.egg.pendingEgg() !== undefined ||
       this.sourceSceneFade !== undefined ||
       this.activeBigMap !== undefined ||
       this.activePartyEditor !== undefined ||
@@ -3546,23 +3585,30 @@ export class WorldNode {
   private presentReplayBattleTutorial(): void {
     if (
       this.lifecycle.disposed ||
+      this.modalOpening ||
       this.deps.playerRuntime.profile.hasTutorialFlag(REPLAY_BATTLE_TUTORIAL_FLAG)
     ) return;
 
-    if (this.deps.authority === undefined) {
-      if (!this.deps.playerRuntime.profile.claimTutorialFlag(REPLAY_BATTLE_TUTORIAL_FLAG)) return;
-      this.mountReplayBattleTutorial();
-      return;
-    }
-
-    void this.claimTutorialFlag(REPLAY_BATTLE_TUTORIAL_FLAG).then((claim) => {
-      if (claim === "claimed") this.mountReplayBattleTutorial();
+    // Arrival has completed, but its first-use tutorial still owns the next input. Keep
+    // navigation/menu actions out through both the authority claim and async popup mounting.
+    this.modalOpening = true;
+    void (async () => {
+      try {
+        const claimed = this.deps.authority === undefined
+          ? this.deps.playerRuntime.profile.claimTutorialFlag(REPLAY_BATTLE_TUTORIAL_FLAG)
+          : await this.claimTutorialFlag(REPLAY_BATTLE_TUTORIAL_FLAG) === "claimed";
+        if (claimed) await this.mountReplayBattleTutorial();
+      } finally {
+        this.modalOpening = false;
+      }
+    })().catch((error: unknown) => {
+      if (!this.lifecycle.disposed) queueMicrotask(() => { throw error; });
     });
   }
 
-  private mountReplayBattleTutorial(): void {
+  private async mountReplayBattleTutorial(): Promise<void> {
     if (this.lifecycle.disposed) return;
-    void showReplayBattleTutorial({
+    await showReplayBattleTutorial({
       parent: this.pointRoot,
       owner: this,
       assets: this.deps.game.assets,
@@ -3572,9 +3618,7 @@ export class WorldNode {
         onButtonPress: () => this.deps.audio.playSfx("click"),
         onButtonBlocked: () => this.deps.audio.playSfx("notAllowed"),
       },
-    }, this.deps.game.strings).catch((error: unknown) => {
-      if (!this.lifecycle.disposed) queueMicrotask(() => { throw error; });
-    });
+    }, this.deps.game.strings);
   }
 
   private async presentIntroTutorial(key: string, images: readonly string[]): Promise<void> {

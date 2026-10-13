@@ -64,6 +64,7 @@ export interface InventoryManagementOptions {
   readonly onClick: () => void;
   readonly onBlocked: () => void;
   readonly onClose: () => void;
+  readonly isMutationPending?: () => boolean;
   readonly mutate?: (
     action: "drop" | "equip" | "unequip",
     itemId: InventoryItemId,
@@ -113,7 +114,7 @@ export async function showInventoryManagement(
    *  rather than at `CommandCoordinator.submit`, which permits only one in-flight command per slot
    *  and would reject the second with `CommandBusyError`. */
   const runMutation = async (body: () => Promise<void>): Promise<void> => {
-    if (closed || mutating) return;
+    if (closed || mutating || opts.isMutationPending?.()) return;
     mutating = true;
     try {
       await body();

@@ -472,6 +472,24 @@ describe("inventory mutations serialize at flow level", () => {
     tap(topmost(h.host, "gemInventoryItems"));
   }
 
+  it("refuses inventory mutation while its owner is committing a tutorial, then recovers", async () => {
+    const h = harness();
+    let pending = true;
+    const opening = showInventoryManagement({ ...h.options, isMutationPending: () => pending });
+    await settle(); await h.ticker.drain();
+    const handle = await opening;
+    selectFirstRow(h);
+    tap(topmost(h.host, "popupButton:EquipGemKey"));
+    await settle();
+    expect(h.commands).toHaveLength(0);
+    pending = false;
+    tap(topmost(h.host, "popupButton:EquipGemKey"));
+    await settle();
+    expect(h.commands).toHaveLength(1);
+    h.commands[0]!.resolve(); await settle();
+    handle!.requestClose();
+  });
+
   it("shows the Novice slot refusal without submitting an authority mutation", async () => {
     const h = harness(1, "Novice");
     await openSettled(h);

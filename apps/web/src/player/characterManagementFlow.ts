@@ -37,6 +37,7 @@ export interface CharacterManagementOptions {
   readonly onClick: () => void;
   readonly onBlocked: () => void;
   readonly onClose: () => void;
+  readonly isMutationPending?: () => boolean;
   readonly onFirstGemDisplay?: () => void | Promise<void>;
   readonly mutateInventory?: (
     action: "drop" | "equip" | "unequip",
@@ -191,7 +192,7 @@ export class CharacterManagementFlow extends Container {
   }
 
   private async activate(action: CharacterManagementAction): Promise<void> {
-    if (this.closed || this.child !== undefined) return;
+    if (this.closed || this.child !== undefined || this.opts.isMutationPending?.()) return;
     this.opts.onClick();
     if (action === "gems") {
       let child: InventoryManagementHandle | undefined;
@@ -214,6 +215,7 @@ export class CharacterManagementFlow extends Container {
             this.visible = true;
           }
         },
+        ...(this.opts.isMutationPending === undefined ? {} : { isMutationPending: this.opts.isMutationPending }),
         ...(this.opts.mutateInventory === undefined
           ? {}
           : { mutate: this.opts.mutateInventory }),
