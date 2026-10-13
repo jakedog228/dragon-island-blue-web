@@ -21,8 +21,8 @@ import "./modLibrary.css";
 import { PVP_MOD, pvpModEnabled, setPvpModEnabled } from "../pvp/pvpMod.js";
 import { PVP_LISTING, PVP_BUILTIN_RELEASE, pvpLibraryEntry, pvpListingMatches } from "../pvp/pvpModListing.js";
 
-const catalogImageUrl = (mod: CatalogMod, digest: string): string => mod.id === PVP_LISTING.id
-  ? `${import.meta.env.BASE_URL}pvp-lobby.png` : remoteCatalogImageUrl(mod, digest);
+// The built-in PvP listing ships without screenshots, so every image comes from the catalog.
+const catalogImageUrl = (mod: CatalogMod, digest: string): string => remoteCatalogImageUrl(mod, digest);
 
 /** What Apply hands back to the launcher: the files to enable and how they resolve. */
 export interface ModManagerSelection extends LoadOrderChoice {
