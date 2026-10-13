@@ -104,6 +104,7 @@
     "scenario:egg-hatch": "node apps/web/tests/browser/egg-hatch.playwright.mjs",
     "scenario:player-progression": "node apps/web/tests/browser/player-progression.playwright.mjs",
     "scenario:tournament-bracket": "node apps/web/tests/browser/tournament-bracket.playwright.mjs",
+    "scenario:pvp": "node apps/web/tests/browser/pvp.playwright.mjs",
     "scenario:save-me": "node apps/web/tests/browser/save-me.playwright.mjs",
     "scenario:collection": "node apps/web/tests/browser/collection.playwright.mjs",
     "scenario:black-market-not-ready": "node apps/web/tests/browser/black-market-not-ready.playwright.mjs",

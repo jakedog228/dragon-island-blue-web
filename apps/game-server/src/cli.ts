@@ -4,6 +4,8 @@ import { CommunityHttp } from "./community.js";
 import { createCatalogOnlyServer } from "./devCatalog.js";
 import { ModCatalog } from "./modCatalog.js";
 import { loadOfficialMods } from "./officialMods.js";
+import { createInstalledPvpService } from "./pvpRuntime.js";
+import { installedPvpMods } from "./pvpSupportedMods.js";
 import {
   loadGameData,
   loadCollectionCatalog,
@@ -594,7 +596,18 @@ async function serve(): Promise<void> {
   });
   // Fail startup on a malformed shipped package rather than serving a partial Official catalog.
   const officialMods = config.officialModsDirectory ? await loadOfficialMods(config.officialModsDirectory) : [];
+  const pvpMods = config.pvpEnabled ? await installedPvpMods(officialMods) : [];
   const server = createGameServer({
+    ...(config.pvpEnabled ? { pvp: createInstalledPvpService({
+      data, logicPackId: pack.logicPackId, dataDirectory,
+      supportedMods: pvpMods,
+      readOfficialState: async (playerId, slotId) => {
+        const record = await store.read(playerId, slotId);
+        if (record === undefined) return undefined;
+        reducer.validatePersistedRecord(record);
+        return record.state;
+      },
+    }) } : {}),
     // Official mods alone enable public catalog reads; uploads additionally need the author origin.
     ...(config.communityOrigin || officialMods.length > 0 ? { community: new CommunityHttp({
       directory: config.communityDirectory, accountDirectory: dataDirectory,

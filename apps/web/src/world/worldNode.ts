@@ -279,6 +279,7 @@ export interface WorldNodeDeps {
   onEncounter: (request: WorldEncounterRequest) => void | Promise<void>;
   onArenaChallenge: (request: ArenaChallengeRequest) => void | Promise<void>;
   onTournamentBattle: (request: TournamentBattleRequest) => void | Promise<void>;
+  onPvp?: import("../player/tournamentFlow.js").TournamentFlowOptions["onPvp"];
   onTournamentPrize: (
     tournament: import("@dib/gamedata/browser").TournamentDef,
   ) => void | Promise<void>;
@@ -2338,6 +2339,7 @@ export class WorldNode {
             data: this.deps.game.gd,
             profile: this.deps.playerRuntime.profile,
             deferPresentation: true,
+            ...(this.deps.onPvp === undefined ? {} : { onPvp: this.deps.onPvp }),
             onClick: () => this.deps.audio.playSfx("click"),
             onBlocked: () => this.deps.audio.playSfx("notAllowed"),
             onStateChanged: () => this.deps.onStateChanged(),
@@ -2409,6 +2411,7 @@ export class WorldNode {
           if (await this.claimTutorialFlag("TournamentTutorial") === "claimed") {
             await tournamentFlow.showFirstEntryTutorial();
           }
+          tournamentFlow.finishEntry();
         },
       });
       if (this.lifecycle.disposed) {

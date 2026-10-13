@@ -446,6 +446,7 @@ problem list. See [`deploy/.env.example`](../deploy/.env.example) for the operat
 | `DIB_GAME_SHUTDOWN_GRACE_MS` | `15000` | Must stay below `stop_grace_period` |
 | `DIB_GAME_SESSION_RATE_PER_MINUTE` / `_BURST` | `20` / `10` | Unauthenticated login route, keyed by client address |
 | `DIB_GAME_REGISTRATION_ENABLED` | `true` | `0` closes self-service registration |
+| `DIB_PVP_ENABLED` | `true` | `0` disables PvP session/invite/match routes; campaign play remains available |
 | `DIB_GAME_REGISTRATION_RATE_PER_MINUTE` / `_BURST` | `0.2` / `1` | One account per address per five minutes |
 | `DIB_GAME_MAX_ACCOUNTS` | `10000` | Ceiling on accounts, not on registry records |
 | `DIB_GAME_SCOREBOARD_RATE_PER_MINUTE` / `_BURST` | `60` / `20` | Unauthenticated scoreboard reads, keyed by client address |

@@ -27,6 +27,8 @@ import { AccountRequestError } from "./invites.js";
 import { createLogger, errorFields, type LogFields, type Logger } from "./logging.js";
 import { RateLimiter, resolveClientAddress, type RateLimitOptions } from "./rateLimit.js";
 import type { CommunityHttp } from "./community.js";
+import { PvpHttp } from "./pvpHttp.js";
+import type { PvpService } from "./pvpService.js";
 
 export * from "./config.js";
 export * from "./fileSlotStore.js";
@@ -97,6 +99,7 @@ export interface ScoreboardDirectory {
 }
 
 export interface GameServerOptions {
+  readonly pvp?: PvpService;
   readonly community?: CommunityHttp;
   readonly hmacSecret: string | Uint8Array;
   readonly services: readonly AnyGameService[];
@@ -169,6 +172,7 @@ export function createGameServer(options: GameServerOptions): Server {
 const PROBE_PATHS: ReadonlySet<string> = new Set(["/api/game/health", "/api/game/readiness"]);
 
 class GameHttpRuntime {
+  private readonly pvp: PvpHttp;
   private readonly secret: string | Uint8Array;
   private readonly services = new Map<string, AnyGameService>();
   private readonly isInvited: GameServerOptions["isInvited"];
@@ -221,6 +225,16 @@ class GameHttpRuntime {
       : new RateLimiter(options.rateLimit.scoreboard);
     this.trustProxy = options.trustProxy ?? false;
     this.logger = options.logger ?? createLogger();
+    this.pvp = new PvpHttp({
+      ...(options.pvp ? { service: options.pvp } : {}),
+      secret: this.secret, logger: this.logger, now: this.now, trustProxy: this.trustProxy,
+      authenticateOfficial: async (request) => {
+        const claims = this.authenticate(request);
+        if (!(await this.isInvited(claims.playerId))) throw new Error("Official access was revoked");
+        const account = await this.accounts?.read(claims.playerId);
+        return { id: `official:${claims.playerId}`, name: account?.username ?? "Official player", officialPlayerId: claims.playerId };
+      },
+    });
   }
 
   async route(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -231,6 +245,10 @@ class GameHttpRuntime {
       return;
     }
     const url = new URL(request.url ?? "/", "http://game.local");
+    if (url.pathname.startsWith("/api/pvp/")) {
+      await this.pvp.handle(request, response);
+      return;
+    }
     if (request.method === "GET" && url.pathname === "/api/game/health") {
       sendJson(response, 200, { ok: true });
       return;

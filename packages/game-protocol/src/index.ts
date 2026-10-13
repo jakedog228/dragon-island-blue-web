@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SAVE_SLOT_IDS } from "@dib/save-protocol";
+export * from "./pvp.js";
 
 export const GAME_PROTOCOL_VERSION = "game-protocol-v1" as const;
 export const PRESENTATION_EVENT_VERSION = "presentation-events-v1" as const;

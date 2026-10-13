@@ -9,6 +9,15 @@ while preserving v23 mechanics and historical schemas. See [regression checks](b
 
 ## Current system map
 
+Multiplayer PvP (browser verified): a built-in Official mod in the manager
+adds Tournament invite/join/resume and a two-human exhibition board. The CLI installs the durable
+match service, reads Official parties from committed slots, and accepts isolated Offline parties.
+Reviewed cosmetic mod differences reconcile; unknown gameplay adapters give specific errors.
+Workspace tests/typecheck and the content boundary pass. Muted two-client browser checks
+cover Offline, Official and mixed matches, phone/tablet layouts, committed-response retry,
+compatibility errors, cosmetics, reserves, natural victory and reconnect/forfeit. First-entry
+Tournament claims and tutorial popups retain input ownership before PvP opens. See `docs/pvp.md`.
+
 Community mods: the launcher's single Mod Manager button
 (under the archive field) separates Installed (device: Official, Community and Imported files),
 Load order (drag-and-drop activation order with recommended positions, conflict overrides, shared

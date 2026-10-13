@@ -112,6 +112,7 @@ import {
   migrateOfficialGameV22ToV23,
   migrateOfficialGameV23ToV24,
   parseOfficialGameStateV24,
+  projectOfficialPvpParty,
   officialEncounterResources,
   withoutEncounterRenderers,
   parseOfficialGameProjectionV12,
@@ -731,6 +732,29 @@ function partyStateV12Core(): Omit<OfficialGameStateV1, "pendingEgg"> {
   const { pendingEgg: _pendingEgg, ...core } = partyState();
   return core;
 }
+
+describe("Official PvP exhibition projection", () => {
+  const fixture = () => migrateOfficialGameV23ToV24({ data, quests, state: parseOfficialGameStateV12(data, quests, {
+    ...partyStateV12Core(), collectionClaims: { schemaVersion: 1, claimedGoalIds: [] }, nextContinuationSequence: 1,
+  }) });
+  it("projects the owned healthy batting order without exposing identities or modifying the campaign", () => {
+    const state = fixture();
+    const before = structuredClone(state), party = projectOfficialPvpParty(data, state);
+    expect(party).not.toHaveLength(0);
+    expect(party.every((member) => member.currentHp === undefined && member.sourceInstanceId === undefined)).toBe(true);
+    expect(party.some((member) => member.shortType === "BlueBabyDragon")).toBe(false);
+    expect(state).toEqual(before);
+    party[0]!.level = 999;
+    expect(state).toEqual(before);
+  });
+  it("requires a settled town decision and healthy monsters", () => {
+    const state = fixture();
+    expect(() => projectOfficialPvpParty(data, { ...state, location: { kind: "world", worldId: world.name, poiId: "First_City" } })).toThrow("Return to town");
+    const party = WorldTripParty.fromStateSnapshot(data, state.party);
+    const empty = party.stateSnapshot();
+    expect(() => projectOfficialPvpParty(data, { ...state, party: { ...empty, monsters: empty.monsters.map((monster) => ({ ...monster, currentHp: 0 })) } })).toThrow("healthy monsters");
+  });
+});
 
 function firstDungeonEntrance(dungeonFile = "Dungeon_1.plist"): {
   readonly world: (typeof allWorlds)[number];

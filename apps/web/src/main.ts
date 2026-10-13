@@ -101,6 +101,10 @@ import {
 } from "./authority/officialDefeatRecovery.js";
 import type { ImportedContentPackage } from "./content/archivePackage.js";
 import { hasImportedModProfile } from "./content/moddedContent.js";
+import { identifyContentLogicPack } from "./content/logicPackIdentity.js";
+import { pvpModEnabled } from "./pvp/pvpMod.js";
+import { PvpClient } from "./pvp/pvpClient.js";
+import { showPvpFlow } from "./pvp/pvpFlow.js";
 import { assertOfficialContentBoundary } from "./content/onlineModBoundary.js";
 import { runStartupSequence, type StartupLoadTask } from "./startup/startupSequence.js";
 import { runSourceBlackSceneFade } from "./sourceSceneFade.js";
@@ -3023,6 +3027,22 @@ async function boot(options: BootOptions = {}): Promise<void> {
       onEncounter,
       onArenaChallenge,
       onTournamentBattle,
+      get onPvp() { return pvpModEnabled() ? (parent: Container, onClose: () => void) => showPvpFlow({
+        parent, onClose, game, ticker: stage.app.ticker,
+        connect: async () => {
+          const identity = await identifyContentLogicPack(content);
+          const setup = { logicPackId: identity.logicPackId, mods: hasImportedModProfile(content)
+            ? content.modProfile.packages.map(({ id, version, digest }) => ({ id, version, digest })) : [] };
+          if (official !== undefined) {
+            if (!official.authority.pvpTransport) throw new Error("This Official connection does not support PvP. Update the client and server.");
+            return { client: new PvpClient(official.authority.pvpTransport), setup };
+          }
+          return { client: await PvpClient.offline(), setup };
+        },
+        entry: () => official === undefined
+          ? { source: "offline", party: partyForScene.projectAliveBattingPrefix().map(({ currentHp: _hp, sourceInstanceId: _id, capturable: _capture, ...member }) => member) }
+          : { source: "official", slotId: saveSession.slotId },
+      }) : undefined; },
       onTournamentPrize: async () => {
         if (officialSlot === undefined) {
           throw new Error("local Tournament prize claim must stay scene-owned");

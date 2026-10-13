@@ -187,6 +187,8 @@ export class BattleCore {
   private readonly rng: Rng;
   private readonly fightingGroupSize: number;
   private readonly blockCapture: boolean;
+  /** Port extension for PvP; omission preserves the shipped player-versus-AI behavior. */
+  private readonly humanTeams: ReadonlySet<0 | 1>;
 
   private readonly livings = new Map<string, LivingState>();
   /** Construction-time team-0 roster only. Summons and AddMonster creations never enter the
@@ -231,12 +233,13 @@ export class BattleCore {
     data: GameData,
     teams: [TeamMemberSetup[], TeamMemberSetup[]],
     rng: Rng,
-    opts?: { fightingGroupSize?: number; blockCapture?: boolean; silver?: number },
+    opts?: { fightingGroupSize?: number; blockCapture?: boolean; silver?: number; humanTeams?: readonly (0 | 1)[] },
   ) {
     this.data = data;
     this.rng = rng;
     this.fightingGroupSize = opts?.fightingGroupSize ?? 3;
     this.blockCapture = opts?.blockCapture ?? false;
+    this.humanTeams = new Set(opts?.humanTeams ?? [0]);
     this.silverAmount = opts?.silver ?? 0;
 
     if (teams[0].length === 0 || teams[1].length === 0) {
@@ -1112,12 +1115,13 @@ export class BattleCore {
     return !living.dead && !living.captured;
   }
 
-  /** Whether this living's turns are AI-piloted: every team-1 monster (native wild `ai`), plus
+  /** Whether this living's turns are AI-piloted: by default every team-1 monster (native wild `ai`), plus
    *  any team-0 monster carrying `Passive.Berserk` (its entry hook set `ai = BadguyAI.ai`
-   *  because `ai` was nil — targeting-passives.md §C, permanent for the whole battle). */
+   *  because `ai` was nil — targeting-passives.md §C, permanent for the whole battle).
+   *  PvP explicitly marks both teams human; berserk and native spirits remain automatic. */
   isAiControlled(id: string): boolean {
     const living = this.livingOrThrow(id);
-    return living.team === 1 || living.berserk || living.nativeSpirit;
+    return !this.humanTeams.has(living.team) || living.berserk || living.nativeSpirit;
   }
 
   hpOf(id: string): number {

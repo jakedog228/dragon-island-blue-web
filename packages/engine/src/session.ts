@@ -154,7 +154,7 @@ export class BattleSession {
     data: GameData,
     teams: [TeamMemberSetup[], TeamMemberSetup[]],
     rng: Rng,
-    opts?: { fightingGroupSize?: number; blockCapture?: boolean; silver?: number },
+    opts?: { fightingGroupSize?: number; blockCapture?: boolean; silver?: number; humanTeams?: readonly (0 | 1)[] },
   ) {
     this.core = new BattleCore(data, teams, rng, opts);
     this.data = data;
@@ -343,7 +343,7 @@ export class BattleSession {
 
       return { type: "awaitingEnemy", actorId, forcedLooseTurn: true };
     }
-    if (this.core.teamOf(actorId) === 0 && !this.core.isAiControlled(actorId)) {
+    if (!this.core.isAiControlled(actorId)) {
       const choices = buildPlayerChoices(this.data, this.core.shortTypeOf(actorId), (ability, ref) =>
         this.core.blockUseReasonFor(actorId, ability, ref.arguments),
       );

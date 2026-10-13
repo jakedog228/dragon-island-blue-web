@@ -18,6 +18,7 @@ export default defineConfig(({ command }) => ({
   plugins: [webAppShellResources(), assetArchiveResources(), offlineShell(), ...(command === "serve" ? [developmentCsp()] : [])],
   server: {
     proxy: {
+      "/api/pvp": { target: gameProxyTarget, changeOrigin: false },
       "/api/community": { target: gameProxyTarget, changeOrigin: false },
       "/api/game": {
         target: gameProxyTarget,

@@ -13,13 +13,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@dib/engine": "workspace:*",
     "@dib/mod-kernel": "workspace:*",
     "@dib/gamedata": "workspace:*",
     "@dib/game-protocol": "workspace:*",
     "@dib/game-service": "workspace:*",
     "@dib/logic-pack": "workspace:*",
     "@dib/official-game": "workspace:*",
-    "@dib/save-protocol": "workspace:*"
+    "@dib/save-protocol": "workspace:*",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

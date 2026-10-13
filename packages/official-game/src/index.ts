@@ -1547,11 +1547,11 @@ export function validateOfficialGameSupport(options: {
     "FirstAllMonsterpedia",
     "TownWarpTutorial",
     "TournamentTutorial",
-    // `-[BattleNode ccTouchBegan:] @ 0xc4788` claims the first unset of these six through
-    // `[[UserSavedData sharedInstance] setTutorialFlag:]` (raw `0xc4818` loop / `0xc4870`) before
-    // showing its "NOT YOUR TURN" banner, capping the banner at six appearances per save. They are
-    // real persisted save state in the source, so an authoritative run must accept the claim.
-    // See `re-notes/not-your-turn.md`.
+
+
+
+
+
     ...Array.from({ length: 6 }, (_unused, index) => `NotYourTurn${index + 1}`),
   ]);
   const hasTownWarp = worlds.some((world) => world.pointsOfInterest.some((poi) =>
@@ -9666,6 +9666,22 @@ export class OfficialGameV23Reducer implements GameCommandReducer<
 
 /** v24 preserves mechanics and projects archive-neutral fixed encounter identities. */
 export type OfficialGameStateV24 = OfficialGameStateV23;
+
+/** Read-only exhibition projection; it must never settle PvP changes into a campaign aggregate. */
+export function projectOfficialPvpParty(data: GameData, state: OfficialGameStateV24): TeamMemberSetup[] {
+  if (state.location.kind !== "town" || state.battle !== undefined || state.pendingEgg !== undefined || state.pendingDefeat !== undefined) {
+    throw new Error("Return to town and finish the current campaign decision before entering PvP.");
+  }
+  const party = WorldTripParty.fromStateSnapshot(data, state.party);
+  const profile = PlayerProfile.fromStateSnapshot(state.profile, party.monsters().map((monster) => monster.level), party,
+    profileRestoreOptions(data, state.profile));
+  party.setPlayerBuffSource(() => profile.battleStatBonuses());
+  party.setBattingOrderSize(battingOrderSizeFor(data.license(profile.licenseType).battingOrderSize, profile.heroLevel,
+    { infiniteDungeonHighestLevel: profile.infiniteDungeonHighestLevel }));
+  const members = party.projectAliveBattingPrefix();
+  if (!members.length) throw new Error("Your party has no healthy monsters. Heal your party before entering PvP.");
+  return members.map(({ sourceInstanceId: _id, currentHp: _hp, ...member }) => member);
+}
 
 export function parseOfficialGameStateV24(
   data: GameData,

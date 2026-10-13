@@ -65,6 +65,14 @@ function problemsOf(load: () => unknown): readonly string[] {
 }
 
 describe("loadGameServerConfig", () => {
+  it("enables PvP by default and accepts an explicit operator disable", () => {
+    const paths = fixture(); makeExtractedData(paths.extractedData);
+    const environment = { DIB_GAME_HMAC_SECRET_FILE: paths.secretFile, DIB_GAME_DATA_DIR: paths.dataDirectory,
+      DIB_GAME_EXTRACTED_DATA: paths.extractedData };
+    expect(loadGameServerConfig({ environment }).pvpEnabled).toBe(true);
+    expect(loadGameServerConfig({ environment: { ...environment, DIB_PVP_ENABLED: "0" } }).pvpEnabled).toBe(false);
+    expect(problemsOf(() => loadGameServerConfig({ environment: { ...environment, DIB_PVP_ENABLED: "maybe" } })).join(" ")).toContain("DIB_PVP_ENABLED");
+  });
   it("requires a distinct canonical author origin and explicit production mod storage", () => {
     const paths = fixture(); makeExtractedData(paths.extractedData);
     const environment = { DIB_GAME_ENV: "production", DIB_GAME_HMAC_SECRET_FILE: paths.secretFile,

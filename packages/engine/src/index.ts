@@ -16,6 +16,7 @@ export * from "./core.js";
 export * from "./battle.js";
 export * from "./session.js";
 export * from "./replay.js";
+export * from "./pvp.js";
 export * from "./capture.js";
 export * from "./xp.js";
 export * from "./world.js";

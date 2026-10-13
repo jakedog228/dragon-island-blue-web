@@ -20,6 +20,9 @@ importers:
 
   apps/game-server:
     dependencies:
+      '@dib/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
       '@dib/game-protocol':
         specifier: workspace:*
         version: link:../../packages/game-protocol
@@ -41,6 +44,9 @@ importers:
       '@dib/save-protocol':
         specifier: workspace:*
         version: link:../../packages/save-protocol
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^20.14.0

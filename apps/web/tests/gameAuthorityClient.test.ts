@@ -113,6 +113,21 @@ afterEach(() => {
 });
 
 describe("RemoteGameAuthority", () => {
+  it("uses the authenticated PvP transport and renews an expired session without resending a new action", async () => {
+    const requests: RequestInit[] = [];
+    stubCurrentSession((url, init) => {
+      expect(url).toBe("/api/pvp/invites"); requests.push(init);
+      return requests.length === 1 ? new Response("expired", { status: 401 }) : jsonResponse({ accepted: true });
+    });
+    const authority = await RemoteGameAuthority.authenticate({ endpoint: "", loginToken: "private-login-token", logicPackId });
+    const body = JSON.stringify({ requestId: "unchanged" });
+    expect((await authority.pvpTransport("/api/pvp/invites", { method: "POST", body })).status).toBe(200);
+    expect(requests.map((request) => request.body)).toEqual([body, body]);
+    expect(requests.map((request) => new Headers(request.headers).get("Authorization"))).toEqual([
+      "Bearer signed-session-token-long-enough", "Bearer signed-session-token-long-enough",
+    ]);
+    await expect(authority.pvpTransport("https://another.example/", {})).rejects.toThrow("Invalid PvP route");
+  });
   it("uses the shared Official simulation identity", () => {
     expect(OFFICIAL_CLIENT_SIMULATION_VERSION).toBe(OFFICIAL_GAME_SIMULATION_VERSION);
   });

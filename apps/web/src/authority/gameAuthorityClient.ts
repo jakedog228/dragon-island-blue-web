@@ -128,6 +128,8 @@ export type InstalledCommandResult =
 export const OFFICIAL_CLIENT_SIMULATION_VERSION = OFFICIAL_GAME_SIMULATION_VERSION;
 
 export interface GameAuthority {
+  /** Scoped authenticated PvP transport. Offline clients never receive the Official token. */
+  readonly pvpTransport?: (path: string, init: RequestInit) => Promise<Response>;
   readonly trustTier: "official";
   readonly pack: LogicPackDescriptorV1;
   readonly slots: readonly AuthoritativeSlotSummaryV1[];
@@ -163,6 +165,17 @@ export class RemoteGameAuthorityError extends Error {
 }
 
 export class RemoteGameAuthority implements GameAuthority {
+  readonly pvpTransport = async (path: string, init: RequestInit): Promise<Response> => {
+    if (!/^\/api\/pvp\/(?:invites|join|matches(?:\/|$))/.test(path)) throw new Error("Invalid PvP route");
+    const send = () => {
+      const headers = new Headers(init.headers); headers.set("Authorization", `Bearer ${this.token}`);
+      return fetch(`${this.endpoint}${path}`, { ...init, headers });
+    };
+    const response = await send();
+    if (response.status !== 401) return response;
+    await this.reauthenticate();
+    return send();
+  };
   readonly trustTier = "official" as const;
   readonly account: AccountGateway | undefined;
   readonly scoreboard = (): Promise<ScoreboardResponseV1> => fetchScoreboard(this.endpoint);

@@ -33,6 +33,9 @@ import {
   showMonsterHatchPopup,
 } from "../ui/monsterHatchPopup.js";
 import { PopupHost } from "../ui/popup.js";
+import { prepareMenuButton2 } from "../ui/menuButton2.js";
+import { pvpLayout } from "../pvp/pvpBattleModel.js";
+import type { PvpFlowHandle } from "../pvp/pvpFlow.js";
 
 /** `outlineFadeBackgroundNode`'s borderWidth for all three title labels (`widgets.md` §6). */
 const TITLE_OUTLINE_WIDTH_PT = 2;
@@ -62,6 +65,7 @@ export interface TournamentFlowOptions {
 
   readonly onRequestExit?: (reason: "back" | "prize" | "finished") => void | Promise<void>;
   readonly onClose: () => void;
+  readonly onPvp?: (parent: Container, onClose: () => void) => PvpFlowHandle;
   readonly nowSeconds?: () => number;
 }
 
@@ -76,9 +80,12 @@ export class TournamentFlow extends Container {
   private presented = false;
   private exitPending = false;
   private finishedTournament = false;
+  private pvp: PvpFlowHandle | undefined;
+  private entryPending = false;
 
   private constructor(private readonly opts: TournamentFlowOptions) {
     super();
+    this.entryPending = opts.deferPresentation === true;
   }
 
   static async show(opts: TournamentFlowOptions): Promise<TournamentFlow> {
@@ -98,6 +105,7 @@ export class TournamentFlow extends Container {
     const progress = this.opts.profile.tournament;
     return {
       kind: "tournament",
+      entryPending: this.entryPending,
       open: !this.closed,
       index: progress.index,
       round: progress.round,
@@ -106,11 +114,13 @@ export class TournamentFlow extends Container {
       timeToNext: progress.timeToNextTournament(this.now()),
       buttons: this.buttons,
       popups: PopupHost.for(this).debugState,
+      ...(this.pvp === undefined ? {} : { pvp: this.pvp.debugState }),
       ...(this.prizeList === undefined ? {} : { prizeList: this.prizeList.debugState }),
     };
   }
 
   requestBack(): boolean {
+    if (this.pvp !== undefined) return this.pvp.requestBack();
     if (this.prizeList !== undefined) return this.prizeList.requestBack();
     void this.requestExit("back");
     return true;
@@ -126,7 +136,7 @@ export class TournamentFlow extends Container {
 
   /** `TournamentNode init` runs TournamentFinished and its finish selector is `back:`. */
   async presentFinishedPlotIfNeeded(): Promise<boolean> {
-    if (!this.finishedTournament || this.closed) return false;
+    if (!this.finishedTournament || this.closed || this.opts.onPvp !== undefined) return false;
     await this.opts.onFinished(this);
     await this.requestExit("finished");
     return true;
@@ -135,6 +145,8 @@ export class TournamentFlow extends Container {
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
+    this.pvp?.dispose();
+    this.pvp = undefined;
     this.prizeList?.dispose();
     this.prizeList = undefined;
     this.opts.ticker.remove(this.tickGlow);
@@ -164,10 +176,17 @@ export class TournamentFlow extends Container {
     );
     background.eventMode = "none";
     this.addChild(background);
+    if (this.opts.onPvp) await this.buildPvpEntry();
 
     const tournament = this.opts.data.tournament(this.opts.profile.tournament.index);
     if (tournament === undefined) {
       this.finishedTournament = true;
+      if (this.opts.onPvp) {
+        const label = makeTtfLabel(localizedString(this.opts.strings, "BackButtonKey"), pvpLayout(DISPLAY_MODE).tournamentButton.font);
+        const back = await prepareMenuButton2({ assets: this.opts.assets, scale9: this.opts.scale9, label });
+        back.node.position.set(screen.w * 0.75, screen.h * 0.85); back.node.eventMode = "static"; back.node.cursor = "pointer";
+        back.node.on("pointertap", () => { if (!this.pvp) void this.requestExit("back"); }); this.addChild(back.node);
+      }
       return;
     } else {
       // `-[TournamentNode init]` retains the `MonsterpediaFrames` spritesheet purely to draw
@@ -480,8 +499,32 @@ export class TournamentFlow extends Container {
     }
   };
 
+  private async buildPvpEntry(): Promise<void> {
+    const layout = pvpLayout(DISPLAY_MODE).tournamentButton;
+    const prepared = await prepareMenuButton2({ assets: this.opts.assets, scale9: this.opts.scale9,
+      label: makeTtfLabel("PvP", layout.font) });
+    const button = prepared.node;
+    button.label = "tournament:pvp";
+    button.position.set(layout.x - prepared.visibleRect.x, layout.y - prepared.visibleRect.y);
+    button.eventMode = "static"; button.cursor = "pointer";
+    button.on("pointertap", (event) => {
+      event.stopPropagation();
+      this.openPvp();
+    });
+    this.addChild(button);
+    this.buttons.push({ action: "pvp", x: layout.x, y: layout.y, w: prepared.visibleRect.w, h: prepared.visibleRect.h });
+  }
+
+  /** The scene fade and authoritative first-entry claim must settle before PvP can mount. */
+  finishEntry(): void { this.entryPending = false; }
+
+  private openPvp(): void {
+    if (this.closed || this.exitPending || this.entryPending || this.pvp || !this.opts.onPvp || PopupHost.for(this).modalDepth > 0) return;
+    this.opts.onClick(); this.pvp = this.opts.onPvp(this, () => { this.pvp = undefined; });
+  }
+
   private async activate(action: TournamentAction): Promise<void> {
-    if (this.closed || this.exitPending) return;
+    if (this.closed || this.exitPending || this.pvp) return;
     this.opts.onClick();
     if (action === "back") {
       await this.requestExit("back");

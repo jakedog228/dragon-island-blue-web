@@ -1,0 +1,13 @@
+.pvp-dialog { color: #f0eee6; background: #172a32; border: 1px solid #859b9f; border-radius: 12px; width: min(560px, 88vw); max-height: 84dvh; padding: 20px; box-shadow: 0 16px 64px #0009; font: 15px/1.5 system-ui, sans-serif; }
+.pvp-dialog::backdrop { background: #071016b8; }
+.pvp-dialog__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.pvp-dialog h2, .pvp-dialog h3 { margin: 0 0 8px; }
+.pvp-dialog button { color: #fff; background: #355464; border: 1px solid #7897a5; border-radius: 6px; padding: 9px 14px; margin: 4px 8px 4px 0; font: inherit; cursor: pointer; }
+.pvp-dialog button:disabled { opacity: .5; cursor: default; }
+.pvp-dialog button:focus-visible, .pvp-dialog input:focus-visible { outline: 3px solid #f3d17e; outline-offset: 2px; }
+.pvp-dialog__code { display: block; color: #f3d17e; font: 700 32px monospace; letter-spacing: .18em; padding: 12px 0; user-select: all; }
+.pvp-dialog__error { border-left: 3px solid #eea080; background: #4b3033; padding: 12px; overflow-wrap: anywhere; }
+.pvp-dialog__actions { display: grid; gap: 16px; }
+.pvp-dialog form { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
+.pvp-dialog label { display: grid; gap: 6px; }
+.pvp-dialog input { background: #091c25; border: 1px solid #7897a5; color: white; padding: 10px; border-radius: 4px; font: 18px monospace; text-transform: uppercase; width: 12ch; }

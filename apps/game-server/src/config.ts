@@ -25,6 +25,7 @@ export interface RateLimitSettings {
 }
 
 export interface GameServerConfig {
+  readonly pvpEnabled: boolean;
   readonly communityOrigin: string | undefined;
   readonly communityDirectory: string;
   /** Read-only directory of operator-shipped `.dibmod` files published as Official mods. */
@@ -161,6 +162,7 @@ export function loadGameServerConfig(
     problems,
   );
   const trustProxy = readBoolean(read("DIB_GAME_TRUST_PROXY"), "DIB_GAME_TRUST_PROXY", false, problems);
+  const pvpEnabled = readBoolean(read("DIB_PVP_ENABLED"), "DIB_PVP_ENABLED", true, problems);
 
   const sessionRateLimit: RateLimitSettings = {
     perMinute: readPositiveInteger(
@@ -259,6 +261,7 @@ export function loadGameServerConfig(
   const officialModsDirectory = officialModsRaw ? resolve(officialModsRaw) : undefined;
   const warnings = problems.finish();
   return Object.freeze({
+    pvpEnabled,
     environment,
     communityOrigin,
     communityDirectory,

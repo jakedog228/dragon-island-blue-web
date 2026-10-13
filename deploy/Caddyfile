@@ -56,7 +56,8 @@
 			header_up X-Forwarded-For {remote_host}
 		}
 	}
-	handle /api/game/* {
+	@gameApi path /api/game/* /api/pvp/*
+	handle @gameApi {
 		reverse_proxy game:8788 {
 			header_up X-Forwarded-For {remote_host}
 			header_up X-Forwarded-Proto {scheme}

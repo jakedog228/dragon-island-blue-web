@@ -18,6 +18,7 @@ import { badge, button, coverImage, el, emptyState, externalLink, iconButton, sh
 import { readPlayProfiles } from "./playProfiles.js";
 import { loadRequiredLocalFonts } from "../localFonts.js";
 import "./modLibrary.css";
+import { PVP_MOD, pvpModEnabled, setPvpModEnabled } from "../pvp/pvpMod.js";
 
 /** What Apply hands back to the launcher: the files to enable and how they resolve. */
 export interface ModManagerSelection extends LoadOrderChoice {
@@ -102,6 +103,8 @@ interface Detail {
 }
 
 export function showModManager(options: ModManagerOptions): void {
+  const appliedPvp = pvpModEnabled();
+  let stagedPvp = appliedPvp;
   titleFace ??= loadRequiredLocalFonts();
   // ---------------------------------------------------------------------------------------------
   // State
@@ -301,6 +304,7 @@ export function showModManager(options: ModManagerOptions): void {
       : `${entry.displayName} will be disabled when you apply.`);
   };
   const disableAll = async (): Promise<void> => {
+    stagedPvp = false;
     await stage([]);
     toaster.show("Every mod will be disabled when you apply.");
   };
@@ -411,13 +415,19 @@ export function showModManager(options: ModManagerOptions): void {
     stagedAllow = true;
     await refreshOrder();
   };
-  const totalChanges = (): number => pendingChanges(staged, applied) + (orderChanged ? 1 : 0);
+  const totalChanges = (): number => pendingChanges(staged, applied) + (orderChanged ? 1 : 0) + (stagedPvp !== appliedPvp ? 1 : 0);
   const apply = async (): Promise<void> => {
     if (order.error) throw new Error("These mods cannot load together yet. Fix it in Load order first.");
-    await options.select({ files: stagedFiles, priorityOverrides: stagedOverrides, allowDeclaredConflicts: stagedAllow });
+    setPvpModEnabled(stagedPvp);
+    try {
+      if (pendingChanges(staged, applied) || orderChanged) {
+        await options.select({ files: stagedFiles, priorityOverrides: stagedOverrides, allowDeclaredConflicts: stagedAllow });
+      }
+    } catch (error) { setPvpModEnabled(appliedPvp); throw error; }
     dialog.close();
   };
   const discard = async (): Promise<void> => {
+    stagedPvp = appliedPvp;
     stagedOverrides = { ...appliedOrder.priorityOverrides };
     stagedAllow = appliedOrder.allowDeclaredConflicts;
     await stage([...options.selected()]);
@@ -439,7 +449,7 @@ export function showModManager(options: ModManagerOptions): void {
     }
     dialog.close();
   };
-  const applyLabel = (): string => options.applyReloads?.() ? "Apply & reload" : "Apply";
+  const applyLabel = (): string => (pendingChanges(staged, applied) || orderChanged) && options.applyReloads?.() ? "Apply & reload" : "Apply";
 
   // ---------------------------------------------------------------------------------------------
   // Details window
@@ -619,7 +629,7 @@ export function showModManager(options: ModManagerOptions): void {
     applyButton.disabled = order.error !== undefined;
     const detailText = order.error
       ? "These mods cannot load together yet. Open Load order to fix it."
-      : `${plural(staged.length, "mod")} will be enabled${orderChanged ? " in the new order" : ""}. Mod code only runs after you apply.`;
+      : `${plural(staged.length + Number(stagedPvp), "mod")} will be enabled${orderChanged ? " in the new order" : ""}. Changes take effect after you apply.`;
     applyBar.replaceChildren(
       el("div", "ml-apply__text", el("strong", "", `${plural(changes, "change")} to apply`), el("small", "", detailText)),
       button("Discard", { tone: "ghost", onClick: () => run(discard) }),
@@ -696,10 +706,12 @@ export function showModManager(options: ModManagerOptions): void {
 
   const renderLibrary = (): void => {
     const text = query.trim().toLowerCase();
+    const showPvp = (!text || `${PVP_MOD.name} ${PVP_MOD.id} Official multiplayer online`.toLowerCase().includes(text)) &&
+      (libraryFilter === "all" || (libraryFilter === "enabled" && stagedPvp));
     const visible = library.filter((entry) => (!text || `${entry.displayName} ${entry.modId}`.toLowerCase().includes(text)) &&
       (libraryFilter === "all" || (libraryFilter === "enabled" ? entry.stagedDigest !== undefined : entry.update !== undefined)));
     const segment = el("div", "ml-segment"); segment.setAttribute("role", "radiogroup"); segment.setAttribute("aria-label", "Filter installed mods");
-    for (const [id, label, count] of [["all", "All", library.length], ["enabled", "Enabled", library.filter((entry) => entry.stagedDigest).length],
+    for (const [id, label, count] of [["all", "All", library.length + 1], ["enabled", "Enabled", library.filter((entry) => entry.stagedDigest).length + Number(stagedPvp)],
       ["updates", "Updates", library.filter((entry) => entry.update).length]] as const) {
       const node = el("button", "ml-segment__item", label, el("span", "ml-segment__count", String(count)));
       node.type = "button"; node.setAttribute("role", "radio"); node.setAttribute("aria-checked", String(libraryFilter === id));
@@ -707,16 +719,29 @@ export function showModManager(options: ModManagerOptions): void {
       segment.append(node);
     }
     const importButton = button("Import file", { tone: "secondary", small: true, title: "Add .dibmod files from this device. You can also drop them anywhere here.", onClick: () => fileInput.click() });
-    if (!library.length) {
+    if (!library.length && !showPvp && !text && libraryFilter === "all") {
       main.replaceChildren(emptyState("No mods installed yet", "Find some under Browse, or import a .dibmod file you already have.",
         button("Browse mods", { tone: "primary", onClick: () => switchTab("browse") }),
         button("Import file", { tone: "secondary", onClick: () => fileInput.click() })));
       return;
     }
-    const disableAllButton = staged.length > 0
+    const disableAllButton = staged.length > 0 || stagedPvp
       ? button("Disable all", { tone: "ghost", small: true, title: "Turn every mod off. Takes effect when you apply.", onClick: () => run(disableAll) }) : undefined;
     main.replaceChildren(el("div", "ml-toolbar", segment, el("span", "ml-toolbar__spacer"), disableAllButton, importButton, viewToggle()));
-    if (!visible.length) {
+    if (showPvp) {
+      const toggle = el("button", "ml-switch", el("span", "ml-switch__thumb"));
+      toggle.type = "button"; toggle.setAttribute("role", "switch");
+      toggle.setAttribute("aria-label", PVP_MOD.name); toggle.setAttribute("aria-checked", String(stagedPvp));
+      toggle.addEventListener("click", () => { stagedPvp = !stagedPvp; render(); main.querySelector<HTMLButtonElement>(`[data-mod-id="${PVP_MOD.id}"] [role="switch"]`)?.focus(); });
+      const row = el("article", `ml-row ${stagedPvp ? "ml-row--on" : "ml-row--off"}`, toggle,
+        el("div", "ml-row__main", el("div", "ml-row__title", el("h4", "", PVP_MOD.name),
+          stagedPvp !== appliedPvp ? badge(stagedPvp ? "Enabling on apply" : "Disabling on apply", "pending") : undefined),
+        el("div", "ml-row__meta", `v${PVP_MOD.version} · by ${PVP_MOD.author} · Built-in · Offline + Official`),
+        el("p", "ml-muted", PVP_MOD.description)));
+      row.dataset["modId"] = PVP_MOD.id;
+      main.append(el("section", "ml-group ml-group--official", el("h3", "ml-group__title", "Official", el("small", "", "Included with the game")), row));
+    }
+    if (!visible.length && !showPvp) {
       main.append(emptyState(text ? "Nothing matches" : libraryFilter === "updates" ? "Everything is up to date" : "No mods are enabled",
         text ? `None of your installed mods match \u201c${query}\u201d.` : libraryFilter === "enabled" ? "Use the switch next to a mod to enable it." : "Updates are checked each time you open this list."));
       return;
