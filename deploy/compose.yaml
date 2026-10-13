@@ -26,7 +26,8 @@ services:
       DIB_GAME_BIND_HOST: 0.0.0.0
       DIB_GAME_DATA_DIR: /var/lib/dib-game
       DIB_COMMUNITY_ORIGIN: https://${DIB_COMMUNITY_HOST:-community.example.com}
-      DIB_GAME_PUBLIC_ORIGIN: https://${DIB_PUBLIC_HOST:?set DIB_PUBLIC_HOST}
+      # Caddy's hostname field may list aliases; the author portal needs one canonical origin.
+      DIB_GAME_PUBLIC_ORIGIN: ${DIB_GAME_PUBLIC_ORIGIN:?set DIB_GAME_PUBLIC_ORIGIN to one HTTPS origin}
       DIB_COMMUNITY_DATA_DIR: /var/lib/dib-community
       DIB_GAME_EXTRACTED_DATA: /srv/extracted/data
       DIB_GAME_HMAC_SECRET_FILE: /run/secrets/dib_game_hmac

@@ -52,9 +52,19 @@ function Invoke-NativeCommand {
         [string[]]$ArgumentList
     )
 
-    & $FilePath @ArgumentList
-    if ($LASTEXITCODE -ne 0) {
-        throw "$FilePath failed with exit code $LASTEXITCODE."
+    # Windows PowerShell 5.1 turns redirected native stderr into ErrorRecords. Docker/SSH
+    # write normal build progress there; only the native exit code decides success.
+    $previousErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $FilePath @ArgumentList
+        $nativeExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
+    if ($nativeExitCode -ne 0) {
+        throw "$FilePath failed with exit code $nativeExitCode."
     }
 }
 
@@ -205,7 +215,15 @@ rmdir "$audit_directory"
 
 cd "$release"
 docker compose -f deploy/compose.yaml --env-file deploy/.env config --quiet
+# Preserve running image identities before the build replaces the mutable Compose tags. A failed
+# activation must restore the already-proven images, without rebuilding during an outage.
+previous_game_container="$(docker compose -f "$current/deploy/compose.yaml" --env-file "$current/deploy/.env" ps -q game)"
+previous_proxy_container="$(docker compose -f "$current/deploy/compose.yaml" --env-file "$current/deploy/.env" ps -q proxy)"
+previous_game_image="$(docker inspect --format '{{.Image}}' "$previous_game_container")"
+previous_proxy_image="$(docker inspect --format '{{.Image}}' "$previous_proxy_container")"
 docker compose -f deploy/compose.yaml --env-file deploy/.env build
+# Validate the real mounted production configuration while the old containers still serve traffic.
+docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm --no-deps game config:check
 
 previous_target="$(readlink "$current")"
 next_link="$app_root/.current-$revision"
@@ -222,7 +240,9 @@ if ! docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --no-bui
 	ln -s "$previous_target" "$rollback_link"
 	mv -Tf "$rollback_link" "$current"
 	cd "$current"
-	docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build
+	docker tag "$previous_game_image" dib-game:latest
+	docker tag "$previous_proxy_image" dib-proxy:latest
+	docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --no-build
 	exit 1
 fi
 

@@ -3,9 +3,9 @@
 Runbook for standing up `apps/game-server` (the token-gated authoritative service) and `apps/web`
 (the browser client) behind TLS on a single host.
 
-The current release uses `official-game-v24`. Deploy matching web and server revisions.
-The CLI migration preserves the newest prior state, including v23 active battles, and adds
-archive-neutral fixed encounter identity for local artwork restoration. Older schemas and
+The current release uses `official-game-v25`. Deploy matching web and server revisions.
+The CLI migration chain (newest-first, v24 included) preserves the newest prior state, including
+active battles, and adds only the provable Arena/dungeon chats to `dialogsSeen`. Older schemas and
 receipts remain immutable; no player upload or resource transfer is needed.
 
 ---
@@ -521,8 +521,13 @@ leaves root-owned files: `chown -R 1000:1000` the state directory.
 ## Community mod hosting
 
 The new author portal requires a separate `DIB_COMMUNITY_HOST` DNS name pointing at this VM;
-set it in `deploy/.env` before deploying. Compose derives `DIB_COMMUNITY_ORIGIN` and
-`DIB_GAME_PUBLIC_ORIGIN`, which must differ, and mounts a separate `community-state` volume.
+set it in `deploy/.env` before deploying. Also set `DIB_GAME_PUBLIC_ORIGIN` to the one canonical
+HTTPS game origin (for example `https://play.example.com`). `DIB_PUBLIC_HOST` is Caddy configuration and
+may contain comma-separated aliases; it cannot be used as an origin. Compose derives
+`DIB_COMMUNITY_ORIGIN` from the author hostname; the two origins must differ. It mounts a separate
+`community-state` volume.
+The release helper runs `config:check` against the built image and production mounts before
+activation. A failed activation restores the previous running image identities without rebuilding.
 The existing scheduled `game-state` backup does not include that volume. Use the consistent
 `mods:backup` CLI and archive completed snapshots as described in [the mod-library runbook](mod-library.md).
 That runbook also covers quota/free-space limits, restore, `mods:hide` takedowns and author
