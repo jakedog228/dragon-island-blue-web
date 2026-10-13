@@ -1426,9 +1426,11 @@ const battleViewCommonShape = {
   /** Present exactly when the authority's battle has a breeder. Breeder's omitted authored
    * `xpBonus` is projected as its native default 1.0; absence means `Battle.breeder == nil`. */
   breederXpBonus: z.number().finite().nonnegative().optional(),
+  // Earned batting orders exceed 32 (license + heroLevel/3 + infiniteHighestLevel/10; a campaign
+  // reached 40 Offline and Official faulted at 34). Match the party projection's 256 bound.
   teams: z.tuple([
-    z.array(battleTeamMember).min(1).max(32),
-    z.array(battleTeamMember).min(1).max(32),
+    z.array(battleTeamMember).min(1).max(256),
+    z.array(battleTeamMember).min(1).max(256),
   ]),
   options: z.object({
     fightingGroupSize: positiveInteger.optional(),
@@ -2154,7 +2156,9 @@ export const FixedBattleEncounterV1Schema = z.object({
       allowCapture: z.boolean().optional(),
       displayName: boundedId.optional(),
     }).strict().optional(),
-  }).strict()).min(1).max(32),
+    // Must mirror the enemy team (see the v24 refinement), whose bound is 256: authored
+    // encounters field more than 32 (official-fresh-24 faulted entering one in World_4-1).
+  }).strict()).min(1).max(256),
 }).strict();
 export type FixedBattleEncounterV1 = z.infer<typeof FixedBattleEncounterV1Schema>;
 

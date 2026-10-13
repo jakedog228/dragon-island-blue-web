@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCOUNT_USERNAME_MAX_LENGTH,
+  FixedBattleEncounterV1Schema,
   ACCOUNT_USERNAME_MIN_LENGTH,
   AccountResponseV1Schema,
   AccountUsernameV1Schema,
@@ -1118,6 +1119,19 @@ describe("command result cursor invariants", () => {
         battle: { ...active.battle, seed: 1234 },
       },
     }).success).toBe(false);
+
+    // official-fresh-24 faulted (500) entering a dungeon battle with a 34-monster batting order;
+    // earned orders reach 40 (license + heroLevel/3 + infiniteHighestLevel/10).
+    const order = Array.from({ length: 40 }, (_, index) => ({
+      shortType: "BlueBabyDragon", level: 150, sourceInstanceId: `monster-${index + 1}`,
+    }));
+    expect(GameCommandResultV1Schema.safeParse({
+      ...result,
+      projection: {
+        ...active,
+        battle: { ...active.battle, teams: [order, order.map(({ shortType, level }) => ({ shortType, level }))] },
+      },
+    }).success).toBe(true);
   });
 });
 
@@ -1575,5 +1589,14 @@ describe("source-sized batting order wire admission", () => {
       .toEqual({ type: "party.commitBattingPriority", activeInstanceIds: ids });
     expect(CurrentGameCommandV1Schema.safeParse({ type: "party.commitBattingPriority",
       activeInstanceIds: Array.from({ length: 257 }, (_, i) => `monster-${i}`) }).success).toBe(false);
+  });
+});
+
+describe("fixed encounter identity", () => {
+  it("admits an authored enemy roster above 32, matching the battle team bound", () => {
+    // official-fresh-24 faulted (500) entering a World_4-1 fixed encounter with more than 32 enemies.
+    const members = Array.from({ length: 40 }, () => ({ type: "Ninja", level: 150 }));
+    expect(FixedBattleEncounterV1Schema.safeParse({ source: { kind: "world", tableKey: "Liberation" }, members }).success).toBe(true);
+    expect(FixedBattleEncounterV1Schema.safeParse({ source: { kind: "world", tableKey: "Liberation" }, members: [] }).success).toBe(false);
   });
 });

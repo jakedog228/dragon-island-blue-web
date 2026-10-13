@@ -13,6 +13,7 @@ import { Container } from "pixi.js";
 import { infiniteDungeonFloorEntry } from "@dib/player-domain";
 import { SceneCoordinator } from "../src/sceneCoordinator.js";
 import { WorldMenu } from "../src/world/worldMenu.js";
+import { EggHatchFlow } from "../src/world/eggHatchFlow.js";
 import { DungeonNode, type DungeonNodeDeps } from "../src/dungeon/dungeonNode.js";
 import {
   DungeonFeatureController,
@@ -716,6 +717,46 @@ describe("Dungeon menu owner guard wiring", () => {
       expect(captured.isInputBlocked?.()).toBe(true);
       finishPortal();
       await vi.waitFor(() => expect(captured.isInputBlocked?.()).toBe(false));
+    } finally { create.mockRestore(); show.mockRestore(); }
+  });
+});
+
+describe("Dungeon Egg presentation input ownership", () => {
+  it("refuses room input for the whole Egg presentation, including authority round-trips", async () => {
+
+
+    let captured!: DungeonNodeDeps;
+    let finishFlow!: () => void;
+    const node = { lifecycleSignal: new AbortController().signal, onDestroy: vi.fn(),
+      prepareStart: vi.fn(async () => undefined), start: vi.fn(async () => undefined),
+      notificationParent: new Container(), notificationOwner: {} };
+    const create = vi.spyOn(DungeonNode, "create").mockImplementation(async deps => {
+      captured = deps; return node as unknown as DungeonNode;
+    });
+    const show = vi.spyOn(EggHatchFlow, "show").mockImplementation(async () => ({
+      finished: new Promise<void>(resolve => { finishFlow = resolve; }), dispose: vi.fn(),
+    }) as unknown as EggHatchFlow);
+    const scenes = { current: undefined as unknown, replace: vi.fn(async (incoming: unknown) => { scenes.current = incoming; }) };
+    const controller = new DungeonFeatureController({
+      player: () => ({ party: {}, profile: {} }), game: { sourceTutorialTopics: [] }, audio: {},
+      content: { hasDungeonCapability: true }, scenes, nextRunSeed: () => 1,
+      stage: { app: { ticker: { add: vi.fn(), remove: vi.fn() } } },
+      keyboard: { register: vi.fn(() => vi.fn()) }, checkpoint: vi.fn(),
+    } as unknown as DungeonFeatureHost<"shell">) as unknown as {
+      run: unknown; startDungeonScene: (entry: object) => Promise<unknown>;
+      presentDungeonEggs: (node: unknown, eggs: readonly object[]) => Promise<void>;
+    };
+    controller.run = { session: {}, route: {}, definition: {} };
+    try {
+      await controller.startDungeonScene({ kind: "restore", actions: [], documentRestore: true });
+      expect(captured.isInputBlocked?.()).toBe(false);
+      const presenting = controller.presentDungeonEggs(node, [{ kind: "monsterEgg" }]);
+      expect(captured.isInputBlocked?.()).toBe(true);
+      await vi.waitFor(() => expect(show).toHaveBeenCalledOnce());
+      expect(captured.isInputBlocked?.()).toBe(true);
+      finishFlow();
+      await presenting;
+      expect(captured.isInputBlocked?.()).toBe(false);
     } finally { create.mockRestore(); show.mockRestore(); }
   });
 });

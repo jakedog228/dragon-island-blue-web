@@ -421,6 +421,10 @@ export class DungeonFeatureController<ShellMode extends string> {
   }> = [];
   private readonly pendingBattleRewardKeys = new Map<string, string>();
   private activeEggHatch: EggHatchFlow | undefined;
+  /** Egg presentations in progress, including the gap before the flow mounts and the authority
+   *  round-trips between its popups. Room input is refused throughout: the hatch popups are modal
+   *  in the source, and online a room command would race the pending Egg continuation. */
+  private eggPresentationDepth = 0;
   private eggMonsterSequence = 0;
   private activeLocalTerminal: LocalDungeonTerminal | undefined;
   private readonly localTerminalContinuation = new LocalDungeonTerminalContinuation();
@@ -1148,7 +1152,7 @@ export class DungeonFeatureController<ShellMode extends string> {
       isCollectionMonsterEligible: (shortType, extraLivingArguments) =>
         extraLivingArguments?.capturable !== false &&
         this.host.game.gd.monsterByShortType(shortType).category !== "Summon",
-      isInputBlocked: () => menuActionPending,
+      isInputBlocked: () => menuActionPending || this.eggPresentationDepth > 0,
       onMenu: async () => {
         if (
           activeMenu !== undefined ||
@@ -2093,6 +2097,18 @@ export class DungeonFeatureController<ShellMode extends string> {
   }
 
   private async presentDungeonEggs(
+    node: DungeonNode,
+    eggs: readonly Extract<DungeonLoot, { kind: "egg" | "monsterEgg" | "repeatEgg" }>[],
+  ): Promise<void> {
+    this.eggPresentationDepth++;
+    try {
+      await this.presentDungeonEggsInOrder(node, eggs);
+    } finally {
+      this.eggPresentationDepth--;
+    }
+  }
+
+  private async presentDungeonEggsInOrder(
     node: DungeonNode,
     eggs: readonly Extract<DungeonLoot, { kind: "egg" | "monsterEgg" | "repeatEgg" }>[],
   ): Promise<void> {

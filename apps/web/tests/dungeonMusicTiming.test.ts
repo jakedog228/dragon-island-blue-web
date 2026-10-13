@@ -253,6 +253,56 @@ describe("Dungeon music transition timing", () => {
     node.destroy();
   });
 
+  it("blocks old-floor input throughout a detached entrance waypoint transition", async () => {
+    const selection = deferred<Parameters<DungeonNodeDeps["onWaypointTravel"]>[0] | undefined>();
+    const travel = deferred<void>();
+    waypointHarness.choose.mockReturnValue(selection.promise);
+    const onSelectRoom = vi.fn();
+    const onWaypointTravel = vi.fn(() => travel.promise);
+    const { node } = dungeonNodeHarness({
+      allowWaypointSelection: true,
+      onWaypoint: () => [{ typeName: "Test", sourceFile: "Dungeon_Test.plist", floor: 2 }],
+      onWaypointTravel,
+      onSelectRoom,
+    });
+    await node.start([]);
+    const internals = node as unknown as {
+      inputLocked: boolean;
+      locked: boolean;
+      handleRoomTouch: (id: string, point: { x: number; y: number }) => Promise<void>;
+      selectRoom: (id: string) => Promise<void>;
+    };
+    selection.resolve({ typeName: "Test", sourceFile: "Dungeon_Test.plist", floor: 2 });
+    await selection.promise;
+    expect(onWaypointTravel).toHaveBeenCalledOnce();
+    // Finishing an independent entry animation must not release the network transition lock.
+    internals.locked = false;
+    expect(internals.inputLocked).toBe(true);
+    await internals.handleRoomTouch("old-floor-room", { x: 0, y: 0 });
+    await internals.selectRoom("old-floor-room");
+    expect(onSelectRoom).not.toHaveBeenCalled();
+    travel.resolve();
+    await travel.promise;
+    await Promise.resolve();
+    expect(internals.inputLocked).toBe(false);
+    node.destroy();
+  });
+
+  it("releases waypoint input ownership when transition preparation fails", async () => {
+    waypointHarness.choose.mockResolvedValue({ typeName: "Test", sourceFile: "Dungeon_Test.plist", floor: 2 });
+    const { node } = dungeonNodeHarness({
+      onWaypoint: () => [{ typeName: "Test", sourceFile: "Dungeon_Test.plist", floor: 2 }],
+      onWaypointTravel: async () => { throw new Error("transition failed"); },
+    });
+    const internals = node as unknown as {
+      inputLocked: boolean;
+      openWaypoint: (showNowhere: boolean) => Promise<boolean>;
+    };
+    await expect(internals.openWaypoint(false)).rejects.toThrow("transition failed");
+    expect(internals.inputLocked).toBe(false);
+    node.destroy();
+  });
+
   it("proves music precedes initiation of nonempty room-entry processing", async () => {
     const events: string[] = [];
     const { node, namePlate } = dungeonNodeHarness({

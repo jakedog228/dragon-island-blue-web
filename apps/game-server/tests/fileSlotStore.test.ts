@@ -1177,6 +1177,49 @@ function command(
 
 describe("restart-safe authoritative slot files", () => {
 
+  it("bounds warm history and replay retention without changing immutable records or exact retries", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dib-game-store-warm-history-"));
+    directories.push(directory);
+    const store = new FileAuthoritativeSlotStore(storeOptions(directory));
+    const service = new AuthoritativeGameService({ pack, reducer, store });
+    const create = command("warm_history_create", 0, { type: "slot.create", starterElement: "Water" });
+    const created = await service.execute(playerId, "slot-1", create);
+    const firstRecord = (await store.read(playerId, "slot-1"))!;
+    const originals = [{ envelope: create, result: created }];
+    const sidecarReads = () => vi.mocked(readFile).mock.calls.filter(call => String(call[0]).endsWith(".receipt")).length;
+    const beforeReads = sidecarReads();
+    for (let revision = 1; revision < 150; revision++) {
+      const envelope = command(`warm_history_move_${revision}`, revision,
+        { type: "world.navigate", targetPoiId: "Forest" }, `decision-${revision}`);
+      originals.push({ envelope, result: await service.execute(playerId, "slot-1", envelope) });
+    }
+    expect(sidecarReads()).toBe(beforeReads); // Appending/compacting never loads old sidecars.
+    const final = (await store.read(playerId, "slot-1"))!;
+    expect(final.revision).toBe(150);
+    expect(final.receipts.size).toBe(150); // No idempotency history is discarded.
+    expect([...final.receipts.values()].filter(receipt => receipt.result !== undefined).length).toBeLessThan(64);
+    expect(firstRecord.revision).toBe(1);
+    expect(firstRecord.receipts.size).toBe(1);
+    expect(firstRecord.receipts.get(create.commandId)?.result).toEqual(created);
+    const path = await findSlotFile(directory);
+    const before = await readFile(path, "utf8");
+    const fingerprint = await stat(path, { bigint: true });
+    for (const { envelope, result } of originals.slice(0, 40)) {
+      await expect(service.execute(playerId, "slot-1", envelope)).resolves.toEqual({ ...result, idempotentReplay: true });
+    }
+    const afterEviction = sidecarReads();
+    await expect(service.execute(playerId, "slot-1", create)).resolves.toEqual({ ...created, idempotentReplay: true });
+    expect(sidecarReads()).toBe(afterEviction + 1); // Evicted result reloads and validates from disk.
+    await expect(service.execute(playerId, "slot-1", create)).resolves.toEqual({ ...created, idempotentReplay: true });
+    expect(sidecarReads()).toBe(afterEviction + 1); // Immediate retries still share a warm result.
+    expect(await readFile(path, "utf8")).toBe(before);
+    expect((await stat(path, { bigint: true })).mtimeNs).toBe(fingerprint.mtimeNs);
+    expect((await service.bootstrap(playerId, "slot-1")).revision).toBe(150);
+    const restarted = new AuthoritativeGameService({ pack, reducer,
+      store: new FileAuthoritativeSlotStore(storeOptions(directory)) });
+    await expect(restarted.execute(playerId, "slot-1", create)).resolves.toEqual({ ...created, idempotentReplay: true });
+  }, 20_000); // 150 real durable fsync commits, including two compactions and replay eviction.
+
   it("lists, bootstraps and appends after restart without reading history; old replay loads exactly once", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dib-game-store-deferred-"));
     directories.push(directory);
@@ -1268,6 +1311,57 @@ describe("restart-safe authoritative slot files", () => {
     expect(await readFile(path, "utf8")).toBe(beforeSnapshot);
     expect(afterFingerprint.mtimeNs).toBe(beforeFingerprint.mtimeNs);
     expect(await readdir(receiptDirectoryForSlot(path))).toEqual(sidecars);
+  });
+
+  it("ignores and replaces an uncommitted receipt sidecar after restart", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dib-game-store-orphan-retry-"));
+    directories.push(directory);
+    let now = 123_456_000;
+    const make = () => new AuthoritativeGameService({
+      pack,
+      reducer,
+      store: new FileAuthoritativeSlotStore(storeOptions(directory)),
+      now: () => now,
+    });
+    const service = make();
+    const create = command("orphan_retry_create", 0, {
+      type: "slot.create", starterElement: "Water",
+    });
+    await service.execute(playerId, "slot-1", create);
+    const path = await findSlotFile(directory);
+    const committedSnapshot = await readFile(path, "utf8");
+    const createReceipt = await readFirstReceiptSidecar(path);
+    const committedReceipt = await readFile(createReceipt.sidecarPath, "utf8");
+    const move = command("orphan_retry_move", 1,
+      { type: "world.navigate", targetPoiId: "Forest" }, "decision-1");
+    const abandoned = await service.execute(playerId, "slot-1", move);
+    const orphanPath = join(receiptDirectoryForSlot(path),
+      `${createHash("sha256").update(move.commandId).digest("hex")}.receipt`);
+    const orphanBytes = await readFile(orphanPath, "utf8");
+
+    // Official05 stopped after writing its new sidecar but before replacing the slot.
+    // Recreate that disk state in this isolated fixture, then discard all warm caches.
+    await writeFile(path, committedSnapshot, "utf8");
+    now += 1_000;
+    const restarted = make();
+    expect((await restarted.listSlots(playerId))[0]?.revision).toBe(1);
+    const retried = await restarted.execute(playerId, "slot-1", move);
+    expect(retried.revision).toBe(2);
+    expect(retried.idempotentReplay).toBe(false);
+    expect(retried.projection.updatedAt).not.toBe(abandoned.projection.updatedAt);
+    const replacedBytes = await readFile(orphanPath, "utf8");
+    expect(replacedBytes).not.toBe(orphanBytes);
+    expect(JSON.parse(replacedBytes).result).toEqual(retried);
+    const snapshot = JSON.parse(await readFile(path, "utf8")) as {
+      revision: number; receipts: Array<{ commandId: string }>;
+    };
+    expect(snapshot.revision).toBe(2);
+    expect(snapshot.receipts.map(receipt => receipt.commandId))
+      .toEqual([create.commandId, move.commandId]);
+    expect(await readFile(createReceipt.sidecarPath, "utf8")).toBe(committedReceipt);
+    await expect(make().execute(playerId, "slot-1", move))
+      .resolves.toEqual({ ...retried, idempotentReplay: true });
+    expect(await readFile(orphanPath, "utf8")).toBe(replacedBytes);
   });
 
   it("cold-loads concurrent receipt histories within one process-wide file-handle budget", async () => {

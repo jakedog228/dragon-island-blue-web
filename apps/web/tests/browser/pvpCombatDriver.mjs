@@ -109,3 +109,13 @@ export async function pickNativePvpTargets(page, read, wait, click, requestedIds
   }
   throw new Error("Native target picker exceeded its target count");
 }
+
+
+// A committed terminal transcript can contain a long automatic status/death tail.
+// Give both manual browser clocks enough ticker time within the unchanged wall guard;
+// input-ready, modal, loading and unknown phases retain the small observation cadence.
+export function pvpClockStepMs(board) {
+  const automatic = ["turnLeadIn", "phaseDelay", "impact", "deathResolution", "turnComplete", "abilityQueued", "battleEndDelay", "battleEnded"];
+  return board?.status === "ended" && !board.rendering && !board.statusText?.visible &&
+    !board.activePopup && !board.picking && automatic.includes(board.presentation?.state) ? 100 : 25;
+}

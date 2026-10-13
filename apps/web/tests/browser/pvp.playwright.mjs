@@ -1,4 +1,4 @@
-import { nativePvpClick, nativePvpReady, nativePvpPoint, pickNativePvpTargets } from "./pvpCombatDriver.mjs";
+import { pvpClockStepMs, nativePvpClick, nativePvpReady, nativePvpPoint, pickNativePvpTargets } from "./pvpCombatDriver.mjs";
 // Opt-in. Use an isolated file-backed API + fresh Vite server and an operator-owned archive.
 // DIB_PVP_HOST_TOKEN / DIB_PVP_GUEST_TOKEN use disposable Official slots already in an Arena town.
 // No token means Offline. DIB_PVP_HOST_MOD may select a reviewed cosmetic package on the host only.
@@ -66,7 +66,7 @@ async function wait(page, predicate, description) {
         await device.mouse.click(point.x, point.y);
         evidence.statusAcknowledgments++;
       }
-      await device.evaluate(ms => typeof window.advanceTime === "function" && window.advanceTime(ms), 25);
+      await device.evaluate(ms => typeof window.advanceTime === "function" && window.advanceTime(ms), pvpClockStepMs(board));
     }
     await page.waitForTimeout(20);
   }

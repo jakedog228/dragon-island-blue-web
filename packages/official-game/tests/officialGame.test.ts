@@ -11617,6 +11617,81 @@ describe("official v18 town-origin world battle return", () => {
     expect(result.projection.location.kind).toBe("town");
     expect(() => reducer.projectPersistedState(result.state)).not.toThrow();
   });
+
+  it("purges a dungeon cache kept by a dungeon world exit when the battle auto-enters the town", () => {
+
+
+
+
+    const entrance = firstDungeonEntrance();
+    const created = reduce(undefined, { type: "slot.create", starterElement: "Water" });
+    const entered = reduce({
+      ...created.state,
+      location: { kind: "world", worldId: entrance.world.name, poiId: entrance.poi.name },
+      world: {
+        ...created.state.world!,
+        worldId: entrance.world.name,
+        currentPoiId: entrance.poi.name,
+      },
+    }, { type: "world.activateZone", zoneId: entrance.poi.name });
+    if (entered.state.dungeon === undefined) throw new Error("fixture did not enter a dungeon");
+    const retainedDungeon = entered.state.dungeon;
+
+    const sourceState = structuredClone(sourceWorldActiveBattle());
+    if (sourceState.battle?.origin.kind !== "world" || sourceState.world === undefined) {
+      throw new Error("town-origin retreat fixture has no world battle");
+    }
+    const sourceBattle = sourceState.battle;
+    const sourceWorld = sourceState.world;
+    const initial = stateFor({
+      ...sourceState,
+      battle: {
+        ...sourceBattle,
+        origin: { kind: "world", worldId: "World_1-1", poiId: "First_City" },
+      },
+      location: {
+        kind: "battle",
+        worldId: "World_1-1",
+        poiId: "First_City",
+        battleId: sourceBattle.battleId,
+      },
+      world: {
+        ...sourceWorld,
+        currentPoiId: "First_City",
+        lastTownId: "First_City",
+        visitedTownIds: [...new Set([...sourceWorld.visitedTownIds, "First_City"])],
+      },
+      dungeon: retainedDungeon,
+    });
+    expect(initial.dungeon).toBeDefined();
+    const reducer = v18Reducer();
+    const decision = reducer.projectPersistedState(initial).decision;
+    if (decision.type !== "battle.playerTurn") {
+      throw new Error("town-origin retreat fixture has no player decision");
+    }
+
+    const result = reducer.apply({
+      playerId: "town-retreat-dungeon-cache",
+      slotId: "slot-1",
+      pack: completeV18Pack,
+      state: initial,
+      previousRevision: 1,
+      now: "2026-08-12T00:00:00.000Z",
+    }, {
+      type: "battle.retreat",
+      battleId: decision.battleId,
+      actorId: decision.actorId,
+    });
+
+    expect(result.state.location).toEqual({
+      kind: "town",
+      worldId: "World_1-1",
+      townId: "First_City",
+    });
+    expect(result.state.dungeon).toBeUndefined();
+    expect(result.state.battle).toBeUndefined();
+    expect(() => reducer.projectPersistedState(result.state)).not.toThrow();
+  });
 });
 
 

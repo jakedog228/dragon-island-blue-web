@@ -285,8 +285,9 @@ export class DungeonNode {
   private heroXpRoot!: Container;
   private heroXpFrameWidth = 0;
   private locked = false;
+  private waypointTravelPending = false;
   private get inputLocked(): boolean {
-    return this.locked || this.deps.isInputBlocked?.() === true;
+    return this.locked || this.waypointTravelPending || this.deps.isInputBlocked?.() === true;
   }
   private pendingAction: DungeonRoomEntryAction | undefined;
   private waypointSelectionState: WaypointSelectionState | undefined;
@@ -1778,7 +1779,7 @@ export class DungeonNode {
       void selection
         .then(async (destination) => {
           if (destination === undefined || this.lifecycle.disposed) return;
-          await this.deps.onWaypointTravel(destination);
+          await this.travelToWaypoint(destination);
         })
         .catch((error: unknown) => { queueMicrotask(() => { throw error; }); })
         // A cancelled owner token retires a still-loading popup without ever presenting it; the
@@ -1790,8 +1791,21 @@ export class DungeonNode {
     }
     const destination = await selection;
     if (destination === undefined || this.lifecycle.disposed) return false;
-    await this.deps.onWaypointTravel(destination);
+    await this.travelToWaypoint(destination);
     return true;
+  }
+
+  private async travelToWaypoint(destination: DungeonRouteDescriptor): Promise<void> {
+    // The entrance selector is detached from start(): dismissing it must not expose the old
+    // floor while the authority commits travel and the replacement scene loads. Keep separate
+    // ownership so a finishing room-entry animation cannot release this transition's input.
+    if (this.waypointTravelPending || this.lifecycle.disposed) return;
+    this.waypointTravelPending = true;
+    try {
+      await this.deps.onWaypointTravel(destination);
+    } finally {
+      this.waypointTravelPending = false;
+    }
   }
 
   private dialogContext() {

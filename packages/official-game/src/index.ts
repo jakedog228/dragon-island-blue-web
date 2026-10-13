@@ -6047,7 +6047,15 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
     battle: OfficialBattleStateV1 | undefined,
     dungeon: OfficialDungeonStateV1 | null | undefined = undefined,
   ): OfficialGameStateV1 {
-    const nextDungeon = dungeon === undefined ? prior.dungeon : dungeon ?? undefined;
+    // A dungeon world exit (`dungeon.activateZone` -> world) deliberately keeps the run cache while
+    // the player walks the overworld; only a town entry purges it. Every town entry therefore drops
+    // the cache here, including the auto-entries that end a battle (town-origin WorldEncounter
+    // victory/retreat/Save Me, Tournament/Arena returns), not only the paths that pass `null`.
+    // A town location carrying the cache is rejected by the state parser, so this can only turn a
+    // previously always-rejected transition into a valid one.
+    const nextDungeon = location.kind === "town"
+      ? undefined
+      : dungeon === undefined ? prior.dungeon : dungeon ?? undefined;
     return {
       schemaVersion: 1,
       profile: profile.stateSnapshot(),

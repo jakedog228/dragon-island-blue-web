@@ -29,6 +29,10 @@ type ResultForBody<P extends ProjectionBody> = CommandResultForBody<P>;
 const RESULT_DIGESTS = new WeakMap<object, string>();
 const DEFERRED_DIGESTS = new WeakMap<object, string>();
 const RECEIPT_WRITE_CONCURRENCY = 8;
+// Keep only a short warm tail of committed projections. A multi-day campaign can have
+// >100,000 receipts; retaining every full result eventually exhausts the server heap.
+const WARM_RECEIPT_LIMIT = 64;
+const REPLAY_RESULT_LIMIT = 32;
 // A cold long-running campaign has thousands of sidecars. Share the read budget across slots
 // and migrations: Promise.all over every receipt exhausted Windows file handles on real saves.
 const RECEIPT_READ_CONCURRENCY = 8;
@@ -234,6 +238,7 @@ export class FileAuthoritativeSlotStore<
   private readonly loading = new Map<string, Promise<AuthoritativeSlotRecord<S, P> | undefined>>();
   private readonly currentCache = new Map<string, CachedRecord<S, P>>();
   private readonly migrationCache = new Map<string, CachedRecord<S, P>>();
+  private readonly replayResults = new Map<object, ResultForBody<P>>();
   private readonly layouts = new WeakMap<object, StoredLayout>();
 
   constructor(options: FileAuthoritativeSlotStoreOptions<S, P>) {
@@ -323,11 +328,20 @@ export class FileAuthoritativeSlotStore<
               DEFERRED_DIGESTS.set(receipt, resultDigest(result));
             }));
         }
-        await this.atomicWrite(path, `${JSON.stringify(serializeV2(completed.record))}\n`);
-        this.layouts.set(completed.record, "v2");
+        const serialized = serializeV2(completed.record);
+        await this.atomicWrite(path, `${JSON.stringify(serialized)}\n`);
+        const warmCount = [...completed.record.receipts.values()]
+          .filter(receipt => receipt.loadResult === undefined).length;
+        // Replace, never mutate, a published immutable record. The service revalidates the
+        // compact index once per batch instead of scanning its entire history every command.
+        const cachedRecord = warmCount >= WARM_RECEIPT_LIMIT
+          ? Object.freeze({ ...completed.record, receipts: deferredReceipts(path, serialized,
+            completed.record, this.parseCommandResult, this.replayResults) })
+          : completed.record;
+        this.layouts.set(cachedRecord, "v2");
         this.currentCache.set(key, {
           fingerprint: await fingerprint(path),
-          record: completed.record,
+          record: cachedRecord,
         });
       }
       return completed.value;
@@ -501,7 +515,7 @@ export class FileAuthoritativeSlotStore<
         this.validateRecord,
       );
       const record = deferred ? Object.freeze({ ...parsed,
-        receipts: deferredReceipts(path, raw, parsed, this.parseCommandResult) }) : parsed;
+        receipts: deferredReceipts(path, raw, parsed, this.parseCommandResult, this.replayResults) }) : parsed;
       this.layouts.set(record, layout);
       if (isCurrentPath) {
         this.currentCache.set(slotKey(playerId, slotId), {
@@ -682,6 +696,7 @@ function serializeV2<S, P extends ProjectionBody>(
 
 function deferredReceipts<S, P extends ProjectionBody>(path: string, value: unknown,
   record: AuthoritativeSlotRecord<S, P>, parseResult: (value: unknown) => ResultForBody<P>,
+  replayResults: Map<object, ResultForBody<P>>,
 ): ReadonlyMap<string, StoredReceipt<P>> {
   if (!isStoredSlotFileV2(value)) throw corrupt(record.slotId, "invalid deferred receipt layout");
   assertStoredFileKeys(value, record.slotId);
@@ -697,34 +712,55 @@ function deferredReceipts<S, P extends ProjectionBody>(path: string, value: unkn
     const envelope = GameCommandEnvelopeV1Schema.parse(JSON.parse(ref.canonicalEnvelope));
     if (envelope.commandId !== ref.commandId) throw corrupt(record.slotId, "receipt envelope command id disagrees");
     const reference = ref as StoredReceiptReferenceV2;
-    let pending: Promise<ResultForBody<P>> | undefined;
-    const receipt: StoredReceipt<P> = Object.freeze({ canonicalEnvelope: reference.canonicalEnvelope,
-      loadResult: () => {
-        if (pending !== undefined) return pending;
-        pending = (async () => {
-          try {
-            const expanded = await expandStoredFile(path, { ...value, receipts: [reference] }, record.slotId) as StoredSlotFileV1;
-            const result = parseResult(expanded.receipts[0]!.result);
-            if (result.commandId !== reference.commandId || result.revision > record.revision ||
-              result.projection.slotId !== record.slotId || result.projection.revision !== result.revision ||
-              result.projection.logicPackId !== record.logicPackId ||
-              result.projection.simulationVersion !== record.simulationVersion)
-              throw corrupt(record.slotId, "receipt does not belong to this slot generation");
-            resultDigest(result);
-            return result;
-          } catch (error) {
-            pending = undefined; // Repairs may be retried; do not cache a rejected read forever.
-            if (error instanceof GameServiceError) throw error;
-            throw new GameServiceError("STATE_CORRUPT", error instanceof Error ? error.message : "invalid receipt result");
-          }
-        })();
-        return pending;
-      },
-    });
-    DEFERRED_DIGESTS.set(receipt, reference.resultSha256);
-    receipts.set(reference.commandId, receipt);
+    receipts.set(reference.commandId, deferredReceipt(path, reference, {
+      slotId: record.slotId, revision: record.revision,
+      logicPackId: record.logicPackId, simulationVersion: record.simulationVersion,
+    }, parseResult, replayResults));
   }
   return receipts;
+}
+
+function deferredReceipt<P extends ProjectionBody>(path: string, reference: StoredReceiptReferenceV2,
+  identity: { slotId: SaveSlotId; revision: number; logicPackId: string; simulationVersion: string },
+  parseResult: (value: unknown) => ResultForBody<P>, replayResults: Map<object, ResultForBody<P>>,
+): StoredReceipt<P> {
+  // This closure must not retain the previous record, its receipt map, or its full snapshot.
+  // Otherwise each compaction would keep the very historical results it meant to release.
+  let pending: Promise<ResultForBody<P>> | undefined;
+  const receipt: StoredReceipt<P> = Object.freeze({ canonicalEnvelope: reference.canonicalEnvelope,
+    loadResult: () => {
+      const cached = replayResults.get(receipt);
+      if (cached !== undefined) {
+        replayResults.delete(receipt);
+        replayResults.set(receipt, cached);
+        return Promise.resolve(cached);
+      }
+      if (pending !== undefined) return pending;
+      pending = (async () => {
+        try {
+          const result = parseResult(await readReceiptResult(path, reference, identity.slotId));
+          if (result.commandId !== reference.commandId || result.revision > identity.revision ||
+            result.projection.slotId !== identity.slotId || result.projection.revision !== result.revision ||
+            result.projection.logicPackId !== identity.logicPackId ||
+            result.projection.simulationVersion !== identity.simulationVersion)
+            throw corrupt(identity.slotId, "receipt does not belong to this slot generation");
+          resultDigest(result);
+          replayResults.set(receipt, result);
+          while (replayResults.size > REPLAY_RESULT_LIMIT) replayResults.delete(replayResults.keys().next().value!);
+          return result;
+        } catch (error) {
+          if (error instanceof GameServiceError) throw error;
+          throw new GameServiceError("STATE_CORRUPT", error instanceof Error ? error.message : "invalid receipt result");
+        } finally {
+          // Single-flight only: settled promises also strongly retain their results.
+          pending = undefined;
+        }
+      })();
+      return pending;
+    },
+  });
+  DEFERRED_DIGESTS.set(receipt, reference.resultSha256);
+  return receipt;
 }
 
 async function expandStoredFile(
@@ -752,30 +788,10 @@ async function expandStoredFile(
       throw corrupt(slotId, "duplicate or invalid command receipt reference");
     }
     ids.add(reference.commandId);
-    let sidecar: unknown;
-    try {
-      sidecar = JSON.parse(await readReceiptFile(receiptPathFor(path, reference.commandId)));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw corrupt(slotId, `receipt ${reference.commandId} sidecar is missing`);
-      }
-      throw error;
-    }
-    if (sidecar === null || typeof sidecar !== "object") {
-      throw corrupt(slotId, `receipt ${reference.commandId} sidecar is not an object`);
-    }
-    assertReceiptSidecarKeys(sidecar, slotId);
-    const stored = sidecar as Partial<StoredReceiptSidecarV1>;
-    if (stored.schemaVersion !== 1 || stored.commandId !== reference.commandId) {
-      throw corrupt(slotId, `receipt ${reference.commandId} sidecar identity disagrees`);
-    }
-    if (resultDigest(stored.result) !== reference.resultSha256) {
-      throw corrupt(slotId, `receipt ${reference.commandId} sidecar digest disagrees`);
-    }
     return {
       commandId: reference.commandId,
       canonicalEnvelope: reference.canonicalEnvelope,
-      result: stored.result,
+      result: await readReceiptResult(path, reference as StoredReceiptReferenceV2, slotId),
     };
   }));
   return {
@@ -783,6 +799,30 @@ async function expandStoredFile(
     schemaVersion: 1,
     receipts,
   } satisfies StoredSlotFileV1;
+}
+
+async function readReceiptResult(path: string, reference: StoredReceiptReferenceV2, slotId: SaveSlotId): Promise<unknown> {
+  let sidecar: unknown;
+  try {
+    sidecar = JSON.parse(await readReceiptFile(receiptPathFor(path, reference.commandId)));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw corrupt(slotId, `receipt ${reference.commandId} sidecar is missing`);
+    }
+    throw error;
+  }
+  if (sidecar === null || typeof sidecar !== "object") {
+    throw corrupt(slotId, `receipt ${reference.commandId} sidecar is not an object`);
+  }
+  assertReceiptSidecarKeys(sidecar, slotId);
+  const stored = sidecar as Partial<StoredReceiptSidecarV1>;
+  if (stored.schemaVersion !== 1 || stored.commandId !== reference.commandId) {
+    throw corrupt(slotId, `receipt ${reference.commandId} sidecar identity disagrees`);
+  }
+  if (resultDigest(stored.result) !== reference.resultSha256) {
+    throw corrupt(slotId, `receipt ${reference.commandId} sidecar digest disagrees`);
+  }
+  return stored.result;
 }
 
 async function parseFile<S, P extends ProjectionBody>(
