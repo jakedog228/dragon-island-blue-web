@@ -30,7 +30,11 @@ compatible Dragon Island Blue resource archive and run only in Offline/scenario 
   panel. All modules start disabled; its persisted toggles can remove battle delays, run the central
   Pixi ticker at 3x, make every overworld location traversable while revealing every dungeon room
   *and letting the player walk to the revealed ones*, and set ordinary shop-goods prices to zero.
-  No game module knows the package exists.
+  **Fixed / Quest Encounters** is a session-only toggle: subsequent moves reactivate the fixed
+  candidate in each destination's current encounter tier, bypassing trip completion, unique/quest
+  eligibility, appearance chance and cadence. Encounters remain at their authored locations; ordinary
+  locations retain normal checks. Turning it off or reloading restores eligibility. Battle outcomes
+  and rewards still save normally. No game module knows the package exists.
 - `mercy-stone` adds a whole new ITEM. It overlays one `Items` soul-stone leaf, bakes its atlas
   frames from the shipped art, sells itself in the town Shop for 100 silver, is equipped through
   the ordinary Insert Soul Stone picker, and stops its holder from ever landing a killing blow —

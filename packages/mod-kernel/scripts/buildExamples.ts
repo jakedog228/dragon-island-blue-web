@@ -32,7 +32,8 @@ for (const [source, name] of [["pirate-panic-dancer/save/pirate-savefile0", "pir
 async function sourceFiles(directory: string): Promise<string[]> {
   const found: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (entry.name === "dist" || entry.name === ".gitignore") continue;
+    // Extractor bytecode embeds local interpreter/path state and is not package source.
+    if (entry.name === "dist" || entry.name === ".gitignore" || entry.name === "__pycache__" || entry.name.endsWith(".pyc")) continue;
     const path = resolve(directory, entry.name);
     if (entry.isDirectory()) found.push(...await sourceFiles(path));
     else if (entry.isFile()) found.push(path);

@@ -13,6 +13,7 @@ assert(archive, "Set DIB_CONTENT_ARCHIVE to a compatible local IPA/ZIP.");
 const mod = resolve(repositoryRoot, "examples/mods/dist/devtools.dibmod");
 assert(existsSync(mod), "Run pnpm mods:examples before this scenario.");
 const dungeonMode = process.env.DIB_DEVTOOLS_DUNGEON === "1";
+const fixedMode = process.env.DIB_DEVTOOLS_FIXED === "1";
 
 const browser = await chromium.launch({
   headless: true,
@@ -20,6 +21,11 @@ const browser = await chromium.launch({
 });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  // This Offline scenario needs no authority service running beside the client.
+  await page.route("**/api/game/readiness", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ ready: false, installedLogicPackIds: [] }),
+  }));
   const errors = [];
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.stack ?? error}`));
   page.on("console", (message) => {
@@ -27,10 +33,15 @@ try {
       errors.push(`console: ${message.text()}`);
     }
   });
-  await page.addInitScript(({ useDungeon }) => {
+  await page.addInitScript(({ useDungeon, useFixed }) => {
     window.advanceTime = () => Promise.resolve();
     window.__DIB_TEST_WORLD_DEMO__ = true;
     window.__DIB_TEST_DIALOGS_SEEN__ = ["LeslieIntro1"];
+    if (useFixed) {
+      window.__DIB_TEST_SKIP_SOURCE_NEW_GAME_INTRO__ = true;
+      window.__DIB_TEST_POI_NAME__ = "1-1_Turtorial_Hut_1";
+      window.__DIB_TEST_GUILD_QUEST_NAMES__ = [];
+    }
     if (useDungeon) {
       window.__DIB_TEST_WORLD_SEED__ = 7;
       window.__DIB_TEST_DUNGEON_SEED__ = 3;
@@ -51,7 +62,7 @@ try {
         tutorialFlags: ["FirstShop", "Tutorial0", "Tutorial1"],
       };
     }
-  }, { useDungeon: dungeonMode });
+  }, { useDungeon: dungeonMode, useFixed: fixedMode });
 
   await page.goto(url, { waitUntil: "domcontentloaded" });
   const archiveInput = page.locator('input[name="asset-archive"]');
@@ -60,7 +71,9 @@ try {
   await page.locator('input[name="mod-archives"]').setInputFiles(mod);
   await page.getByRole("radio", { name: "Offline", exact: true }).check();
   await page.locator('[data-local-save-status].content-gate__mode-detail-status--success')
-    .waitFor({ state: "visible", timeout: 120_000 });
+    .waitFor({ state: "visible", timeout: 120_000 }).catch(async (error) => {
+      throw new Error(`Offline gate did not validate: ${await page.locator("body").innerText()}`, { cause: error });
+    });
   await page.getByRole("checkbox", {
     name: "I have the right to use the content in this archive on this device.",
   }).check();
@@ -138,6 +151,7 @@ try {
   await waitForState(
     (value) => value.startup?.phase === "title",
     "startup title did not become interactive",
+    2400,
   );
   await page.keyboard.press("Enter");
   let snapshot = await waitForState(
@@ -229,6 +243,7 @@ try {
     "devtools:speedUp:on",
     "devtools:unlockLocations:on",
     "devtools:unlockShop:on",
+    "devtools:activateFixedEncounters:on",
   ];
   for (const label of requiredControls) assert(await boundsForLabel(label), `missing Devtools control ${label}`);
 
@@ -238,6 +253,7 @@ try {
     speedUp: false,
     unlockLocations: false,
     unlockShop: false,
+    activateFixedEncounters: false,
     speedMultiplier: 3,
   });
   assert.equal(
@@ -260,12 +276,14 @@ try {
       `locked overworld POIs remain: ${JSON.stringify(snapshot.poiStates)}`);
   }
   await clickLabel("devtools:unlockShop:on");
+  await clickLabel("devtools:activateFixedEncounters:on");
   snapshot = await state();
   assert.deepEqual(snapshot.codeMods?.devtools?.features, {
     noBattleDelays: true,
     speedUp: true,
     unlockLocations: true,
     unlockShop: true,
+    activateFixedEncounters: true,
     speedMultiplier: 3,
   });
   assert.deepEqual(
@@ -285,7 +303,40 @@ try {
   writeFileSync(screenshotPath, Buffer.from(screenshot.data, "base64"));
   let shopScreenshotPath;
   let dungeonScreenshotPath;
-  if (snapshot.mode === "dungeon") {
+  if (fixedMode) {
+    await clickLabel("devtools:activateFixedEncounters:off");
+    assert.equal((await state()).codeMods.devtools.features.activateFixedEncounters, false);
+    await clickLabel("devtools:activateFixedEncounters:on");
+    await clickLabel("popupButton:Close");
+    await waitForLabel("devtoolsContent", false, "Devtools popup did not close");
+    snapshot = await state();
+    assert.equal(snapshot.currentPoi, "1-1_Turtorial_Hut_1");
+    assert(!snapshot.guildQuests.usableQuestKeys.includes("LiberateTownsQuest"));
+    // Mark the destination cleared to cover the short-circuit that originally skipped arrivals.
+    await page.evaluate(() => {
+      const visit = (node) => {
+        if (node.deps?.trip && node.deps?.refreshState) {
+          node.deps.refreshState.completedThisRefresh.add("First_City");
+        }
+        for (const child of node.children ?? []) visit(child);
+      };
+      visit(globalThis.__PIXI_APP__.stage);
+    });
+    const poi = snapshot.pois.find((point) => point.name === "First_City");
+    assert(poi);
+    const { stageGeometry } = await import("./stageGeometry.mjs");
+    const geometry = await stageGeometry(page, await page.locator("canvas").first().boundingBox());
+    const target = geometry.toCss({ x: poi.position.x + 8, y: poi.position.y });
+    await page.mouse.click(target.x, target.y);
+    snapshot = await waitForState((value) => value.mode === "battle" &&
+      value.activePopup === "encounterChat", "inactive quest encounter did not launch", 1000);
+    assert.equal(snapshot.encounter.questKey, "LiberateTownsQuest");
+    assert.equal(snapshot.encounter.uniqueKey, "RenderableFirst_CityNameKey");
+    assert.equal(snapshot.encounter.startChat, "Ralph");
+    const fixedScreenshot = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    writeFileSync(resolve(screenshotDirectory, "devtools-fixed-encounter.png"), Buffer.from(fixedScreenshot.data, "base64"));
+    writeFileSync(resolve(screenshotDirectory, "devtools-fixed-encounter.json"), JSON.stringify(snapshot, null, 2));
+  } else if (snapshot.mode === "dungeon") {
     await clickLabel("popupButton:Close");
     await waitForLabel("devtoolsContent", false, "Devtools popup did not close in the dungeon");
     await advance(500);
@@ -380,7 +431,7 @@ try {
     tickerSpeed: 3,
     ...(snapshot.mode === "dungeon"
       ? { renderedRooms: snapshot.renderedRoomIds.length, durableRooms: snapshot.rooms.length }
-      : { poiCount: Object.keys(snapshot.poiStates).length }),
+      : { poiCount: Object.keys(snapshot.poiStates ?? {}).length }),
     screenshot: screenshotPath,
     ...(shopScreenshotPath === undefined ? {} : { shopScreenshot: shopScreenshotPath }),
     ...(dungeonScreenshotPath === undefined ? {} : { dungeonScreenshot: dungeonScreenshotPath }),

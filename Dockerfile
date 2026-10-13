@@ -41,7 +41,9 @@ COPY docs/code-mod-api.md ./docs/code-mod-api.md
 # Fail the image build on a type error rather than shipping a bundle that only happens to run.
 RUN pnpm --filter @dib/game-server typecheck
 RUN pnpm --filter @dib/game-server build
-RUN pnpm --filter @dib/web build
+# The small production VM has swap, but Node's RAM-derived default heap is too small for Rollup.
+# Limit this allowance to the build process; the server runtime keeps its normal memory policy.
+RUN NODE_OPTIONS=--max-old-space-size=1024 pnpm --filter @dib/web build
 
 # ------------------------------------------------------------------------------------------------
 # Stage 3: server runtime

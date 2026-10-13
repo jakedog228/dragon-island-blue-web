@@ -9,12 +9,14 @@ const FEATURE_KEYS = Object.freeze([
   "speedUp",
   "unlockLocations",
   "unlockShop",
+  "activateFixedEncounters",
 ]);
 const DEFAULTS = Object.freeze({
   noBattleDelays: false,
   speedUp: false,
   unlockLocations: false,
   unlockShop: false,
+  activateFixedEncounters: false,
 });
 
 const [
@@ -30,7 +32,8 @@ const [
     nearestMaterializedRoom,
   },
   { StoreFlow },
-  { DungeonSession, WorldTrip },
+  { DungeonSession, WorldTrip, selectEncounterTableEntry, fixedEncounterCompletionKey },
+  { createWorldTrip },
   { Container, Graphics, Rectangle },
   { makeTtfLabel },
   { showMonsterHatchPopup },
@@ -43,6 +46,7 @@ const [
   dibMod.modules.load("web/dungeon/dungeonDisplayMath.ts"),
   dibMod.modules.load("web/player/storeFlow.ts"),
   dibMod.modules.load("@dib/engine"),
+  dibMod.modules.load("web/world/worldDemoState.ts"),
   dibMod.modules.load("pixi.js"),
   dibMod.modules.load("@dib/renderer"),
   dibMod.modules.load("web/ui/monsterHatchPopup.ts"),
@@ -56,7 +60,8 @@ function loadSettings() {
       const parsed = JSON.parse(raw);
       return Object.fromEntries(FEATURE_KEYS.map((key) => [
         key,
-        typeof parsed?.[key] === "boolean" ? parsed[key] : DEFAULTS[key],
+        key !== "activateFixedEncounters" && typeof parsed?.[key] === "boolean"
+          ? parsed[key] : DEFAULTS[key],
       ]));
     }
     const legacy = localStorage.getItem(LEGACY_NO_DELAY_KEY);
@@ -72,7 +77,8 @@ function loadSettings() {
 let settings = loadSettings();
 function saveSettings() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    const { activateFixedEncounters, ...persisted } = settings;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
   } catch {
     // Storage-disabled browsers retain the current tab's settings in this module instance.
   }
@@ -152,6 +158,67 @@ dibMod.intercept(BattleNode.prototype, "renderGameState", function (next, ...arg
 
 // --- World and dungeon visibility -----------------------------------------------------------
 
+// Use the existing public navigation API: older deployed engines do not expose private
+// encounter predicates. Build the authored encounter in an isolated trip, then move the live
+// trip through its normal navigation method without generating a second encounter.
+const worldContexts = new WeakMap();
+const buildNavigation = WorldTrip.prototype.navigate;
+dibMod.intercept(WorldTrip.prototype, "navigate", function (next, target, levels) {
+  if (!settings.activateFixedEncounters) return next(target, levels);
+  const context = worldContexts.get(this);
+  if (context === undefined) throw new Error("Devtools: active world context is unavailable");
+  const poi = context.world.pointsOfInterest.find((point) => point.name === target);
+  if (poi === undefined || this.poiState(target) === 3) return next(target, levels);
+  const selected = selectEncounterTableEntry(Object.fromEntries(poi.randomPopulators.map((row) =>
+    [String(row.tier), { monsterPopulator: row }])), this.poiWins(target));
+  const candidate = selected?.entry.monsterPopulator.fixedEncounters[0];
+  if (candidate === undefined) return next(target, levels);
+
+  const { uniqueKey, questKey, exactFloor, everyXFloors, ...ungated } = candidate;
+  const projectedWorld = {
+    ...context.world,
+    pointsOfInterest: context.world.pointsOfInterest.map((point) => point !== poi ? point : {
+      ...point,
+      randomPopulators: point.randomPopulators.map((row) => String(row.tier) !== selected.key ? row : {
+        ...row, fixedEncounters: [{ ...ungated, chanceToAppear: 1 }],
+      }),
+    }),
+  };
+  const state = context.refreshState;
+  const completed = new Set(state.completedThisRefresh);
+  completed.delete(target);
+  // All maps/sets are detached: begin/navigation on this builder cannot write live completion,
+  // quest events, occurrence caches or win counters. Random fixed monsters use the live roster.
+  const preview = createWorldTrip(projectedWorld, this.currentPoiName, context.questRewardRng,
+    context.game.gd.allMonsters().map((monster) => monster.shortType), {
+      ...state,
+      completedThisRefresh: completed,
+      occurrenceThisRefresh: new Map(state.occurrenceThisRefresh),
+      poiWins: new Map(state.poiWins),
+      everCompletedPois: new Set(state.everCompletedPois),
+      notifiedCompletedPois: new Set(state.notifiedCompletedPois),
+    });
+  const result = buildNavigation.call(preview, target, levels);
+  if (result.kind !== "encounter" || result.encounter.kind !== "fixed") {
+    throw new Error(`Devtools: fixed encounter did not build at ${target}`);
+  }
+  const completionKey = fixedEncounterCompletionKey(candidate, this.poiWins(target) + 1);
+  if (target !== this.currentPoiName) {
+    const wasCompleted = state.completedThisRefresh.has(target);
+    state.completedThisRefresh.add(target);
+    try {
+      next(target, levels);
+    } finally {
+      if (!wasCompleted) state.completedThisRefresh.delete(target);
+    }
+  }
+  return { ...result, encounter: {
+    ...result.encounter,
+    ...(completionKey === undefined ? {} : { completionKey }),
+    ...(questKey === undefined ? {} : { questKey }),
+  } };
+});
+
 dibMod.intercept(WorldTrip.prototype, "poiStates", function (next, ...args) {
   const original = next(...args);
   if (!settings.unlockLocations) return original;
@@ -161,10 +228,14 @@ dibMod.intercept(WorldTrip.prototype, "poiStates", function (next, ...args) {
 });
 dibMod.intercept(WorldNode.prototype, "refreshPoiStates", function (next, ...args) {
   activeWorldNodes.add(this);
+  if (this.deps !== undefined) worldContexts.set(this.deps.trip, this.deps);
   return next(...args);
 });
 dibMod.intercept(WorldNode.prototype, "destroy", function (next, ...args) {
   activeWorldNodes.delete(this);
+  if (this.deps !== undefined && worldContexts.get(this.deps.trip) === this.deps) {
+    worldContexts.delete(this.deps.trip);
+  }
   return next(...args);
 });
 dibMod.intercept(WorldNode.prototype, "renderGameState", function (next, ...args) {
@@ -349,13 +420,16 @@ function toggleButton(text, selected, onPress) {
 async function showDevtools(parent, opts) {
   const content = new Container();
   content.label = "devtoolsContent";
-  content.addChild(new Graphics().rect(0, 0, 292, 116).fill({ color: 0x000000, alpha: 0 }));
   const rows = [
     ["noBattleDelays", "No Battle Delays", "Off", "On"],
     ["speedUp", "Speed-up", "1x", `${SPEED_MULTIPLIER}x`],
     ["unlockLocations", "Unlock Locations", "Off", "On"],
     ["unlockShop", "Unlock Shop", "Off", "On"],
+    ["activateFixedEncounters", "Fixed / Quest Encounters", "Off", "On"],
   ];
+  // Mod-authored Cocos-point geometry, shared intentionally by the iPhone and iPad tiers.
+  content.addChild(new Graphics().rect(0, 0, 292, rows.length * 29)
+    .fill({ color: 0x000000, alpha: 0 }));
   const refreshers = [];
   rows.forEach(([key, title, offText, onText], index) => {
     const y = index * 29;

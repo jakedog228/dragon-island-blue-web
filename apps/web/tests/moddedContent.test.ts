@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { GameData } from "@dib/gamedata/browser";
+import { WorldTrip, createWorldTripSharedState, selectEncounterTableEntry, fixedEncounterCompletionKey } from "@dib/engine";
+import { createWorldTrip } from "../src/world/worldDemoState.js";
 import { importCodeModArchive, resolveCodeModProfile } from "@dib/mod-kernel";
 import type { ImportedContentPackage } from "../src/content/archivePackage.js";
 import { applyFullTrustModsToContent } from "../src/content/moddedContent.js";
@@ -355,7 +357,10 @@ describe("full-trust imported content", () => {
     runtime.dispose();
   });
 
-  it("runs the external Devtools menu and restores every toggle interception", async () => {
+  it.each(["iphone", "ipad"])("runs the external Devtools menu and restores every toggle interception (%s)", async (displayMode) => {
+    // The downloadable mod must also load in deployed builds predating the proposed predicates.
+    expect(WorldTrip.prototype).not.toHaveProperty("shouldCheckEncounter");
+    expect(WorldTrip.prototype).not.toHaveProperty("fixedEncounterIsEligible");
     class FakeDisplay {
       label: string | undefined;
       width = 30;
@@ -411,8 +416,9 @@ describe("full-trust imported content", () => {
     }
 
     class FakeGraphics extends FakeContainer {
+      rectangle: number[] | undefined;
       clear() { return this; }
-      rect(..._args: number[]) { return this; }
+      rect(...args: number[]) { this.rectangle = args; return this; }
       roundRect(..._args: number[]) { return this; }
       fill(_options: unknown) { return this; }
       stroke(_options: unknown) { return this; }
@@ -444,16 +450,18 @@ describe("full-trust imported content", () => {
       }
     }
 
-    class FakeWorldTrip {
-      currentPoiName = "start";
-
-      poiStates() {
-        return new Map<string, number>([["start", 2], ["near", 4], ["locked", 3]]);
+    class FakeWorldTrip extends WorldTrip {
+      constructor() {
+        super({
+          pointsOfInterest: ["start", "near", "locked"].map((instanceName) => ({ instanceName })),
+          connections: [{ poi1: "start", poi2: "near" }],
+        }, "start", { next: () => 0, intBelow: () => 0, chance: () => true }, { randomMonsterTypes: [] });
       }
     }
 
     class FakeWorldNode {
       refreshCount = 0;
+      deps?: unknown;
 
       refreshPoiStates() { this.refreshCount += 1; }
       destroy() { /* lifecycle stub */ }
@@ -582,7 +590,9 @@ describe("full-trust imported content", () => {
       }
     }
 
-    const values = new Map<string, string>();
+    const values = new Map<string, string>([[
+      "dev.dragonislandblue.devtools.settings.v1", JSON.stringify({ activateFixedEncounters: true }),
+    ]]);
     const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
@@ -623,9 +633,10 @@ describe("full-trust imported content", () => {
         },
       }],
       ["web/player/storeFlow.ts", { StoreFlow: FakeStoreFlow }],
-      ["@dib/engine", { DungeonSession: FakeDungeonSession, WorldTrip: FakeWorldTrip }],
+      ["@dib/engine", { DungeonSession: FakeDungeonSession, WorldTrip, selectEncounterTableEntry, fixedEncounterCompletionKey }],
+      ["web/world/worldDemoState.ts", { createWorldTrip }],
       ["pixi.js", { Container: FakeContainer, Graphics: FakeGraphics, Rectangle: FakeRectangle }],
-      ["web/runtimeSettings.ts", { DISPLAY_MODE: "iphone" }],
+      ["web/runtimeSettings.ts", { DISPLAY_MODE: displayMode }],
       ["@dib/renderer", {
         makeTtfLabel: (_text: string) => new FakeDisplay(),
       }],
@@ -687,6 +698,8 @@ describe("full-trust imported content", () => {
       await Promise.resolve();
       expect(menu.closed).toBe(true);
       expect(shownDevtools?.options.content.label).toBe("devtoolsContent");
+      expect((shownDevtools?.options.content.children[0] as FakeGraphics).rectangle)
+        .toEqual([0, 0, 292, 145]);
       const devtoolsControl = (label: string) =>
         shownDevtools?.options.content.children.find((child) => child.label === label);
       const noBattleDelaysOff = devtoolsControl("devtools:noBattleDelays:off");
@@ -694,15 +707,128 @@ describe("full-trust imported content", () => {
       const speedUpOn = devtoolsControl("devtools:speedUp:on");
       const unlockLocationsOn = devtoolsControl("devtools:unlockLocations:on");
       const unlockShopOn = devtoolsControl("devtools:unlockShop:on");
+      const fixedOn = devtoolsControl("devtools:activateFixedEncounters:on");
+      const fixedOff = devtoolsControl("devtools:activateFixedEncounters:off");
       expect(noBattleDelaysOff).toBeDefined();
       expect(noBattleDelaysOn).toBeDefined();
       expect(speedUpOn).toBeDefined();
       expect(unlockLocationsOn).toBeDefined();
       expect(unlockShopOn).toBeDefined();
+      expect(fixedOn).toBeDefined();
+      expect(fixedOff).toBeDefined();
 
       const exports = runtime.host.require<{
         settings(): Record<string, unknown>;
       }>("mods.dev.dragonislandblue.devtools");
+      expect(exports.settings().activateFixedEncounters).toBe(false);
+
+      // Exercise the real trip through the mod UI: completed, inactive-quest, chance-zero and
+      // cadence-gated encounters are all reactivated, without editing their durable registries.
+      const shared = createWorldTripSharedState();
+      const completedKeys = new Set(["boss-done"]);
+      let eligibilityReads = 0;
+      const fixedDefinition = Object.freeze({
+        sourceIndex: 0,
+        uniqueKey: "boss-done", questKey: "inactive-quest", chanceToAppear: 0,
+        exactFloor: 50,
+        monsters: [{ type: "FireCub", levelScalor: 2 }],
+        battleRewardKey: "boss-reward", achievement: "boss-achievement",
+      });
+      const encounter = {
+        table: { "1": { monsterPopulator: {
+          types: ["ordinary"], minMonstersPerPack: 1, maxMonstersPerPack: 1,
+          fixedEncounters: [fixedDefinition],
+        } } },
+      };
+      const makeTrip = () => {
+        const trip = new WorldTrip({
+        challengeLevel: 5,
+        pointsOfInterest: [
+          { instanceName: "town" }, { instanceName: "boss", encounter },
+          { instanceName: "ordinary", encounter: { table: { "1": {
+            monsterPopulator: { types: ["ordinary"] },
+          } } } },
+        ],
+        connections: [{ poi1: "town", poi2: "boss" }, { poi1: "town", poi2: "ordinary" }],
+      }, "town", { next: () => 0.5, intBelow: () => 0, chance: () => false }, {
+        sharedState: shared, randomMonsterTypes: [],
+        hasCompletedFixedEncounter: (key) => {
+          eligibilityReads += 1;
+          return completedKeys.has(key);
+        },
+        canUseQuestKey: () => { eligibilityReads += 1; return false; },
+        });
+        const node = new FakeWorldNode();
+        node.deps = {
+          trip, refreshState: shared,
+          game: { gd: { allMonsters: () => [{ shortType: "FireCub" }] } },
+          questRewardRng: { next: () => 0.5, intBelow: () => 0, chance: () => false },
+          world: {
+            name: "TestWorld", challengeLevel: 5, encounterChance: 0.333,
+            connections: [{ poi1: "town", poi2: "boss" }, { poi1: "town", poi2: "ordinary" }],
+            pointsOfInterest: [
+              { name: "town", randomPopulators: [] },
+              { name: "boss", hasEncounterTable: true, randomPopulators: [{
+                tier: 1, encounterLevelScalor: 1, itterationScalor: 0, populatorLevelScalor: 1,
+                minMonstersPerPack: 1, maxMonstersPerPack: 1,
+                types: [{ type: "ordinary", chance: 100 }], fixedEncounters: [fixedDefinition],
+              }] },
+              { name: "ordinary", hasEncounterTable: true, randomPopulators: [{
+                tier: 1, encounterLevelScalor: 1, itterationScalor: 0, populatorLevelScalor: 1,
+                types: [{ type: "ordinary", chance: 100 }], fixedEncounters: [],
+              }] },
+            ],
+          },
+        };
+        node.refreshPoiStates();
+        return trip;
+      };
+      const trip = makeTrip();
+      trip.begin();
+      shared.completedThisRefresh.add("boss");
+      shared.completedThisRefresh.add("ordinary");
+      expect(trip.navigate("boss", [5])).toMatchObject({ reason: "completed-this-refresh" });
+      trip.navigate("town", [5]);
+      fixedOn?.emit("pointertap");
+      expect(trip.currentPoiName).toBe("town"); // Toggling itself starts no fight.
+      expect(trip.navigate("boss", [100])).toMatchObject({
+        kind: "encounter", movement: { kind: "walk" },
+        encounter: {
+          kind: "fixed", forced: false, completionKey: "boss-done", questKey: "inactive-quest",
+          battleRewardKey: "boss-reward", achievement: "boss-achievement",
+          monsters: [{ type: "FireCub", level: 10 }],
+        },
+      });
+      expect(trip.navigate("boss", [100])).toMatchObject({
+        kind: "encounter", encounter: { kind: "fixed", forced: true },
+      });
+      shared.completedThisRefresh.delete("boss");
+      trip.navigate("town", [5]);
+      expect(trip.navigate("boss", [100])).toMatchObject({ kind: "encounter", encounter: { kind: "fixed" } });
+      expect(shared.completedThisRefresh.has("boss")).toBe(false);
+      trip.recordEncounterWin();
+      trip.navigate("town", [5]);
+      expect(trip.navigate("boss", [100])).toMatchObject({ kind: "encounter", encounter: { kind: "fixed" } });
+      trip.navigate("town", [5]);
+      expect(trip.navigate("ordinary", [5])).toMatchObject({ reason: "completed-this-refresh" });
+      expect(eligibilityReads).toBe(0);
+      expect([...completedKeys]).toEqual(["boss-done"]);
+      expect(fixedDefinition.chanceToAppear).toBe(0);
+      expect(fixedDefinition.exactFloor).toBe(50);
+      expect(shared.completedThisRefresh.has("boss")).toBe(true);
+      expect(JSON.parse(values.get("dev.dragonislandblue.devtools.settings.v1")!))
+        .not.toHaveProperty("activateFixedEncounters");
+      // A newly constructed trip (world change) sees the same temporary setting.
+      const nextTrip = makeTrip();
+      nextTrip.begin();
+      expect(nextTrip.navigate("boss", [5])).toMatchObject({ kind: "encounter", encounter: { kind: "fixed" } });
+      fixedOff?.emit("pointertap");
+      trip.navigate("town", [5]);
+      expect(trip.navigate("boss", [5])).toMatchObject({ reason: "completed-this-refresh" });
+      // Same-location replay bypasses trip completion in the baseline, but still uses the
+      // original unique/quest checks once the toggle is off.
+      expect(trip.navigate("boss", [5])).toMatchObject({ kind: "encounter", encounter: { kind: "ordinary" } });
+      expect(eligibilityReads).toBe(1);
       noBattleDelaysOn?.emit("pointertap");
       await battle.sleep(250);
       await battle.awaitTimeDelay(1_000);
@@ -795,8 +921,11 @@ describe("full-trust imported content", () => {
         unlockShop: true,
       });
 
+      fixedOn?.emit("pointertap");
       runtime.dispose();
       runtime = undefined;
+      trip.navigate("town", [5]);
+      expect(trip.navigate("boss", [5])).toMatchObject({ reason: "completed-this-refresh" });
       expect(ticker.speed).toBe(1);
       const restored = new FakeBattleNode();
       await restored.sleep(50);

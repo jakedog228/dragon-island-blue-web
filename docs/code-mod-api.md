@@ -336,7 +336,17 @@ that package and reads its published toggle instead of fighting it.
 plus the generic Pixi ticker and master-menu layout. It adds a separate persisted **Devtools** panel
 whose modules all start disabled. Its toggles remove battle holds, apply a fixed 3x animation speed,
 unlock overworld traversal and dungeon-room visibility, and zero ordinary shop-goods prices without
-host-side integration.
+host-side integration. **Fixed / Quest Encounters** is session-only and starts off even if an old
+storage record contains it. It intercepts the existing `WorldTrip.navigate` method and captures each
+live world context through `WorldNode.refreshPoiStates`; no engine update or new private predicate
+is required. A detached trip uses the original `createWorldTrip` adapter and encounter builder with
+the selected fixed candidate's gates lifted, then restores its original completion/quest keys on
+the result. All builder registries are copies, and its RNG is the world's quest-reward stream. The
+live trip moves through normal navigation with a synchronous, finally-restored completion marker
+to prevent a second encounter draw. Cleared POIs and inactive/completed quests can therefore be
+replayed with their authored monsters, levels, dialogue and rewards. Battle settlement remains
+durable. Ordinary-only destinations keep their original checks; turning the toggle off restores
+normal eligibility. Version 1.1.1 removes 1.1.0's dependency on undeployed engine predicates.
 
 Its dungeon reveal is also the profile's worked example of a presentation change that has to reach
 input to be real. Revealing a room draws it, but the shipped scene arbitration
