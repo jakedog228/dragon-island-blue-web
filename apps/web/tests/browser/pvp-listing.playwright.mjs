@@ -1,6 +1,7 @@
 // Opt-in. Tests the real manager with its online catalog, plus offline availability.
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
+import { zipSync, strToU8 } from "fflate";
 import fs from "node:fs";
 import path from "node:path";
 const out = path.resolve("output/pvp-listing"); fs.mkdirSync(out, { recursive: true });
@@ -17,6 +18,7 @@ try {
     const page = await context.newPage(); page.on("pageerror", e => errors.push(e.message));
     await page.goto(url); await page.locator(".content-gate__mod-manager").click();
     const manager = page.getByRole("dialog", { name: "Mod Manager", exact: true });
+    const orderCount = manager.locator('[data-tab="order"] .ml-tab__count');
     await manager.getByRole("tab", { name: /Browse/ }).click();
     const tile = manager.locator('.ml-tile[data-mod-id="dib.official.pvp"]');
     await tile.waitFor(); await tile.locator("img").evaluate(image => image.decode());
@@ -32,7 +34,11 @@ try {
     await detail.getByRole("button", { name: "Enable", exact: true }).click();
     await detail.getByRole("button", { name: "Enabled", exact: true }).waitFor();
     await detail.getByRole("button", { name: "Close details" }).click();
+    assert.equal(await orderCount.innerText(), "1");
+    assert.match(await manager.locator(".ml-apply").textContent(), /1 mod will be enabled/);
     await manager.getByRole("button", { name: "Discard", exact: true }).click();
+    await manager.locator(".ml-apply").waitFor({ state: "hidden" });
+    assert.equal(await orderCount.innerText(), "0");
     await manager.getByRole("tab", { name: /Browse/ }).click();
     await tile.getByRole("button", { name: "Multiplayer PvP", exact: true }).click();
     await detail.getByRole("button", { name: "DIB Web", exact: true }).click();
@@ -47,7 +53,27 @@ try {
     await tile.getByRole("button", { name: "Enable", exact: true }).click();
     await manager.getByRole("button", { name: /^Apply/ }).click();
     assert.equal(await page.evaluate(() => localStorage.getItem("dib.mods.builtin.pvp.v1")), "enabled");
+    assert.match(await page.locator(".content-gate__mod-manager").innerText(), /1 mod enabled/);
+    assert.equal(await page.locator(".content-gate__mods-status").innerText(), "Multiplayer PvP");
     await page.locator(".content-gate__mod-manager").click();
+    await manager.getByRole("tab", { name: /Load order/ }).click();
+    assert.equal(await orderCount.innerText(), "1");
+    await manager.getByText("1 mod enabled", { exact: true }).waitFor();
+    // A built-in and an imported mod contribute equally, without giving PvP a sortable position.
+    const mod = zipSync({
+      "manifest.json": strToU8(JSON.stringify({ schemaVersion: 4, id: "test.pvp-count", version: "1.0.0", displayName: "Count fixture", apiVersion: 4, mode: "offline", dependencies: {}, entry: "main.js" })),
+      "main.js": strToU8("export function activate() {}"),
+    });
+    await manager.locator("input[type=file]").setInputFiles({ name: "count.dibmod", mimeType: "application/octet-stream", buffer: Buffer.from(mod) });
+    await manager.getByText("Imported and enabled Count fixture. Apply to play with it.", { exact: true }).waitFor();
+    await manager.getByRole("tab", { name: /Load order/ }).click();
+    assert.equal(await orderCount.innerText(), "2");
+    assert.match(await manager.locator(".ml-toolbar__summary").innerText(), /2 enabled mods/);
+    assert.match(await manager.locator(".ml-apply").textContent(), /2 mods will be enabled/);
+    assert.equal(await manager.locator(".ml-order__row").count(), 1);
+    await manager.getByRole("button", { name: "Discard", exact: true }).click();
+    await manager.locator(".ml-apply").waitFor({ state: "hidden" });
+    assert.equal(await orderCount.innerText(), "1");
     await manager.getByRole("tab", { name: /Installed/ }).click();
     const installed = manager.locator('[data-mod-id="dib.official.pvp"]');
     assert.equal(await installed.getByRole("switch").getAttribute("aria-checked"), "true");
@@ -62,6 +88,8 @@ try {
     await installed.getByRole("switch").click();
     await manager.getByRole("button", { name: /^Apply/ }).click();
     assert.equal(await page.evaluate(() => localStorage.getItem("dib.mods.builtin.pvp.v1")), "disabled");
+    assert.match(await page.locator(".content-gate__mod-manager").innerText(), /Optional Offline mods/);
+    assert.equal(await page.locator(".content-gate__mods-status").isVisible(), false);
     await context.close();
   }
   const context = await browser.newContext(); const page = await context.newPage();

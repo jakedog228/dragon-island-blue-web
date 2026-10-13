@@ -1,3 +1,4 @@
+import type { MultiplayerBattle } from "./multiplayerBattle.js";
 
 
 
@@ -323,6 +324,7 @@ const SAVE_ME_GOLD_COST = 100;
 const TIME_DELAY_RESIDUE_MS = 1e-6;
 
 export interface BattleNodeDeps {
+  multiplayer?: MultiplayerBattle;
   stage: FixedStage;
   game: LoadedGame;
   audio: AudioPlayer;
@@ -364,6 +366,7 @@ export interface BattleNodeDeps {
 export class BattleNode {
   readonly sceneKind = "battle" as const;
   private readonly lifecycle = new LifecycleScope();
+  private readonly multiplayer: MultiplayerBattle | undefined;
   private readonly stage: FixedStage;
   private readonly game: LoadedGame;
   private readonly audio: AudioPlayer;
@@ -533,6 +536,7 @@ export class BattleNode {
 
   constructor(deps: BattleNodeDeps) {
     this.stage = deps.stage;
+    this.multiplayer = deps.multiplayer;
     this.game = deps.game;
     this.audio = deps.audio;
     this.keyboard = deps.keyboard;
@@ -559,7 +563,7 @@ export class BattleNode {
       // children (WorldTripParty owns them, exactly as the source keeps them on the bench
       // Monster), and an authoritative replay carries whatever the authority projected. Only a
       // standalone demo team — no durable party behind it — still needs them derived here.
-      playerTeam: deps.authority === undefined && deps.tripParty === undefined
+      playerTeam: deps.authority === undefined && deps.tripParty === undefined && deps.multiplayer === undefined
         ? applyPlayerBattleBonuses(deps.encounter.playerTeam, deps.playerState.profile)
         : deps.encounter.playerTeam.map((member) => ({ ...member })),
       enemyTeam: deps.encounter.enemyTeam.map((member) => ({ ...member })),
@@ -567,7 +571,7 @@ export class BattleNode {
     this.encounter = deps.authority === undefined
       ? encounter
       : officialEncounterRoster(encounter, deps.authority.replay);
-    this.roster = new BattleRoster(this.encounter);
+    this.roster = new BattleRoster(this.encounter, this.multiplayer?.you);
     this.collection = deps.playerState.collection;
     this.profile = deps.playerState.profile;
     this.tripParty = deps.tripParty;
@@ -608,7 +612,8 @@ export class BattleNode {
     this.requestChatPresentation = deps.requestChatPresentation ?? (() => true);
     this.onReady = deps.onReady;
     this.authority = deps.authority;
-    deps.keyboard.register(this.handleKeyboardShortcut, this.lifecycle.signal);
+    deps.keyboard.register(shortcut => this.handleKeyboardShortcut(shortcut) ||
+      (this.multiplayer !== undefined && this.keyboardActive), this.lifecycle.signal);
     if (
       this.tripParty !== undefined &&
       this.captureInstanceId === undefined &&
@@ -650,7 +655,7 @@ export class BattleNode {
 
   async start(seed: number | Rng): Promise<void> {
     if (this.lifecycle.disposed) throw new Error("BattleNode.start: battle node is destroyed");
-    const localRng = this.authority === undefined
+    const localRng = this.authority === undefined && this.multiplayer === undefined
       ? (typeof seed === "number" ? mulberry32(seed) : seed)
       : undefined;
     this.sourceRng = localRng;
@@ -704,7 +709,12 @@ export class BattleNode {
     await this.buildScene();
     if (this.lifecycle.disposed) return;
     this.buildPhase = "session";
-    if (this.authority === undefined) {
+    if (this.multiplayer) {
+      this.session = this.multiplayer.session;
+      this.resumedStep = this.multiplayer.resumedStep;
+      this.restoredPresentationEvents = this.multiplayer.historyEvents;
+      this.suppressCommittedOpeningSpiritCharge = false;
+    } else if (this.authority === undefined) {
       this.session = createLocalBattleSession(
         this.game.gd,
         [structuredClone(this.encounter.playerTeam), structuredClone(this.encounter.enemyTeam)],
@@ -736,7 +746,7 @@ export class BattleNode {
     // only knows the encounter's initial setups — a rematch must not carry last battle's summon
     // ids into buildSnapshots' session lookups. Rebuilt here because Rematch stands in for the
     // original's new-BattleNode construction (see start()'s music note above).
-    this.roster = new BattleRoster(this.encounter);
+    this.roster = new BattleRoster(this.encounter, this.multiplayer?.you);
     const restoredIdentities = restoredRosterIdentities(this.restoredPresentationEvents);
     for (const identity of restoredIdentities) {
       this.roster.registerMidBattle(identity.id, identity.team, {
@@ -745,7 +755,7 @@ export class BattleNode {
       });
     }
     this.buildPhase = "roster";
-    await this.preloadRestoredRoster(restoredIdentities);
+    await this.preloadRestoredRoster(this.multiplayer ? this.roster.entries().map(entry => ({ id: entry.id, team: entry.team, shortType: entry.setup.shortType, level: entry.setup.level })) : restoredIdentities);
     if (this.lifecycle.disposed) return;
 
     // Team displays render ACTIVE members only (the original's `team.monsterMembers`); the 4th+
@@ -801,7 +811,7 @@ export class BattleNode {
     if (this.scene) this.scene.visible = true;
     const music = battleMusicRole(this.encounter.breederXpBonus);
     this.playMusicTrack(music.category, music.trackCount, true);
-    if (this.authority?.resumeExisting !== true) await this.presentInitialTutorials();
+    if (!this.multiplayer && this.authority?.resumeExisting !== true) await this.presentInitialTutorials();
     if (this.lifecycle.disposed) return;
     await this.showEncounterChat(this.encounter.startChat, "startEvent");
     if (this.lifecycle.disposed) return;
@@ -945,7 +955,7 @@ export class BattleNode {
     bg.zIndex = zOf.get("background")!;
     scene.addChild(bg);
 
-    this.enemyDisplay = new EnemyTeamDisplay({ assets, ticker });
+    this.enemyDisplay = new EnemyTeamDisplay({ multiplayer: this.multiplayer !== undefined, assets, ticker });
     this.enemyDisplay.zIndex = zOf.get("enemyTeamDisplay")!;
     scene.addChild(this.enemyDisplay);
 
@@ -1194,6 +1204,38 @@ export class BattleNode {
         if (this.battleEscaped) {
           await this.onBattleRetreated();
           return;
+        }
+        continue;
+      }
+
+      if (this.multiplayer) {
+        // Same panel, picker, swipe handling and renderer. Only intent ownership differs.
+        for (;;) {
+          this.setPresentationState(actorTeam === 0 ? "awaitingPlayerChoice" : "awaitingOpponent");
+          let action: import("@dib/engine").PvpAction | undefined;
+          if (actorTeam === 0) {
+            const selection = await this.awaitPlayerChoice(step);
+            if (this.lifecycle.disposed) return;
+            if (selection.kind === "cancelled") return;
+            if (selection.kind === "capture" || selection.kind === "retreat") throw new Error("PvP exhibition does not accept campaign actions");
+            action = selection.kind === "delay" ? { type: "delay", actorId: step.actorId } : {
+              type: "ability", actorId: step.actorId, slot: selection.choice.slot,
+              targets: this.submitTargetsFor(selection.choice, selection.targets),
+            };
+          }
+          this.setPanelShown(false);
+          const resolved = await this.multiplayer.resolve(step, action);
+          if (this.lifecycle.disposed) return;
+          if (resolved.terminal) { this.multiplayer.ended(); return; }
+          if (resolved.spiritId) {
+            await this.presentMultiplayerSummon(resolved.events, resolved.spiritId);
+            continue;
+          }
+          if (!resolved.abilityPath) throw new Error("Committed PvP action omitted its ability");
+          await this.playTurn(resolved.events, step.actorId, resolved.abilityPath, resolved.tier,
+            automaticTurnActivationMotion(actorTeam, resolved.abilityPath), resolved.slot);
+          if (this.battleEscaped) { this.multiplayer.ended(); return; }
+          break;
         }
         continue;
       }
@@ -1588,7 +1630,7 @@ export class BattleNode {
         resolve({ kind: "cancelled" });
       };
       const finish = (choice: PlayerChoice, targets: string[]): void => {
-        if (settled) return;
+        if (settled || this.multiplayer?.busy) return;
         settled = true;
         clearPendingCancel();
         resolve({ kind: "ability", choice, targets });
@@ -1613,6 +1655,7 @@ export class BattleNode {
         finish(choice, targets);
       });
       this.panel.onNeedsTargets((choice) => {
+        if (settled || this.multiplayer?.busy) return;
         this.picking = true;
         this.friendlyDisplay.setSummonSelectMode(true);
         this.setPresentationState("targetPicking");
@@ -1683,7 +1726,7 @@ export class BattleNode {
         }
       });
       this.panel.onDelayTap(() => {
-        if (settled || this.secondaryPopupKind !== null) return;
+        if (settled || this.multiplayer?.busy || this.secondaryPopupKind !== null) return;
         const commit = (): void => {
           if (settled) return;
           this.hasConfirmedSkip = true;
@@ -1698,6 +1741,7 @@ export class BattleNode {
         }
       });
       this.panel.onRetreatTap(() => {
+        if (this.multiplayer) { this.requestMultiplayerForfeit(); return; }
         if (settled || this.secondaryPopupKind !== null) return;
         if (this.encounter.allowRetreat !== true) {
           void this.showSecondaryMessage("NoRetreat", "noRetreat");
@@ -1716,7 +1760,7 @@ export class BattleNode {
 
 
 
-        if (settled || this.secondaryPopupKind !== null) return;
+        if (settled || this.multiplayer?.busy || this.secondaryPopupKind !== null) return;
         if (this.activeMonsterManagement || this.monsterManagementOpening) return;
         if (this.session.benchCountOf(0) === 0) {
           void this.showSecondaryMessage("NoBattingOrder", "noBattingOrder");
@@ -1789,6 +1833,18 @@ export class BattleNode {
     this.friendlyDisplay.visible = false;
   }
 
+  /** PvP's existing retreat control ends the exhibition only after native confirmation. */
+  requestMultiplayerForfeit(): void {
+    if (!this.multiplayer || this.multiplayer.busy || this.lifecycle.disposed || !this.built ||
+      !["awaitingPlayerChoice", "awaitingOpponent"].includes(this.presentationState)) return;
+    void this.showSecondaryConfirmation("ConfirmRetreat", "confirmRetreat", () => this.multiplayer?.forfeit());
+  }
+
+  /** Route shell Back through the same popup/picker ownership as keyboard Escape. */
+  requestMultiplayerBack(): void {
+    if (this.multiplayer) this.handleKeyboardShortcut({ key: "escape" });
+  }
+
   /** Native MonsterHatchPopup yes/no family used by both toolbar confirmations. */
   private async showSecondaryConfirmation(
     messageName: "ConfirmTurnSkip" | "ConfirmRetreat",
@@ -1796,12 +1852,15 @@ export class BattleNode {
     onYes: () => void,
   ): Promise<void> {
     if (this.secondaryPopupKind !== null || !this.scene) return;
+    const previousState = this.presentationState;
     this.secondaryPopupKind = kind;
     this.setPresentationState(kind === "confirmSkip" ? "skipTurnConfirmation" : "retreatConfirmation");
     let popup: Popup | undefined;
     popup = await showMonsterHatchPopup(this.monsterHatchEnvironment(this.scene), {
-      title: localizedString(this.game.strings, `${messageName}TitleKey`),
-      content: buildLocalizedMonsterHatchMessageContent(this.game.strings, messageName),
+      title: this.multiplayer && kind === "confirmRetreat" ? "Surrender?" : localizedString(this.game.strings, `${messageName}TitleKey`),
+      content: this.multiplayer && kind === "confirmRetreat"
+        ? buildMonsterHatchMessageContent("Surrender this match? Your opponent will win.")
+        : buildLocalizedMonsterHatchMessageContent(this.game.strings, messageName),
       buttons: [
         { label: localizedString(this.game.strings, "YesButtonKey"), onPress: onYes },
         { label: localizedString(this.game.strings, "NoButtonKey"), onPress: () => {} },
@@ -1810,10 +1869,11 @@ export class BattleNode {
         if (this.activeSecondaryPopup === popup) this.activeSecondaryPopup = undefined;
         if (this.secondaryPopupKind === kind) this.secondaryPopupKind = null;
         if (this.presentationState === "skipTurnConfirmation" || this.presentationState === "retreatConfirmation") {
-          this.setPresentationState("awaitingPlayerChoice");
+          this.setPresentationState(previousState);
         }
       },
     });
+    if (this.lifecycle.disposed) { popup.dismiss(); return; }
     this.activeSecondaryPopup = popup;
   }
 
@@ -2115,6 +2175,7 @@ export class BattleNode {
 
   private async onBattleRetreated(): Promise<void> {
     if (!this.scene) return;
+    if (this.multiplayer) { this.multiplayer.ended(); return; }
     this.setPresentationState("retreated");
     this.commitTripTerminalState();
     // `attemptRetreatForMonster:chance:` success: Battle state 6 + `Escape.m4a`.
@@ -2192,6 +2253,11 @@ export class BattleNode {
     if (this.lifecycle.disposed) return;
     this.setPresentationState("battleEnded");
     const won = winner === 0;
+    if (this.multiplayer) {
+      if (won) this.playMusicTrack("Win", 1, false);
+      this.multiplayer.ended();
+      return;
+    }
     this.commitTripTerminalState();
 
 
@@ -2356,7 +2422,7 @@ export class BattleNode {
     this.resolveEnterTransition();
   }
 
-  private readonly handleKeyboardShortcut = ({ key }: KeyboardShortcut): boolean => {
+  private readonly handleKeyboardShortcut = ({ key }: Pick<KeyboardShortcut, "key">): boolean => {
     if (!this.keyboardActive || !this.built) return false;
     if (key === "escape") {
 
@@ -2396,6 +2462,7 @@ export class BattleNode {
         this.targetPicker.cancelViaEscape();
         return true;
       }
+      if (this.multiplayer) { this.requestMultiplayerForfeit(); return true; }
       return false;
     }
     if (isAdvanceShortcut(key)) {
@@ -2418,6 +2485,7 @@ export class BattleNode {
     if (
       this.presentationState !== "awaitingPlayerChoice" ||
       !this.panel.visible ||
+      this.multiplayer?.busy ||
       this.picking ||
       this.activeSpiritMenu !== undefined ||
       this.activeMonsterManagement !== undefined ||
@@ -3046,6 +3114,8 @@ export class BattleNode {
       if (this.lifecycle.disposed) return;
     }
 
+    const enemySummon = this.session.summonIdOf(1);
+    if (this.multiplayer && enemySummon) await this.enemyDisplay.notifyAdded(this.enemySnapshotOf(enemySummon));
     for (const [id, counts] of restoredStatusCounts(events)) {
       this.statusOverlays.hydrateCounts(id, counts);
     }
@@ -3250,6 +3320,9 @@ export class BattleNode {
         e.added !== undefined ? this.friendlySnapshotOf(e.added) : undefined,
       );
       if (e.added !== undefined) this.statusOverlays.refreshHostsFor(e.added);
+    } else if (this.multiplayer) {
+      if (e.removed) void this.enemyDisplay.notifyDied(e.removed);
+      if (e.added) { await this.enemyDisplay.notifyAdded(this.enemySnapshotOf(e.added)); this.statusOverlays.refreshHostsFor(e.added); }
     }
   }
 
@@ -3622,6 +3695,7 @@ export class BattleNode {
       this.picking ||
       this.activeSpiritMenu ||
       this.spiritMenuOpening ||
+      this.multiplayer?.busy ||
       this.spiritSelectionPending
     ) return;
     const snapshot = this.profile.spiritSnapshot();
@@ -3664,12 +3738,28 @@ export class BattleNode {
     }
   }
 
+  private async presentMultiplayerSummon(events: readonly BattleEvent[], id: string): Promise<void> {
+    this.applyStatusOverlayEvents(events);
+    await this.applyRosterEvents(events);
+    if (this.lifecycle.disposed) return;
+    const removed = turnOrderResolutionPlan(events).teamRemovedIds;
+    if (removed.length) this.startPresentationTask(this.turnOrder.notifyTeamRemovedMonsters(removed), "PvP spirit replacement");
+    await this.turnOrder.notifyTeamAddedMonsters([id]);
+  }
+
   private async selectSpirit(item: SpiritMenuItemModel): Promise<void> {
     if (item.kind !== "spirit" || item.shortType === undefined || this.spiritSelectionPending) return;
     this.spiritSelectionPending = true;
     try {
       // Native order: Team.setSummon first, then Player.spiritSummoned (+33 XP/spend/lock), then
       // setAi. BattleCore stamps AI at construction but otherwise preserves that observable order.
+      if (this.multiplayer) {
+        const result = await this.multiplayer.summon(item.shortType);
+        if (this.lifecycle.disposed) return;
+        this.profile.useSpirit(item.shortType);
+        if (result.spiritId) await this.presentMultiplayerSummon(result.events, result.spiritId);
+        return;
+      }
       const savedXp = this.profile.spiritSavedXp(item.shortType);
       await this.submitAuthoritative({
         type: "battle.summonSpirit",

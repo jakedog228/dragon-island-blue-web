@@ -3,12 +3,12 @@ import type { LibraryEntry } from "../content/modLibraryModel.js";
 import { PVP_MOD } from "./pvpMod.js";
 
 /** Local catalog presentation only. This token is never a downloadable archive or trust exemption. */
-export const PVP_BUILTIN_RELEASE = "builtin-pvp-1.0.0";
+export const PVP_BUILTIN_RELEASE = `builtin-pvp-${PVP_MOD.version}`;
 const saveMetadata = { saveCompatibility: "neutral" as const };
 export const PVP_LISTING: CatalogMod = {
   id: "builtin-multiplayer-pvp", modId: PVP_MOD.id, source: "official", title: PVP_MOD.name,
   summary: "Challenge a friend. Bring your party, share an invite code, and battle online.",
-  description: "Bring your party to the Arena and challenge another player in a two-player exhibition. Choose PvP beside Tournament, create an invite code, or join a friend's match.\n\nBoth teams start at full health. Take turns choosing abilities and targets, use your reserves, and reconnect if you leave the screen. Your campaign progress, items, rewards, and monsters stay unchanged.\n\nWorks with Offline and Official parties. Both players need an internet connection and compatible game rules. Gameplay mods require a supported server adapter; unreviewed special-monster mods are not supported yet.\n\nIncluded with the game. Enable it here, then Apply to make PvP available in the Arena.",
+  description: "Bring your party to the Arena and challenge another player in a two-player exhibition. Choose PvP beside Tournament, create an invite code, or join a friend's match.\n\nBoth teams start at full health. Fight through the normal combat layout and animations, choose abilities and targets, summon your spirits, use your reserves, and surrender through the existing retreat button. Once a match starts, finish it or surrender; disconnects use the turn timeout. Your campaign progress, items, rewards, and monsters stay unchanged.\n\nWorks with Offline and Official parties. Both players need an internet connection and compatible game rules. Only reviewed cosmetic mods are allowed. Gameplay mods are disabled in PvP, even when both players select the same mod.\n\nIncluded with the game. Enable it here, then Apply to make PvP available in the Arena.",
   tags: ["Multiplayer", "Battles"], screenshots: [],
   author: { id: "dib-web", username: "dib-web", displayName: PVP_MOD.author,
     bio: "Official extensions for the Dragon Island Blue web port.", website: "", revision: 1 },

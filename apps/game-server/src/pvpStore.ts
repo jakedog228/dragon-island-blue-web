@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { z } from "zod";
-import { PvpBattleSnapshotV1Schema, PvpClientSetupV1Schema, PvpMatchViewV1Schema, PvpRosterMemberV1Schema } from "@dib/game-protocol";
+import { PvpBattleSnapshotV1Schema, PvpClientSetupV1Schema, PvpMatchViewV1Schema, PvpRosterMemberV1Schema, PvpSpiritSetupV1Schema } from "@dib/game-protocol";
 import { durableWriteFile } from "./durableWrite.js";
 
 const participant = z.object({
@@ -9,6 +9,7 @@ const participant = z.object({
   name: z.string().min(1).max(60), source: z.enum(["official", "offline"]),
   setup: PvpClientSetupV1Schema,
   party: z.array(PvpRosterMemberV1Schema).min(1).max(32),
+  spirits: PvpSpiritSetupV1Schema.optional(),
 }).strict();
 // Store response metadata once, with replay-prefix lengths instead of quadratic transcript copies.
 const receipt = z.object({

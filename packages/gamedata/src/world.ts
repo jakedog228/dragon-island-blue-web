@@ -139,6 +139,12 @@ export interface WorldZoneChange {
   readonly dungeon?: string;
   readonly dungeonFile?: string;
   readonly dungeonLevel?: number;
+
+
+
+
+
+  readonly conditions?: SourceConditions;
 }
 
 export type SupportedPoiInteraction =
@@ -998,6 +1004,9 @@ function parseZoneChange(source: WorldResourceSource, worlds: Record<string, unk
   expect(raw.type === "Generic", `${path}.type is unsupported.`);
   const args = dict(raw.arguments, `${path}.arguments`);
   exactKeys(args, new Set(["conditions", "dungeon", "targetZoneChange", "world"]), `${path}.arguments`);
+  const conditions = args.conditions === undefined
+    ? undefined
+    : parseSourceConditions(args.conditions, `${path}.arguments.conditions`);
   if (args.dungeon !== undefined) {
     const dungeonPath = `${path}.arguments.dungeon`;
     const dungeon = dict(args.dungeon, dungeonPath);
@@ -1014,6 +1023,7 @@ function parseZoneChange(source: WorldResourceSource, worlds: Record<string, unk
       dungeonFile,
       ...(dungeonLevel === undefined ? {} : { dungeonLevel }),
       targetZoneChange: nonempty(args.targetZoneChange, `${path}.arguments.targetZoneChange`),
+      ...(conditions === undefined ? {} : { conditions }),
     });
   }
   const target = typedObject(args.world, `${path}.arguments.world`);
@@ -1027,7 +1037,12 @@ function parseZoneChange(source: WorldResourceSource, worlds: Record<string, unk
     return dict(item.arguments, `${target.type}.plist.pointsOfInterest[].arguments`).instanceName === targetName;
   });
   expect(exists, `${path} references missing target point ${target.type}.${targetName}.`);
-  return Object.freeze({ kind: "world", targetWorld: target.type, targetZoneChange: targetName });
+  return Object.freeze({
+    kind: "world",
+    targetWorld: target.type,
+    targetZoneChange: targetName,
+    ...(conditions === undefined ? {} : { conditions }),
+  });
 }
 
 function parseConnection(value: unknown, path: string, names: ReadonlySet<string>): WorldConnection {

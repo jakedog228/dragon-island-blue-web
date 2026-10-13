@@ -1,5 +1,6 @@
 import { SAVE_SLOT_IDS, type SaveSlotId } from "@dib/save-protocol";
 import { describePlayProfileLabel, readPlayProfiles, type PlayProfileModRef } from "../content/playProfiles.js";
+import { compareSaveMods, saveContentChanged } from "../content/saveModComparison.js";
 import { BrowserSaveConnection, type ReleaseDisposableBrowserStorage } from "./browserSaveClient.js";
 import type { PlayerGameStateSnapshot } from "./gameState.js";
 import type { SaveSession, SaveSlotStore } from "./saveStore.js";
@@ -19,6 +20,8 @@ export interface OfflineSaveEntry {
   readonly name: string;
   readonly lastMods: readonly PlayProfileModRef[] | null;
   readonly lastContent: string | null;
+  /** Semantic archive fingerprint captured before any mod executes. Missing on older history. */
+  readonly lastBaseContent?: string | null;
 }
 interface LibraryIndex {
   readonly schemaVersion: 1;
@@ -35,6 +38,7 @@ export class OfflineSaveLibrary implements SaveSlotStore {
     private readonly contentNamespace: string,
     private readonly mods: readonly PlayProfileModRef[],
     private readonly releaseDisposableStorage?: ReleaseDisposableBrowserStorage,
+    private readonly baseContentNamespace?: string,
   ) {
     this.index = this.read();
     const known = new Set(this.index.entries.map(entry => entry.id));
@@ -107,12 +111,12 @@ export class OfflineSaveLibrary implements SaveSlotStore {
     const entry = this.entry(slot);
     await this.connection(entry).restorePreviousRevision(entry.sourceSlot);
     // The rollback may predate the last mod selection; never claim to know its provenance.
-    this.edit(entry.id, { lastMods: null, lastContent: null });
+    this.edit(entry.id, { lastMods: null, lastContent: null, lastBaseContent: null });
   }
   async deleteSlot(slot: SaveSlotId): Promise<void> {
     const entry = this.entry(slot);
     await this.connection(entry).deleteSlot(entry.sourceSlot);
-    this.edit(entry.id, { lastMods: null, lastContent: null });
+    this.edit(entry.id, { lastMods: null, lastContent: null, lastBaseContent: null });
   }
   open(slot: SaveSlotId, preloadedState?: PlayerGameStateSnapshot): SaveSession {
     // Capture the stable address now: reordering in another tab cannot redirect an autosave.
@@ -120,6 +124,7 @@ export class OfflineSaveLibrary implements SaveSlotStore {
     const session = this.connection(entry).open(entry.sourceSlot, preloadedState);
     const remember = () => this.edit(entry.id, {
       lastMods: this.mods, lastContent: this.contentNamespace,
+      lastBaseContent: this.baseContentNamespace ?? (this.mods.length === 0 ? this.contentNamespace : null),
     });
     if (preloadedState !== undefined) remember();
     let latest: Promise<void> = Promise.resolve();
@@ -143,7 +148,7 @@ export class OfflineSaveLibrary implements SaveSlotStore {
     const entry = this.entry(slot);
     const name = offlineSaveName(fileName);
     await this.connection(entry).open(entry.sourceSlot).save(state);
-    this.edit(entry.id, { name, lastMods: null, lastContent: null });
+    this.edit(entry.id, { name, lastMods: null, lastContent: null, lastBaseContent: null });
   }
   rename(slot: SaveSlotId, name: string): void {
     this.edit(this.entry(slot).id, { name: offlineSaveName(name) });
@@ -173,15 +178,17 @@ export class OfflineSaveLibrary implements SaveSlotStore {
     for (let i = 0; i < 3; i++) this.index.entries.push(this.emptyEntry());
     this.persist();
   }
+  contentChanged(slot: SaveSlotId): boolean {
+    return saveContentChanged(this.entry(slot), this.mods, this.contentNamespace, this.baseContentNamespace);
+  }
   warning(slot: SaveSlotId): string | undefined {
     const entry = this.entry(slot);
     if (this.storage.getItem(entry.id) === null) return undefined;
-    if (entry.lastMods === null) return "Previous mods unknown. Check compatibility before playing.";
-    const same = entry.lastMods.length === this.mods.length &&
-      entry.lastMods.every((mod, i) => mod.digest === this.mods[i]?.digest);
-    if (!same) return `Different mods selected. Last played with: ${entry.lastMods.length === 0
-      ? "no mods" : entry.lastMods.map(mod => `${mod.displayName} ${mod.version}`).join(", ")}.`;
-    if (entry.lastContent !== this.contentNamespace) return "Different game content selected. Check compatibility before playing.";
+    const comparison = compareSaveMods(entry.lastMods, this.mods, this.contentChanged(slot));
+    if (comparison.kind === "unknown") return "Previous mods unknown. Check compatibility before playing.";
+    if (comparison.kind === "mods") return `Different mods selected. Last played with: ${entry.lastMods!.length === 0
+      ? "no mods" : entry.lastMods!.map(mod => `${mod.displayName} ${mod.version}`).join(", ")}.`;
+    if (comparison.kind === "content") return "Different game content selected. Check compatibility before playing.";
     return undefined;
   }
   private connection(entry: OfflineSaveEntry): BrowserSaveConnection {
@@ -193,7 +200,7 @@ export class OfflineSaveLibrary implements SaveSlotStore {
     return { id: `dib-save-v1:${namespace}:slot-1`, namespace, sourceSlot: "slot-1",
       name: `Save ${this.index.entries.length + 1}`, lastMods: null, lastContent: null };
   }
-  private edit(id: string, fields: Partial<Pick<OfflineSaveEntry, "name" | "lastMods" | "lastContent">>): void {
+  private edit(id: string, fields: Partial<Pick<OfflineSaveEntry, "name" | "lastMods" | "lastContent" | "lastBaseContent">>): void {
     // Read/merge synchronous mutations so other tabs' names, ordering and selection survive.
     const current = this.read();
     const position = current.entries.findIndex(entry => entry.id === id);
@@ -239,6 +246,7 @@ function validEntry(entry: OfflineSaveEntry): boolean {
     entry.id === `dib-save-v1:${entry.namespace}:${entry.sourceSlot}` &&
     typeof entry.name === "string" && entry.name.length > 0 &&
     (entry.lastContent === null || typeof entry.lastContent === "string") &&
+    (entry.lastBaseContent == null || typeof entry.lastBaseContent === "string") &&
     (entry.lastMods === null || (Array.isArray(entry.lastMods) && entry.lastMods.every(mod =>
       mod && typeof mod.digest === "string" && typeof mod.id === "string" &&
       typeof mod.version === "string" && typeof mod.displayName === "string")));

@@ -16,6 +16,7 @@ import {
   OfficialGameCommandResultV22Schema,
   OfficialGameCommandResultV23Schema,
   OfficialGameCommandResultV24Schema,
+  OfficialGameCommandResultV25Schema,
   OfficialGameProjectionV12Schema,
   OfficialGameProjectionV13Schema,
   OfficialGameProjectionV14Schema,
@@ -29,6 +30,7 @@ import {
   OfficialGameProjectionV22Schema,
   OfficialGameProjectionV23Schema,
   OfficialGameProjectionV24Schema,
+  OfficialGameProjectionV25Schema,
   OFFICIAL_GAME_V12_SIMULATION_VERSION,
   LogicPackDescriptorV1Schema,
   SlotProjectionV1Schema,
@@ -49,6 +51,7 @@ import {
   OFFICIAL_GAME_V22_SIMULATION_VERSION,
   OFFICIAL_GAME_V23_SIMULATION_VERSION,
   OFFICIAL_GAME_V24_SIMULATION_VERSION,
+  OFFICIAL_GAME_V25_SIMULATION_VERSION,
   type OfficialGameCommandResultV12,
   type OfficialGameCommandResultV13,
   type OfficialGameCommandResultV14,
@@ -62,6 +65,7 @@ import {
   type OfficialGameCommandResultV22,
   type OfficialGameCommandResultV23,
   type OfficialGameCommandResultV24,
+  type OfficialGameCommandResultV25,
   type OfficialGameProjectionBodyV12,
   type OfficialGameProjectionBodyV13,
   type OfficialGameProjectionBodyV14,
@@ -75,6 +79,7 @@ import {
   type OfficialGameProjectionBodyV22,
   type OfficialGameProjectionBodyV23,
   type OfficialGameProjectionBodyV24,
+  type OfficialGameProjectionBodyV25,
   type OfficialGameProjectionV12,
   type OfficialGameProjectionV13,
   type OfficialGameProjectionV14,
@@ -88,6 +93,7 @@ import {
   type OfficialGameProjectionV22,
   type OfficialGameProjectionV23,
   type OfficialGameProjectionV24,
+  type OfficialGameProjectionV25,
   type SlotProjectionV1,
   type UnsequencedPresentationEventV1,
 } from "@dib/game-protocol";
@@ -111,11 +117,14 @@ export type ProjectionBody =
   | OfficialGameProjectionBodyV21
   | OfficialGameProjectionBodyV22
   | OfficialGameProjectionBodyV23
-  | OfficialGameProjectionBodyV24;
+  | OfficialGameProjectionBodyV24
+  | OfficialGameProjectionBodyV25;
 // v13+ bodies share their core shape; their envelope version is added only after reduction. Keep
 // their correlated wire as a union while selecting the exact parser from the installed pack.
 export type ProjectionForBody<P extends ProjectionBody> = P extends OfficialGameProjectionBodyV13
-  ? P extends OfficialGameProjectionBodyV24
+  ? P extends OfficialGameProjectionBodyV25
+    ? OfficialGameProjectionV25
+    : P extends OfficialGameProjectionBodyV24
     ? OfficialGameProjectionV24
     : P extends OfficialGameProjectionBodyV23
     ? OfficialGameProjectionV23
@@ -132,7 +141,9 @@ export type ProjectionForBody<P extends ProjectionBody> = P extends OfficialGame
     ? OfficialGameProjectionV12
     : SlotProjectionV1;
 export type CommandResultForBody<P extends ProjectionBody> = P extends OfficialGameProjectionBodyV13
-  ? P extends OfficialGameProjectionBodyV24
+  ? P extends OfficialGameProjectionBodyV25
+    ? OfficialGameCommandResultV25
+    : P extends OfficialGameProjectionBodyV24
     ? OfficialGameCommandResultV24
     : P extends OfficialGameProjectionBodyV23
     ? OfficialGameCommandResultV23
@@ -153,10 +164,29 @@ export class GameServiceError extends Error {
   constructor(
     readonly code: GameErrorCodeV1,
     message: string,
-    readonly options: { retryable?: boolean; currentRevision?: number } = {},
+    readonly options: { retryable?: boolean; currentRevision?: number; cause?: unknown } = {},
   ) {
-    super(message);
+    super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = "GameServiceError";
+  }
+}
+
+/**
+ * An unexpected exception raised while reducing a command. The reducer is pure and storage is
+ * replaced only after it (and the post-reduction projection/receipt validation) succeeds, so the
+ * command is certainly NOT committed and replaying the same envelope deterministically fails again.
+ * It is therefore reported non-retryable: a retryable error tells the browser coordinator the
+ * outcome is uncertain, and it then retains and replays that envelope before every later intent,
+ * which turned one reducer defect into a permanently wedged slot (audit M7 / C1). Transport and
+ * persistence failures are outside this boundary and keep the generic retryable mapping.
+ */
+export class ReducerFaultError extends GameServiceError {
+  constructor(cause: unknown) {
+    super("INTERNAL", "the authoritative reducer rejected this command before committing it", {
+      retryable: false,
+      cause,
+    });
+    this.name = "ReducerFaultError";
   }
 }
 
@@ -334,6 +364,7 @@ export class AuthoritativeGameService<S, P extends ProjectionBody = ProjectionBo
       && pack.simulationVersion !== OFFICIAL_GAME_V22_SIMULATION_VERSION
       && pack.simulationVersion !== OFFICIAL_GAME_V23_SIMULATION_VERSION
       && pack.simulationVersion !== OFFICIAL_GAME_V24_SIMULATION_VERSION
+      && pack.simulationVersion !== OFFICIAL_GAME_V25_SIMULATION_VERSION
     ) {
       throw new GameServiceError(
         "PACK_UNAVAILABLE",
@@ -402,44 +433,57 @@ export class AuthoritativeGameService<S, P extends ProjectionBody = ProjectionBo
 
       const now = new Date(this.now()).toISOString();
       const previousRevision = current?.revision ?? 0;
-      const reduced = await this.reducer.apply({
-        playerId,
-        slotId,
-        pack: this.pack,
-        state: current?.state,
-        previousRevision,
-        now,
-      }, command);
-      reductionFinishedAt = this.timingNow();
       const revision = previousRevision + 1;
       const previousCursor = current?.eventCursor ?? 0;
-      const events = reduced.events.map((event, index) => ({
-        ...event,
-        seq: previousCursor + index + 1,
-      })) as GameCommandResultV1["events"];
-      const eventCursorStart = events.length === 0 ? previousCursor : previousCursor + 1;
+      // Everything from reduction through receipt construction is pure and precedes the store
+      // write, so an unexpected exception here is a certain non-commit (see ReducerFaultError).
+      // Typed domain rejections keep their own code and retryability.
+      let reduced: CommandReducerResult<S, P>;
+      let events: GameCommandResultV1["events"];
+      let projection: ProjectionForBody<P>;
+      let result: CommandResultForBody<P>;
+      try {
+        reduced = await this.reducer.apply({
+          playerId,
+          slotId,
+          pack: this.pack,
+          state: current?.state,
+          previousRevision,
+          now,
+        }, command);
+        reductionFinishedAt = this.timingNow();
+        events = reduced.events.map((event, index) => ({
+          ...event,
+          seq: previousCursor + index + 1,
+        })) as GameCommandResultV1["events"];
+        const eventCursorStart = events.length === 0 ? previousCursor : previousCursor + 1;
+        const eventCursorEnd = previousCursor + events.length;
+        projection = this.parseProjection({
+          slotId,
+          revision,
+          updatedAt: now,
+          logicPackId: this.pack.logicPackId,
+          simulationVersion: this.pack.simulationVersion,
+          trustTier: "official",
+          ...reduced.projection,
+        });
+        this.validatePersistedRecord({ state: reduced.state, projection });
+        result = this.parseCommandResult({
+          protocolVersion: GAME_PROTOCOL_VERSION,
+          commandId: envelope.commandId,
+          previousRevision,
+          revision,
+          eventCursorStart,
+          eventCursorEnd,
+          events,
+          projection,
+          idempotentReplay: false,
+        });
+      } catch (error) {
+        if (error instanceof GameServiceError) throw error;
+        throw new ReducerFaultError(error);
+      }
       const eventCursorEnd = previousCursor + events.length;
-      const projection = this.parseProjection({
-        slotId,
-        revision,
-        updatedAt: now,
-        logicPackId: this.pack.logicPackId,
-        simulationVersion: this.pack.simulationVersion,
-        trustTier: "official",
-        ...reduced.projection,
-      });
-      this.validatePersistedRecord({ state: reduced.state, projection });
-      const result = this.parseCommandResult({
-        protocolVersion: GAME_PROTOCOL_VERSION,
-        commandId: envelope.commandId,
-        previousRevision,
-        revision,
-        eventCursorStart,
-        eventCursorEnd,
-        events,
-        projection,
-        idempotentReplay: false,
-      });
       const receipts = new Map<string, StoredReceipt<P>>(current?.receipts ?? []);
       receipts.set(envelope.commandId, { canonicalEnvelope, result });
       const record: AuthoritativeSlotRecord<S, P> = Object.freeze({
@@ -597,6 +641,10 @@ export class AuthoritativeGameService<S, P extends ProjectionBody = ProjectionBo
         const parsed = OfficialGameProjectionV24Schema.parse(value);
         return parsed as ProjectionForBody<P>;
       }
+      if (this.pack.simulationVersion === OFFICIAL_GAME_V25_SIMULATION_VERSION) {
+        const parsed = OfficialGameProjectionV25Schema.parse(value);
+        return parsed as ProjectionForBody<P>;
+      }
       if (this.pack.simulationVersion === OFFICIAL_GAME_V22_SIMULATION_VERSION) {
         const parsed = OfficialGameProjectionV22Schema.parse(value);
         return parsed as ProjectionForBody<P>;
@@ -660,6 +708,10 @@ export class AuthoritativeGameService<S, P extends ProjectionBody = ProjectionBo
       }
       if (this.pack.simulationVersion === OFFICIAL_GAME_V24_SIMULATION_VERSION) {
         const parsed = OfficialGameCommandResultV24Schema.parse(value);
+        return parsed as CommandResultForBody<P>;
+      }
+      if (this.pack.simulationVersion === OFFICIAL_GAME_V25_SIMULATION_VERSION) {
+        const parsed = OfficialGameCommandResultV25Schema.parse(value);
         return parsed as CommandResultForBody<P>;
       }
       if (this.pack.simulationVersion === OFFICIAL_GAME_V22_SIMULATION_VERSION) {

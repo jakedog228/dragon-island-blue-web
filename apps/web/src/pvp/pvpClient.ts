@@ -1,6 +1,6 @@
 import {
   PvpCurrentMatchV1Schema, PvpErrorV1Schema, PvpMatchViewV1Schema, PvpSessionV1Schema,
-  type PvpCommandV1, type PvpInviteRequestV1, type PvpJoinRequestV1, type PvpMatchViewV1, type PvpErrorV1,
+  type PvpCommandV1, type PvpInviteRequestV1, type PvpJoinRequestV1, type PvpMatchViewV1, type PvpErrorV1, type PvpClientSetupV1,
 } from "@dib/game-protocol";
 
 export type PvpTransport = (path: string, init: RequestInit) => Promise<Response>;
@@ -39,7 +39,7 @@ export class PvpClient {
   }
   async invite(input: PvpInviteRequestV1): Promise<PvpMatchViewV1> { return parseResponse(PvpMatchViewV1Schema, await this.request("/api/pvp/invites", input)); }
   async join(input: PvpJoinRequestV1): Promise<PvpMatchViewV1> { return parseResponse(PvpMatchViewV1Schema, await this.request("/api/pvp/join", input)); }
-  async current(): Promise<PvpMatchViewV1 | null> { return parseResponse(PvpCurrentMatchV1Schema, await this.request("/api/pvp/matches/current")).match; }
+  async current(setup?: PvpClientSetupV1): Promise<PvpMatchViewV1 | null> { return parseResponse(PvpCurrentMatchV1Schema, await this.request("/api/pvp/matches/current", setup)).match; }
   async read(id: string): Promise<PvpMatchViewV1> { return parseResponse(PvpMatchViewV1Schema, await this.request(`/api/pvp/matches/${encodeURIComponent(id)}`)); }
   async command(id: string, input: PvpCommandV1): Promise<PvpMatchViewV1> { return parseResponse(PvpMatchViewV1Schema, await this.request(`/api/pvp/matches/${encodeURIComponent(id)}/commands`, input)); }
   async cancel(id: string, requestId: string): Promise<PvpMatchViewV1> { return parseResponse(PvpMatchViewV1Schema, await this.request(`/api/pvp/matches/${encodeURIComponent(id)}/cancel`, { requestId })); }

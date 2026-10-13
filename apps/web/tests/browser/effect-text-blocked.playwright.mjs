@@ -8,7 +8,11 @@ import { loadLocalContent } from "./localContent.mjs";
 
 const url = process.env.DIB_WEB_URL ?? "http://127.0.0.1:5173";
 const outputDir = path.resolve("output/effect-text-blocked");
-const battleSeed = Number(process.env.DIB_BLOCKED_SEED ?? 1);
+
+
+
+
+const battleSeed = Number(process.env.DIB_BLOCKED_SEED ?? 5);
 fs.mkdirSync(outputDir, { recursive: true });
 
 const browser = await chromium.launch({

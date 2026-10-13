@@ -3,6 +3,15 @@
 These `.dibmod` overlays contain JavaScript. They are selected alongside an operator-owned
 compatible Dragon Island Blue resource archive and run only in Offline/scenario play.
 
+Pirate now offers one guaranteed golden Egg on loading a save that lacks that character in its
+party, bench, or stored/equipped soul stones. On a new save, character Eggs run after starter
+selection and before Leslie's intro dialogue, one at a time in mod order. Keep or Feed consumes
+the gift permanently for that save; already owning the character also consumes eligibility.
+Ordinary golden-Egg levels apply and paid repeats are disabled. Companion saves are optional.
+Use the updated client and rebuilt packages. Opt-in browser proof (not part of `pnpm test`):
+`node apps/web/tests/browser/character-eggs.playwright.mjs`; set `DIB_EGG_DISPLAY_MODE=ipad` for
+the experimental tier. Expect the gift hatch before dialogue, and none on a second load.
+
 - `blue-dragon-overdrive` replaces imported monster data through `content:loaded`.
 - `realtime-combat` changes battle scheduling to 50 TU/second, with immediate enemy actions,
   FIFO friendly readiness and overlapping animations. It includes no-battle-delay behavior,

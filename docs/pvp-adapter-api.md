@@ -1,14 +1,13 @@
 # PvP adapter API
 
-The opt-in `pvp-adapter-v1` API runs reviewed, turn-based mod mechanics on the authority and
-replays the same rules in each browser. It supports custom actions, per-match state, ordered
-observers/guards, declarative buttons and custom canvas controls. It does not make existing
-single-player prototype patches compatible with PvP automatically.
+As of 2026-10-06, gameplay mods are **disabled in PvP**, including matching selections and
+operator-installed adapters. Invite/join/reconnect admission rejects them, and the server rejects
+custom adapter commands. The battle has no Match menu or custom mod-action UI. Future gameplay
+support must use actual project mods through the ordinary battle controls.
 
-Realtime Combat, Mercy Stone and the other unreviewed gameplay packages remain unsupported.
-Mods built on real-time reactions need team-relative rules and an authoritative reaction/timing
-protocol; that protocol is **not** part of this first API.
-Never substitute ordinary ability buttons for those mechanics and label the result compatible.
+The API below documents retained development infrastructure, not currently supported PvP play.
+Echo Strike and Turn Counter remain test fixtures only. Historical installation and browser recipes
+below cannot enable gameplay mods under the current policy; see [current PvP rules](pvp.md).
 
 ## Shared rules
 

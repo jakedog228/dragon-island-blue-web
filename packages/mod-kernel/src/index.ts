@@ -11,6 +11,13 @@ const MAX_PRIORITY = 1_000_000;
 
 export const CODE_MOD_API_VERSION = 4 as const;
 
+/** Author declaration about save portability, not a restriction on full-trust code. */
+export type ModSaveCompatibility = "neutral" | "dependent";
+
+export function modSaveCompatibilityLabel(value: ModSaveCompatibility | undefined): string {
+  return value === "neutral" ? "Save-neutral" : "Save-dependent";
+}
+
 export interface CodeModManifestV4 {
   readonly schemaVersion: 4;
   readonly id: string;
@@ -18,6 +25,8 @@ export interface CodeModManifestV4 {
   readonly displayName: string;
   readonly apiVersion: 4;
   readonly mode: "offline";
+  /** Omitted declarations conservatively default to dependent during import. */
+  readonly saveCompatibility: ModSaveCompatibility;
   /** Hard requirements. Absence or a version outside the range refuses the profile. Implies order. */
   readonly dependencies: Readonly<Record<string, string>>;
   /** Version-checked and ordered only when the named package is also selected. */
@@ -296,7 +305,7 @@ const REQUIRED_MANIFEST_FIELDS = [
   "schemaVersion", "id", "version", "displayName", "apiVersion", "mode", "dependencies", "entry",
 ] as const;
 const OPTIONAL_MANIFEST_FIELDS = [
-  "optionalDependencies", "conflicts", "loadAfter", "loadBefore", "priority",
+  "optionalDependencies", "conflicts", "loadAfter", "loadBefore", "priority", "saveCompatibility",
 ] as const;
 
 function parseManifest(value: unknown, label: string): CodeModManifestV4 {
@@ -320,6 +329,10 @@ function parseManifest(value: unknown, label: string): CodeModManifestV4 {
   const displayName = requiredString(manifest["displayName"], `${label}: displayName`);
   if (displayName.length > 80) throw new ModPackageError(`${label}: displayName is too long`);
   if (manifest["mode"] !== "offline") throw new ModPackageError(`${label}: mods must declare offline mode`);
+  const saveCompatibility = manifest["saveCompatibility"] ?? "dependent";
+  if (manifest["saveCompatibility"] === null || (saveCompatibility !== "neutral" && saveCompatibility !== "dependent")) {
+    throw new ModPackageError(`${label}: saveCompatibility must be neutral or dependent`);
+  }
   const entry = requiredString(manifest["entry"], `${label}: entry`);
   validatePath(entry, `${label}: entry`);
   if (!/\.(?:js|mjs)$/i.test(entry)) {
@@ -345,6 +358,7 @@ function parseManifest(value: unknown, label: string): CodeModManifestV4 {
     displayName,
     apiVersion: 4,
     mode: "offline",
+    saveCompatibility,
     ...relations,
     priority: parsePriority(manifest["priority"], label),
     entry,

@@ -23,7 +23,7 @@
 
 
 
-import { Container, Text, type Sprite, type Texture, type Ticker } from "pixi.js";
+import { Container, RenderLayer, Text, type Sprite, type Texture, type Ticker } from "pixi.js";
 import {
   Box,
   pointSprite,
@@ -35,11 +35,13 @@ import { EnemyMonsterDisplay } from "./enemyMonsterDisplay.js";
 import { tween, easeExponentialOut, easeExponentialInOut } from "../tween.js";
 import {
   enemyNameColor,
+  multiplayerEnemyGap,
   ENEMY_NAME_COLOR_FALLBACK,
   SCREEN_W,
   SCREEN_H,
   ENEMY_SLOT_WIDTH,
   ENEMY_SLOT_HEIGHT,
+  enemyTeamLayoutMetrics,
   MEMBERS_BOX_GAP_TWO,
   BENCH_BOX_INSET,
   membersBoxXCocos,
@@ -51,6 +53,7 @@ import {
   ENEMY_REORDER_MOVE_MS,
   reorderEntranceStart,
 } from "./displayShared.js";
+import { DISPLAY_MODE } from "../runtimeSettings.js";
 
 
 
@@ -80,6 +83,7 @@ export interface EnemySnapshot {
 }
 
 export interface EnemyTeamDisplayOpts {
+  multiplayer?: boolean;
   assets: AssetLibrary;
   ticker: Ticker;
 }
@@ -87,12 +91,16 @@ export interface EnemyTeamDisplayOpts {
 export type EnemyBenchTapResult = "analyzeNotReady" | "noMonstersToAnalyze" | "showReserves";
 
 export class EnemyTeamDisplay extends Container {
+  private readonly multiplayer: boolean;
   private readonly assets: AssetLibrary;
   private readonly ticker: Ticker;
   private readonly membersBox = new Box({ horizontal: true, gap: 0, positiveAlignDirection: true });
   /** Insertion order mirrors the original's `memberNodes` (join order, promoted reserves
    *  appended at the end); dead members are deleted on `notifyDied`. */
   private readonly displays = new Map<string, EnemyMonsterDisplay>();
+  private hadWideHealthBars = false;
+  private wideHealthBarLayer: RenderLayer | undefined;
+  private readonly wideHealthBarOwners = new Map<string, Set<string>>();
 
   private readonly colorSlots = new Map<string, number>();
   /** Built-but-unparented promoted reserves awaiting the 1.0s-deferred `reorderMonsters`
@@ -118,6 +126,7 @@ export class EnemyTeamDisplay extends Container {
 
   constructor(opts: EnemyTeamDisplayOpts) {
     super();
+    this.multiplayer = opts.multiplayer === true;
     this.assets = opts.assets;
     this.ticker = opts.ticker;
     this.addChild(this.membersBox);
@@ -148,7 +157,7 @@ export class EnemyTeamDisplay extends Container {
     this.setBenchCount(0);
 
 
-    this.membersBox.gap = enemies.length === 2 ? MEMBERS_BOX_GAP_TWO : 0;
+    this.membersBox.gap = this.multiplayer ? multiplayerEnemyGap(enemies.length, DISPLAY_MODE) : enemies.length === 2 ? MEMBERS_BOX_GAP_TWO : 0;
 
     for (const [i, e] of enemies.entries()) {
       this.colorSlots.set(e.id, i);
@@ -424,7 +433,58 @@ export class EnemyTeamDisplay extends Container {
 
   /** Propagates one `ProgressBar` ease tick to every live HP bar (see EnemyMonsterDisplay.update). */
   update(dtMs: number): void {
+    this.layoutWideHealthBars();
     for (const d of this.displays.values()) d.update(dtMs);
+  }
+
+  /** Full-trust mods opt their enemies in; owners compose and dispose independently. */
+  setWideHealthBarIds(owner: string, ids: readonly string[]): void {
+    if (ids.length) this.wideHealthBarOwners.set(owner, new Set(ids));
+    else this.wideHealthBarOwners.delete(owner);
+    this.layoutWideHealthBars();
+  }
+
+  private layoutWideHealthBars(): void {
+    const ids = new Set([...this.wideHealthBarOwners.values()].flatMap(set => [...set]));
+    if (!ids.size && !this.hadWideHealthBars) return;
+    this.hadWideHealthBars = ids.size > 0;
+    if (ids.size && !this.wideHealthBarLayer) {
+      this.wideHealthBarLayer = new RenderLayer();
+      this.addChild(this.wideHealthBarLayer);
+    }
+    // Bars span neighboring displays: draw chrome above all monster art, retaining
+    // logical parents, input handlers, entrance motion and destruction ownership.
+    if (this.wideHealthBarLayer) this.setChildIndex(this.wideHealthBarLayer, this.children.length - 1);
+    const displays = [...this.displays];
+    const rowHeight = Math.max(0, ...displays.map(([, display]) => display.healthBarRowHeight));
+    // Mod-authored layout derived from native chrome and the source enemy-area left edge.
+    // Leave the ordinary chrome row free when bosses share a field with normal enemies.
+    const ordinary = displays.filter(([id]) => !ids.has(id));
+    const top = Math.max(0, ...ordinary.map(([, display]) => display.ordinaryHealthBarRowHeight));
+    let row = 0;
+    const left = enemyTeamLayoutMetrics(DISPLAY_MODE).offsetX;
+    for (const [id, display] of displays) {
+      if (ids.has(id)) this.wideHealthBarLayer!.attach(...display.healthBarNodes);
+      else this.wideHealthBarLayer?.detach(...display.healthBarNodes);
+      display.layoutWideHealthBar(ids.has(id) ? {
+        x: left - this.membersBox.x - display.x,
+        width: SCREEN_W - left,
+        y: top + row++ * rowHeight,
+      } : undefined);
+    }
+    if (!ids.size && this.wideHealthBarLayer) {
+      this.wideHealthBarLayer.detachAll();
+      this.wideHealthBarLayer.destroy();
+      this.wideHealthBarLayer = undefined;
+    }
+  }
+
+  get wideHealthBarState(): { id: string; x: number; y: number; w: number; h: number; ratio: number; displayedRatio: number }[] {
+    const ids = new Set([...this.wideHealthBarOwners.values()].flatMap(set => [...set]));
+    return [...this.displays].filter(([id, display]) => ids.has(id) && display.parent === this.membersBox)
+      .map(([id, display]) => ({ id, ...display.healthBarState,
+        x: this.membersBox.x + display.x + display.healthBarState.x,
+        y: this.membersBox.y + display.y + display.healthBarState.y }));
   }
 
   /** Deterministic probe: the bench-count badge's rendered number. */
@@ -525,6 +585,7 @@ export class EnemyTeamDisplay extends Container {
 
   private lowestFreeColorSlot(): number {
     const used = new Set(this.colorSlots.values());
+    if (this.multiplayer) { for (let s = 0; s <= 3; s++) if (!used.has(s)) return s; }
     for (let s = 0; s <= 2; s++) if (!used.has(s)) return s;
     console.error("Missing available color for enemy monster display");
     return 3;
@@ -555,7 +616,7 @@ export class EnemyTeamDisplay extends Container {
     const boxOld = { x: this.membersBox.position.x, y: this.membersBox.position.y };
 
 
-    this.membersBox.gap = this.displays.size === 2 ? MEMBERS_BOX_GAP_TWO : 0;
+    this.membersBox.gap = this.multiplayer ? multiplayerEnemyGap(this.displays.size, DISPLAY_MODE) : this.displays.size === 2 ? MEMBERS_BOX_GAP_TWO : 0;
     const newlyParented = [...this.pendingAdds];
     for (const pending of newlyParented) {
 

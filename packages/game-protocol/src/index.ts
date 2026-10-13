@@ -5,7 +5,7 @@ export * from "./pvp.js";
 export const GAME_PROTOCOL_VERSION = "game-protocol-v1" as const;
 export const PRESENTATION_EVENT_VERSION = "presentation-events-v1" as const;
 /** Immutable identity of the currently installed Official authority. */
-export const OFFICIAL_GAME_SIMULATION_VERSION = "official-game-v24" as const;
+export const OFFICIAL_GAME_SIMULATION_VERSION = "official-game-v25" as const;
 /** Historical Official authority retained only for explicit v11 parsing/migration. */
 export const OFFICIAL_GAME_V11_SIMULATION_VERSION = "official-game-v11" as const;
 /**
@@ -36,8 +36,13 @@ export const OFFICIAL_GAME_V21_SIMULATION_VERSION = "official-game-v21" as const
 export const OFFICIAL_GAME_V22_SIMULATION_VERSION = "official-game-v22" as const;
 /** Historical authority: source Egg RNG sequence and release arithmetic. */
 export const OFFICIAL_GAME_V23_SIMULATION_VERSION = "official-game-v23" as const;
-/** Current authority: archive-neutral fixed encounter identity for reconnect. */
-export const OFFICIAL_GAME_V24_SIMULATION_VERSION = OFFICIAL_GAME_SIMULATION_VERSION;
+/** Historical authority: archive-neutral fixed encounter identity for reconnect. */
+export const OFFICIAL_GAME_V24_SIMULATION_VERSION = "official-game-v24" as const;
+/**
+ * Current authority: v24 wire, plus source story rules (Arena/dungeon encounter chats recorded in
+ * `dialogsSeen`, zone-change conditions, per-death quest event 0, empty Drop Quests).
+ */
+export const OFFICIAL_GAME_V25_SIMULATION_VERSION = OFFICIAL_GAME_SIMULATION_VERSION;
 
 /**
  * The wire vocabulary: every command type an envelope is *allowed to name*. Membership here is not
@@ -2152,30 +2157,53 @@ const officialGameProjectionV24Shape = {
   simulationVersion: z.literal(OFFICIAL_GAME_V24_SIMULATION_VERSION),
   battle: battleViewV16.extend({ fixedEncounter: FixedBattleEncounterV1Schema.nullable() }).optional(),
 } as const;
-export const OfficialGameProjectionV24Schema = z.object(officialGameProjectionV24Shape)
-  .strict().superRefine((value, context) => {
-    validateProjectionDecisionIdentity(value, context);
-    const handoff = value.dungeonBattleReturn;
-    if (handoff !== undefined && (value.location.kind !== "dungeon" ||
-      value.dungeon === undefined || value.location.dungeonId !== handoff.dungeonId ||
-      value.location.floor !== handoff.floor || value.location.roomId !== handoff.roomId)) {
-      context.addIssue({ code: "custom", path: ["dungeonBattleReturn"],
-        message: "dungeon battle return must identify the projected dungeon location" });
-    }
-    const battle = value.battle;
-    const fixed = battle?.fixedEncounter;
-    if (battle !== undefined && fixed != null &&
-      (fixed.source.kind !== battle.scene.kind || fixed.members.length !== battle.teams[1].length ||
-       fixed.members.some((member, index) => member.type !== battle.teams[1][index]?.shortType ||
-         member.level !== battle.teams[1][index]?.level))) {
-      context.addIssue({ code: "custom", path: ["battle", "fixedEncounter"],
-        message: "fixed encounter must identify the committed enemy construction roster" });
-    }
-  });
+const officialGameProjectionV24Object = z.object(officialGameProjectionV24Shape).strict();
+/** v24's cross-field invariants; v25 keeps the identical wire and therefore the identical rules. */
+function refineOfficialGameProjectionV24Shape(
+  value: Omit<z.infer<typeof officialGameProjectionV24Object>, "simulationVersion"> & {
+    readonly simulationVersion: string;
+  },
+  context: z.RefinementCtx,
+): void {
+  validateProjectionDecisionIdentity(value, context);
+  const handoff = value.dungeonBattleReturn;
+  if (handoff !== undefined && (value.location.kind !== "dungeon" ||
+    value.dungeon === undefined || value.location.dungeonId !== handoff.dungeonId ||
+    value.location.floor !== handoff.floor || value.location.roomId !== handoff.roomId)) {
+    context.addIssue({ code: "custom", path: ["dungeonBattleReturn"],
+      message: "dungeon battle return must identify the projected dungeon location" });
+  }
+  const battle = value.battle;
+  const fixed = battle?.fixedEncounter;
+  if (battle !== undefined && fixed != null &&
+    (fixed.source.kind !== battle.scene.kind || fixed.members.length !== battle.teams[1].length ||
+     fixed.members.some((member, index) => member.type !== battle.teams[1][index]?.shortType ||
+       member.level !== battle.teams[1][index]?.level))) {
+    context.addIssue({ code: "custom", path: ["battle", "fixedEncounter"],
+      message: "fixed encounter must identify the committed enemy construction roster" });
+  }
+}
+export const OfficialGameProjectionV24Schema = officialGameProjectionV24Object
+  .superRefine(refineOfficialGameProjectionV24Shape);
 export type OfficialGameProjectionV24 = z.infer<typeof OfficialGameProjectionV24Schema>;
 export type OfficialGameProjectionBodyV24 = Omit<OfficialGameProjectionV24,
   "slotId" | "revision" | "updatedAt" | "logicPackId" | "simulationVersion" | "trustTier"
 > & { readonly __officialGameV24: true };
+
+/**
+ * v25 keeps the v24 wire byte-for-byte; only the simulation identity changes. Its new story
+ * rules surface through existing fields (`quests.dialogsSeen`, quest events, typed rejections).
+ */
+const officialGameProjectionV25Shape = {
+  ...officialGameProjectionV24Shape,
+  simulationVersion: z.literal(OFFICIAL_GAME_V25_SIMULATION_VERSION),
+} as const;
+export const OfficialGameProjectionV25Schema = z.object(officialGameProjectionV25Shape)
+  .strict().superRefine(refineOfficialGameProjectionV24Shape);
+export type OfficialGameProjectionV25 = z.infer<typeof OfficialGameProjectionV25Schema>;
+export type OfficialGameProjectionBodyV25 = Omit<OfficialGameProjectionV25,
+  "slotId" | "revision" | "updatedAt" | "logicPackId" | "simulationVersion" | "trustTier"
+> & { readonly __officialGameV25: true };
 
 const eventBase = {
   seq: positiveInteger,
@@ -2452,6 +2480,12 @@ export const OfficialGameCommandResultV24Schema = z.object({
   projection: OfficialGameProjectionV24Schema,
 }).strict().superRefine(validateCommandResultCursor);
 export type OfficialGameCommandResultV24 = z.infer<typeof OfficialGameCommandResultV24Schema>;
+
+export const OfficialGameCommandResultV25Schema = z.object({
+  ...gameCommandResultShape,
+  projection: OfficialGameProjectionV25Schema,
+}).strict().superRefine(validateCommandResultCursor);
+export type OfficialGameCommandResultV25 = z.infer<typeof OfficialGameCommandResultV25Schema>;
 
 export const GameErrorCodeV1Schema = z.enum([
   "AUTH_REQUIRED",

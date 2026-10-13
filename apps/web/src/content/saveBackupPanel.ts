@@ -433,7 +433,7 @@ export async function installSaveBackupPanel(options: SaveBackupPanelOptions): P
         const previous = library.entry(row.slotId);
         const open = row.warning.querySelector("details")?.open ?? false;
         const details = saveModDetails(previous.lastMods, library.selectedMods,
-          previous.lastContent !== library.selectedContentNamespace);
+          library.contentChanged(row.slotId));
         details.open = open;
         row.warning.replaceChildren(details);
       }

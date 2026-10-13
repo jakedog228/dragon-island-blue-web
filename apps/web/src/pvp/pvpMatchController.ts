@@ -52,7 +52,7 @@ export class PvpMatchController {
       if (write) this.retryOperation = uncertain ? operation : undefined;
     }
   }
-  async refresh(): Promise<void> { await this.run(() => this.match ? this.client.read(this.match.matchId) : this.client.current()); }
+  async refresh(): Promise<void> { await this.run(() => this.match ? this.client.read(this.match.matchId) : this.client.current(this.setup)); }
   async invite(): Promise<void> {
     if (this.retryOperation) return;
     try {

@@ -1,4 +1,5 @@
 import { SAVE_SLOT_IDS, type SaveSlotId } from "@dib/save-protocol";
+import type { ModSaveCompatibility } from "@dib/mod-kernel";
 import type { KeyValueStorage } from "./contentArchiveMemory.js";
 
 export const PLAY_PROFILE_STORAGE_KEY = "dib.playProfiles.v1";
@@ -13,6 +14,7 @@ const SAVE_STORAGE_PREFIX = "dib-save-v1";
 const MAX_REMEMBERED_PROFILES = 32;
 
 export interface PlayProfileModRef {
+  readonly saveCompatibility?: ModSaveCompatibility;
   readonly digest: string;
   readonly id: string;
   readonly version: string;
@@ -345,6 +347,7 @@ function parsePlayProfileRecord(value: unknown): PlayProfileRecord | undefined {
       id: mod["id"],
       version: mod["version"],
       displayName: mod["displayName"],
+      saveCompatibility: mod["saveCompatibility"] === "neutral" ? "neutral" : "dependent",
       byteLength,
     });
   }

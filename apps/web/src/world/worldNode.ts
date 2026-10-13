@@ -148,7 +148,7 @@ import {
   showGuildQuestChat,
   type GuildQuestChatHandle,
 } from "./guildQuestChat.js";
-import { townBuildingIsRevealed } from "./guildQuestConditions.js";
+import { townBuildingIsRevealed, townBuildingRevealChanges } from "./guildQuestConditions.js";
 import { nextTownEnterChat, selectTownEnterChat } from "./townEnterChat.js";
 import { dispatchTransition } from "./transitionDispatch.js";
 import { projectWorldPoiState } from "./worldPoiProjection.js";
@@ -291,6 +291,8 @@ export interface WorldNodeDeps {
   onTournamentFinished: (parent: Container) => void | Promise<void>;
   onWorldExit: (request: WorldExitRequest) => void | Promise<void>;
   onSceneRequest: (request: WorldSceneRequest) => void | Promise<void>;
+  /** `Chats.plist` lookup with the source nil-record fallback (`loadChatDefinition`). */
+  chatDefinition: (name: string) => ChatDefinition;
   /** Source `GotoTownMenuItem.activate:` direct return to `UserSavedData.lastTown`. */
   onTownPortal?: () => void | Promise<void>;
 
@@ -354,6 +356,8 @@ export interface WorldNodeDeps {
   onQuestEvent?: (event: GuildQuestEvent) => void;
   /** Semantic mutation bridge used by official online play. Local presentation remains renderer-owned. */
   authority?: {
+    /** v25 records dungeon chats and enforces the source zone-change condition gate. */
+    readonly sourceStoryRules?: boolean;
     navigate(
       targetPoiId: string,
       onIntentAccepted: () => void,
@@ -432,13 +436,21 @@ interface TownBuildingDisplay {
   readonly definition: TownBuildingDefinition;
   readonly root: Container;
   readonly house: Sprite;
+  /** `setupForRenderable:context:`'s authored-`conditions` verdict for this house. */
+  readonly revealed: boolean;
   readonly menuRoot?: Container;
   readonly labelRoot?: Container;
   readonly flashTarget?: Sprite;
 }
 
 interface TownPoiDisplay {
-  readonly buildings: readonly TownBuildingDisplay[];
+  /** The POI node every house and service layer is attached to. */
+  readonly parent: Container;
+
+
+
+
+  readonly buildings: TownBuildingDisplay[];
   readonly exit: Container;
   readonly exitFlashTarget: Sprite;
   readonly menuButton: Sprite;
@@ -774,10 +786,12 @@ export class WorldNode {
    * ZoomInAtPointTransition temporarily owns the world transform and hides its scene at the
    * opaque midpoint; Cocos restores that outgoing scene when it becomes the return destination.
    * Keep input locked until SceneCoordinator has completed the entire replacement. */
-  prepareBattleReturn(): void {
+  async prepareBattleReturn(): Promise<void> {
     if (!this.isAlive()) throw new Error("WorldNode: cannot return to a destroyed retained world");
     this.lockForReturnTransition();
     this.cancelMovement();
+    await this.regateTownBuildingServices();
+    if (!this.isAlive()) throw new Error("WorldNode: destroyed while re-gating its town services");
     this.pointRoot.alpha = 1;
     this.scene.visible = true;
     this.scene.pivot.set(0, 0);
@@ -1516,111 +1530,17 @@ export class WorldNode {
       );
       root.addChild(house);
 
-      let menuRoot: Container | undefined;
-      let labelRoot: Container | undefined;
 
 
 
 
-      const revealed = !definition.fake &&
-        townBuildingIsRevealed(definition.conditions, this.deps.guildQuests);
-      if (revealed && definition.iconSpriteFile && definition.nameLabel) {
-        menuRoot = new Container();
-        menuRoot.label = `town:${poi.name}:menu:${definition.className}`;
-        menuRoot.position.set(position.x, position.y);
-        menuRoot.zIndex = 10_000 + definition.sourceIndex;
-        menuRoot.visible = false;
-        menuRoot.alpha = 0;
-        menuRoot.eventMode = "none";
-        menuRoot.cursor = "default";
-        const icon = pointSprite(
-          await this.deps.game.assets.sprite(
-            resolvedSpriteKey(this.deps.game, definition.iconSpriteFile),
-          ),
-        );
-        icon.anchor.set(0.5);
-        icon.position.set(0, -townBuildingIconOffsetY(DISPLAY_MODE));
-        icon.scale.set(
-          icon.scale.x * townCounterScale(town.zoom),
-          icon.scale.y * townCounterScale(town.zoom),
-        );
-        const label = makeTtfLabel(
-          localizedString(this.deps.game.strings, definition.nameLabel),
-          townLabelFontSize(DISPLAY_MODE),
-          {
-            fill: 0xffffff,
-            outline: true,
-
-
-
-
-
-            outlineWidthPt: OUTLINE_FADE_BORDER_PT,
-            outlineAlpha: OUTLINE_FADE_ALPHA,
-            textureScaleMode: "nearest",
-          },
-        );
-        label.anchor.set(0.5, 0);
-        label.position.set(0, townBuildingLabelOffsetY(house.height));
-        label.scale.set(
-          label.scale.x * townCounterScale(town.zoom),
-          label.scale.y * townCounterScale(town.zoom),
-        );
-        label.visible = false;
-        label.alpha = 0;
-        label.eventMode = "none";
-        labelRoot = label;
-        // Source keeps the label with its z=0 house and raises only the icon to the z=1 menu
-        // layer. Later source-ordered houses may therefore occlude an earlier house label.
-        root.addChild(label);
-        menuRoot.addChild(icon);
-        const iconHit = minimumWorldHitRectangle(
-          {
-            x: icon.position.x - icon.width / 2,
-            y: icon.position.y - icon.height / 2,
-            width: icon.width,
-            height: icon.height,
-          },
-          townLocalMinimumTouchSize(town.zoom, DISPLAY_MODE),
-        );
-        menuRoot.hitArea = new Rectangle(iconHit.x, iconHit.y, iconHit.width, iconHit.height);
-        const activate = (event: FederatedPointerEvent): void => {
-          event.stopPropagation();
-          if (
-            !this.townBuildingIsEnabled(definition) ||
-            this.activeTown?.poi.name !== poi.name ||
-            this.locked ||
-            this.hasModal() ||
-            this.modalOpening
-          ) return;
-          void this.activateTownBuilding(definition);
-        };
-        menuRoot.on("pointertap", activate);
-
-
-
-
-        const houseHit = minimumWorldHitRectangle(
-          { x: -house.width / 2, y: -house.height / 2, width: house.width, height: house.height },
-          townLocalMinimumTouchSize(town.zoom, DISPLAY_MODE),
-        );
-        root.hitArea = new Rectangle(houseHit.x, houseHit.y, houseHit.width, houseHit.height);
-        root.eventMode = "none";
-        root.cursor = "default";
-        root.on("pointertap", activate);
-      }
+      const anonymous: TownBuildingDisplay = { definition, root, house, revealed: false };
       parent.addChild(root);
-      if (menuRoot) parent.addChild(menuRoot);
-      buildings.push({
-        definition,
-        root,
-        house,
-        ...(menuRoot ? { menuRoot } : {}),
-        ...(labelRoot ? { labelRoot } : {}),
-        ...(menuRoot?.children[0] instanceof Sprite
-          ? { flashTarget: menuRoot.children[0] }
-          : {}),
-      });
+      buildings.push(
+        this.townBuildingConditionsPass(definition)
+          ? await this.attachTownBuildingService(poi, parent, anonymous)
+          : anonymous,
+      );
     }
 
     const exit = new Container();
@@ -1707,11 +1627,163 @@ export class WorldNode {
     });
     parent.addChild(menuButton);
     return {
-      buildings: Object.freeze(buildings),
+      parent,
+      buildings,
       exit,
       exitFlashTarget: exitSprite,
       menuButton,
     };
+  }
+
+  /** Source authored-`conditions` verdict for one house; see `townBuildingIsRevealed`. */
+  private townBuildingConditionsPass(definition: TownBuildingDefinition): boolean {
+    return !definition.fake &&
+      townBuildingIsRevealed(definition.conditions, this.deps.guildQuests);
+  }
+
+  /**
+   * The service branch of `setupForRenderable:context:`'s per-house loop: the icon, name plate,
+   * both `ccTouchEnded:` hit surfaces, and the tutorial-flash target. `building.root` already owns
+   * the anonymous house sprite and is already attached to `parent`.
+   */
+  private async attachTownBuildingService(
+    poi: WorldPointOfInterest,
+    parent: Container,
+    building: TownBuildingDisplay,
+  ): Promise<TownBuildingDisplay> {
+    const town = poi.town;
+    if (town === undefined) throw new Error(`WorldNode: missing town data for ${poi.name}`);
+    const { definition, root, house } = building;
+    if (!definition.iconSpriteFile || !definition.nameLabel) {
+      return { definition, root, house, revealed: true };
+    }
+    const menuRoot = new Container();
+    menuRoot.label = `town:${poi.name}:menu:${definition.className}`;
+    menuRoot.position.copyFrom(root.position);
+    menuRoot.zIndex = 10_000 + definition.sourceIndex;
+    menuRoot.visible = false;
+    menuRoot.alpha = 0;
+    menuRoot.eventMode = "none";
+    menuRoot.cursor = "default";
+    const icon = pointSprite(
+      await this.deps.game.assets.sprite(
+        resolvedSpriteKey(this.deps.game, definition.iconSpriteFile),
+      ),
+    );
+    icon.anchor.set(0.5);
+    icon.position.set(0, -townBuildingIconOffsetY(DISPLAY_MODE));
+    icon.scale.set(
+      icon.scale.x * townCounterScale(town.zoom),
+      icon.scale.y * townCounterScale(town.zoom),
+    );
+    const label = makeTtfLabel(
+      localizedString(this.deps.game.strings, definition.nameLabel),
+      townLabelFontSize(DISPLAY_MODE),
+      {
+        fill: 0xffffff,
+        outline: true,
+
+
+
+
+
+        outlineWidthPt: OUTLINE_FADE_BORDER_PT,
+        outlineAlpha: OUTLINE_FADE_ALPHA,
+        textureScaleMode: "nearest",
+      },
+    );
+    label.anchor.set(0.5, 0);
+    label.position.set(0, townBuildingLabelOffsetY(house.height));
+    label.scale.set(
+      label.scale.x * townCounterScale(town.zoom),
+      label.scale.y * townCounterScale(town.zoom),
+    );
+    label.visible = false;
+    label.alpha = 0;
+    label.eventMode = "none";
+    // Source keeps the label with its z=0 house and raises only the icon to the z=1 menu
+    // layer. Later source-ordered houses may therefore occlude an earlier house label.
+    root.addChild(label);
+    menuRoot.addChild(icon);
+    const iconHit = minimumWorldHitRectangle(
+      {
+        x: icon.position.x - icon.width / 2,
+        y: icon.position.y - icon.height / 2,
+        width: icon.width,
+        height: icon.height,
+      },
+      townLocalMinimumTouchSize(town.zoom, DISPLAY_MODE),
+    );
+    menuRoot.hitArea = new Rectangle(iconHit.x, iconHit.y, iconHit.width, iconHit.height);
+    const activate = (event: FederatedPointerEvent): void => {
+      event.stopPropagation();
+      if (
+        !this.townBuildingIsEnabled(definition) ||
+        this.activeTown?.poi.name !== poi.name ||
+        this.locked ||
+        this.hasModal() ||
+        this.modalOpening
+      ) return;
+      void this.activateTownBuilding(definition);
+    };
+    menuRoot.on("pointertap", activate);
+
+
+
+
+    const houseHit = minimumWorldHitRectangle(
+      { x: -house.width / 2, y: -house.height / 2, width: house.width, height: house.height },
+      townLocalMinimumTouchSize(town.zoom, DISPLAY_MODE),
+    );
+    root.hitArea = new Rectangle(houseHit.x, houseHit.y, houseHit.width, houseHit.height);
+    root.eventMode = "none";
+    root.cursor = "default";
+    root.on("pointertap", activate);
+    parent.addChild(menuRoot);
+    return { definition, root, house, revealed: true, menuRoot, labelRoot: label, flashTarget: icon };
+  }
+
+  /** Reverse of `attachTownBuildingService`: leave only the anonymous house. */
+  private detachTownBuildingService(building: TownBuildingDisplay): TownBuildingDisplay {
+    const { definition, root, house } = building;
+    root.off("pointertap");
+    root.hitArea = null;
+    root.eventMode = "none";
+    root.cursor = "default";
+    building.labelRoot?.destroy();
+    building.menuRoot?.destroy({ children: true });
+    return { definition, root, house, revealed: false };
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+  private async regateTownBuildingServices(): Promise<void> {
+    if (this.activeTown !== undefined) {
+      throw new Error(
+        `WorldNode: cannot re-gate town services while ${this.activeTown.poi.name} is open`,
+      );
+    }
+    for (const display of this.poiDisplays.values()) {
+      const town = display.town;
+      if (town === undefined) continue;
+      const verdicts = town.buildings.map(({ definition }) =>
+        this.townBuildingConditionsPass(definition));
+      for (const index of townBuildingRevealChanges(town.buildings, verdicts)) {
+        const building = town.buildings[index]!;
+        town.buildings[index] = verdicts[index]
+          ? await this.attachTownBuildingService(display.poi, town.parent, building)
+          : this.detachTownBuildingService(building);
+      }
+    }
   }
 
   private showTownMenus(town: TownPoiDisplay, signal: AbortSignal): void {
@@ -3053,9 +3125,8 @@ export class WorldNode {
         ...(this.deps.authority === undefined
           ? {}
           : {
-              submitAuthoritative: async (command) => {
-                await this.deps.authority!.submitParty(command);
-              },
+              submitAuthoritative: async (command) =>
+                await this.deps.authority!.submitParty(command),
             }),
         onStateChanged: () => this.deps.onStateChanged(),
         onClose: () => {
@@ -3573,7 +3644,7 @@ export class WorldNode {
     return guildQuestListAvailable(this.deps.game.assets, this.deps.guildQuests);
   }
 
-  private townWarpConditionContext(): SourceConditionContext {
+  private sourceConditionContext(): SourceConditionContext {
     const quests = this.deps.guildQuests;
     return {
       hasSeenChat: (name) => quests?.hasSeenDialog(name) ?? false,
@@ -3603,7 +3674,7 @@ export class WorldNode {
       if (current === undefined) {
         throw new Error(`TownWarp registry has no entry for current town ${town}`);
       }
-      const conditions = this.townWarpConditionContext();
+      const conditions = this.sourceConditionContext();
       if (!sourceConditionsAreMet(current.portalConditions, conditions)) {
         const warpEvidenceHarness =
           (globalThis as Record<string, unknown>)["__DIB_TEST_WARP_GATE_EVIDENCE__"] === true;
@@ -3849,11 +3920,16 @@ export class WorldNode {
           readonly synchronizeProjection?: () => void;
       }
       | undefined;
-    // Reopening a scene/Collection attached to the current POI is a read-only route decision; its
-    // own activation command (if any) follows below. `world.navigate` remains meaningful for a
-    // same-POI ordinary field route because that path can author a repeat-visit encounter.
+
+
+
+
+
+
     const requiresAuthorityNavigation =
-      previous.name !== target.name || route.kind === "navigate";
+      previous.name !== target.name ||
+      route.kind === "navigate" ||
+      (route.kind === "scene" && route.sceneId === "town");
     if (this.deps.authority !== undefined && requiresAuthorityNavigation) {
       try {
         authorityArrival = await this.deps.authority.navigate(poiName, () => {
@@ -3958,6 +4034,13 @@ export class WorldNode {
       if (route.kind !== "worldExit") {
         throw new Error("WorldNode: world-exit continuation requires a world-exit route");
       }
+      if (this.zoneChangeBlocked(target)) {
+        if (previous.name !== target.name) {
+          void (optimisticMovement ?? this.playMovement(previous, target, result.movement!.kind));
+        }
+        void this.presentZoneChangeFailChat(target);
+        return;
+      }
       this.locked = true;
       this.cancelMovement();
       this.settleMarkerAt(target, true);
@@ -3981,10 +4064,66 @@ export class WorldNode {
       this.locked = true;
       void movement.then((outcome) => {
         if (outcome.kind !== "completed") return;
+        if (this.zoneChangeBlocked(target)) {
+          void this.presentZoneChangeFailChat(target);
+          return;
+        }
         this.dispatchOwnedTransition(`${route.sceneId} scene`, target, () =>
           this.deps.onSceneRequest({ poi: target, route, arrival: result }));
       });
       return;
+    }
+  }
+
+
+  private zoneChangeBlocked(target: WorldPointOfInterest): boolean {
+    if (this.deps.authority !== undefined && this.deps.authority.sourceStoryRules !== true) return false;
+    const conditions = target.zoneChange?.conditions;
+    return conditions !== undefined &&
+      !sourceConditionsAreMet(conditions, this.sourceConditionContext());
+  }
+
+  /**
+   * Failed `performVisitLogic` gate: `showChatDialog:` of `<instanceName>Fail`, then return with no
+   * transition. The shipped Relic entrance has no `Chats.plist` record, so the nil-record fallback
+   * shows `4-4_Beach_2FailChatKey` without a portrait. `showChatDialog:` stores the key in
+   * `dialogsSeen` before display; no condition reads it, and the authority has no command that
+   * records a non-town chat, so only local play persists it (the server independently rejects the
+   * transition).
+   */
+  private async presentZoneChangeFailChat(target: WorldPointOfInterest): Promise<void> {
+    const chat = this.deps.chatDefinition(`${target.name}Fail`);
+    if (
+      this.deps.authority === undefined &&
+      this.deps.guildQuests?.requestChatPresentation(chat.name, chat.alwaysShow) === false
+    ) {
+      this.locked = false;
+      return;
+    }
+    this.locked = true;
+    try {
+      const keys = chat.messageKeys.length === 0 ? [`${chat.name}ChatKey`] : chat.messageKeys;
+      for (const key of keys) {
+        if (this.lifecycle.disposed) return;
+        const handle = await showGuildQuestChat({
+          parent: this.pointRoot,
+          assets: this.deps.game.assets,
+          scale9: this.deps.game.scale9,
+          ticker: this.deps.stage.app.ticker,
+          message: localizedString(this.deps.game.strings, key),
+          ...(chat.imageFile === undefined ? {} : { portraitFile: chat.imageFile }),
+        });
+        if (this.lifecycle.disposed) {
+          handle.dismiss(true);
+          return;
+        }
+        await handle.closed;
+      }
+    } finally {
+      if (!this.lifecycle.disposed) {
+        this.locked = false;
+        this.deps.onStateChanged();
+      }
     }
   }
 

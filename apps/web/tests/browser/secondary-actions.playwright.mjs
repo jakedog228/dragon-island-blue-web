@@ -97,7 +97,7 @@ async function openBattle({ seed, allowRetreat = true, testEncounter = null }) {
     await waitVisibleText(wanted);
     // PopupKit's source-timed opening tween begins at scaleY=0. Because these
     // deterministic scenarios stop the Pixi ticker, advance it before a hit.
-    await advance(250);
+    await advance(550);
     const point = await page.evaluate((text) => {
       const chainVisible = (node) => {
         for (let current = node; current; current = current.parent) if (!current.visible) return false;
@@ -224,9 +224,9 @@ try {
     await ctx.page.close();
   }
 
-  // Seed 5: player leads and the third RNG draw is 0.2197, so the 30% attempt succeeds.
+  // Seed 12 pins the successful retreat branch including the source construction draws.
   {
-    const ctx = await openBattle({ seed: 5 });
+    const ctx = await openBattle({ seed: 12 });
     await ctx.clickAction("retreat");
     await ctx.page.waitForFunction(() => JSON.parse(window.render_game_to_text()).activePopup === "confirmRetreat");
     await ctx.clickVisibleText("Yes");

@@ -28,16 +28,12 @@ export type PvpCompatibilityResult =
   | { readonly compatible: false; readonly issues: readonly PvpCompatibilityIssueV1[] };
 
 interface InspectedSetup {
-  readonly rules: readonly { readonly rulesId: string; readonly mod: PvpModSelectionV1 }[];
   readonly cosmetic: readonly PvpModSelectionV1[];
   readonly issues: readonly PvpCompatibilityIssueV1[];
 }
 
-/**
- * Reconciliation uses mechanics identities instead of requiring identical modsets. Cosmetic
- * differences and mechanically identical releases are safe. Gameplay order remains meaningful.
- * Execution is always an installed server profile; the server never evaluates uploaded JS.
- */
+/** Only exact, operator-reviewed cosmetic releases may enter PvP. Mechanical adapters remain
+ * dormant infrastructure; matching gameplay selections never confer admission. */
 export class PvpCompatibilityRegistry {
   private readonly mods: ReadonlyMap<string, PvpModSupport>;
   private readonly profiles: readonly PvpRulesProfile[];
@@ -61,7 +57,6 @@ export class PvpCompatibilityRegistry {
   }
 
   private inspect(setup: PvpClientSetupV1, player: "host" | "guest"): InspectedSetup {
-    const rules: { rulesId: string; mod: PvpModSelectionV1 }[] = [];
     const cosmetic: PvpModSelectionV1[] = [];
     const issues: PvpCompatibilityIssueV1[] = [];
     setup.mods.forEach((mod, index) => {
@@ -69,17 +64,19 @@ export class PvpCompatibilityRegistry {
       const path = `${player}.mods[${index}]`;
       if (!installed || installed.id !== mod.id || installed.version !== mod.version) {
         issues.push({ code: "MOD_UNSUPPORTED", path, modId: mod.id,
-          message: `${mod.id} ${mod.version} has no reviewed PvP adapter on this server.`,
-          suggestion: `Disable ${mod.id} for this match, or ask the server operator to install support for this exact release.` });
+          message: `${mod.id} ${mod.version} is not a reviewed cosmetic PvP mod.`,
+          suggestion: `Disable ${mod.id}. PvP currently permits reviewed cosmetic mods only.` });
       } else if (installed.support.kind === "unsupported") {
         issues.push({ code: "MOD_UNSUPPORTED", path: `${path}.${installed.support.path}`, modId: mod.id,
           message: `${mod.id}: ${installed.support.reason}`,
-          suggestion: `Disable ${mod.id} for PvP or use a release with a server-supported battle adapter.` });
+          suggestion: `Disable ${mod.id}. PvP currently permits reviewed cosmetic mods only.` });
       } else if (installed.support.kind === "rules") {
-        rules.push({ rulesId: installed.support.rulesId, mod });
+        issues.push({ code: "MOD_UNSUPPORTED", path, modId: mod.id,
+          message: `${mod.id} changes gameplay. Gameplay mods are disabled in PvP, even when both players select the same release.`,
+          suggestion: `Disable ${mod.id} before entering PvP.` });
       } else cosmetic.push(mod);
     });
-    return { rules, cosmetic, issues };
+    return { cosmetic, issues };
   }
 
   negotiate(hostInput: PvpClientSetupV1, guestInput: PvpClientSetupV1): PvpCompatibilityResult {
@@ -93,31 +90,14 @@ export class PvpCompatibilityRegistry {
         message: "The selected content packages contain different game rules.",
         suggestion: "Select content packages with the same rules on both devices; artwork and translations may differ." });
     }
-    const aRules = a.rules.map((entry) => entry.rulesId);
-    const bRules = b.rules.map((entry) => entry.rulesId);
-    const length = Math.max(a.rules.length, b.rules.length);
-    for (let index = 0; index < length; index++) {
-      if (aRules[index] === bRules[index]) continue;
-      const left = a.rules[index];
-      const right = b.rules[index];
-      const sameSet = aRules.length === bRules.length && [...aRules].sort().join("\0") === [...bRules].sort().join("\0");
-      issues.push({ code: sameSet ? "MOD_ORDER_MISMATCH" : "MOD_VERSION_MISMATCH", path: `setup.rules[${index}]`,
-        modId: (left ?? right)!.mod.id,
-        message: `Battle rules differ at position ${index + 1}: host ${left ? `${left.mod.id} ${left.mod.version}` : "none"}; guest ${right ? `${right.mod.id} ${right.mod.version}` : "none"}.`,
-        suggestion: sameSet ? "Use the same gameplay-mod load order on both devices. Cosmetic mods may stay different."
-          : "Enable mechanically compatible gameplay-mod releases on both devices. Cosmetic mods may stay different." });
-    }
     if (issues.length > 0) return { compatible: false, issues };
     const profile = this.profiles.find((candidate) => candidate.logicPackId === host.logicPackId &&
-      candidate.rules.length === aRules.length && candidate.rules.every((rule, index) => rule === aRules[index]));
+      candidate.rules.length === 0);
     if (!profile) return { compatible: false, issues: [{ code: "PROFILE_UNAVAILABLE", path: "setup.rules",
-      message: "This gameplay-mod combination is not installed on the PvP server.",
-      suggestion: "Use the server's supported gameplay setup, or disable gameplay mods for a baseline match." }] };
+      message: "The baseline rules for this content package are not installed on the PvP server.",
+      suggestion: "Select the server's supported content package and disable gameplay mods." }] };
     const notes: string[] = [];
     if (JSON.stringify(a.cosmetic) !== JSON.stringify(b.cosmetic)) notes.push("Each player keeps their own supported cosmetic mods.");
-    if (a.rules.some((entry, index) => entry.mod.digest !== b.rules[index]!.mod.digest)) {
-      notes.push("Different mod releases were reconciled using identical server-reviewed battle rules.");
-    }
     return { compatible: true, profileId: profile.id, notes };
   }
 }

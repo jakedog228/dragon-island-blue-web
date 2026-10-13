@@ -125,6 +125,16 @@ const finishBattle = async (preferBasicAttack = false, allowSaveMe = false) => {
       continue;
     }
     assert.equal(decision.type, "battle.playerTurn");
+    const capture = committed.projection.player.party.length < 3
+      ? decision.captureTargets.find((target) => target.availableCardLevels.some((level) => committed.projection.player.captureCards[level] > 0))
+      : undefined;
+    if (capture !== undefined) {
+      settlement = await execute({
+        type: "battle.attemptCapture", battleId: decision.battleId, actorId: decision.actorId,
+        targetId: capture.targetId, cardLevel: capture.availableCardLevels.find((level) => committed.projection.player.captureCards[level] > 0),
+      });
+      continue;
+    }
     if (
       preferBasicAttack && !usedSpirit && decision.summonableSpiritTypes.length > 0
     ) {
@@ -273,6 +283,7 @@ try {
       return;
     }
     committedBrowserCommands.push(commandType);
+    reportStep(`browser committed ${commandType}`);
     committedBrowserResults.push(await response.json());
   });
   await page.addInitScript(() => {
@@ -836,7 +847,7 @@ try {
       snapshot.statusText?.visible !== true
     ) {
       const attack = snapshot.abilityButtons.find(({ abilityPath }) =>
-        abilityPath === "Offensive.Attack");
+        abilityPath.startsWith("Offensive."));
       assert(attack, `reconnected actor omitted basic Attack: ${JSON.stringify(snapshot.abilityButtons)}`);
       const attackPoint = geometry.toCss(attack.center);
       await page.mouse.click(attackPoint.x, attackPoint.y);

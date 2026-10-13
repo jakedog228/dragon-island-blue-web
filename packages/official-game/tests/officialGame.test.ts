@@ -4017,7 +4017,12 @@ describe("official authoritative gameplay reducer", () => {
         },
         before.projection.decision.decisionId,
       ),
-    )).rejects.toMatchObject({ message: expect.stringMatching(/continuation|exhausted|safe/i) });
+    // An uncommitted reducer fault is a certain, non-retryable INTERNAL whose cause is retained.
+    )).rejects.toMatchObject({
+      code: "INTERNAL",
+      options: { retryable: false },
+      cause: expect.objectContaining({ message: expect.stringMatching(/continuation|exhausted|safe/i) }),
+    });
     expect(await v12.store.read("defeat-sequence-player", "slot-1")).toEqual(before);
   });
 
@@ -4048,6 +4053,35 @@ describe("official authoritative gameplay reducer", () => {
   it("admits Tutorial4 only when the installed source Plot and raster pages expose it", () => {
     expect(completeSupport.tutorialFlags).toContain("Tutorial4");
     expect(support.tutorialFlags).not.toContain("Tutorial4");
+  });
+
+  it("admits every first-use flag the shipped town, field, and dungeon services claim", () => {
+    // Each of these is claimed through the authority before its popup shows (worldNode Store /
+    // Hero-house / repeat-visit handlers, DungeonNode waypoint and Volcano slot banners). Before
+    // they were admitted, a first Store visit on an Official slot reported a transition failure
+    // and retried the rejected claim on every later visit.
+    for (const flag of ["FirstShop", "FirstCharacterDisplay", "RevistPOI"]) {
+      expect(support.tutorialFlags).toContain(flag);
+    }
+    expect(support.dungeonIds).toEqual([]);
+    expect(support.tutorialFlags).not.toContain("WaypointReached");
+    for (const flag of ["WaypointReached", "NewInfiniteMonsterSlot"]) {
+      expect(completeSupport.tutorialFlags).toContain(flag);
+    }
+  });
+
+  it("commits the Store first-use flag exactly once", async () => {
+    const authority = service();
+    await authority.execute("first-shop", "slot-1", envelope("command_create_0001", 0, {
+      type: "slot.create",
+      starterElement: "Water",
+    }));
+    const claimed = await authority.execute("first-shop", "slot-1",
+      envelope("command_first_shop_0001", 1, { type: "player.claimTutorialFlag", flag: "FirstShop" }));
+    expect(claimed.projection.player.tutorialFlags).toContain("FirstShop");
+    await expect(authority.execute("first-shop", "slot-1",
+      envelope("command_first_shop_0002", 2, { type: "player.claimTutorialFlag", flag: "FirstShop" })))
+      .rejects.toMatchObject({ code: "ACTION_NOT_ALLOWED" });
   });
 
   it("canonicalizes unordered plist room dictionaries before seeded dungeon generation", () => {

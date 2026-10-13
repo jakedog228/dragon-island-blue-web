@@ -13,6 +13,7 @@ import {
   AuthoritativeGameService,
   GameServiceError,
   InMemoryAuthoritativeSlotStore,
+  ReducerFaultError,
   type GameCommandReducer,
 } from "../src/index.js";
 
@@ -175,6 +176,52 @@ const v12Reducer: GameCommandReducer<V12TestState, OfficialGameProjectionBodyV12
 };
 
 describe("AuthoritativeGameService", () => {
+  it("does not commit reducer faults and lets a later independent intent proceed", async () => {
+    const store = new InMemoryAuthoritativeSlotStore<TestState>();
+    const cause = new Error("deterministic reducer defect");
+    let fail = true;
+    const service = new AuthoritativeGameService({
+      pack, store,
+      reducer: { apply: (context, body) => {
+        if (fail) throw cause;
+        return reducer.apply(context, body);
+      } } satisfies GameCommandReducer<TestState>,
+    });
+    const create = command("reducer-fault-create-01", 0, { type: "slot.create", starterElement: "Water" });
+    await expect(service.execute("p", "slot-1", create)).rejects.toMatchObject({
+      name: "ReducerFaultError", code: "INTERNAL", cause, options: { retryable: false },
+    });
+    expect(await store.read("p", "slot-1")).toBeUndefined();
+    fail = false;
+    expect((await service.execute("p", "slot-1", { ...create, commandId: "reducer-recovered-01" })).revision)
+      .toBe(1);
+  });
+
+  it("preserves typed reducer refusals and leaves storage uncertainty outside the fault boundary", async () => {
+    const refusal = new GameServiceError("ACTION_NOT_ALLOWED", "typed refusal");
+    const create = command("typed-refusal-create-01", 0, { type: "slot.create", starterElement: "Water" });
+    const refusing = new AuthoritativeGameService<TestState>({
+      pack, reducer: { apply: () => { throw refusal; } },
+    });
+    await expect(refusing.execute("p", "slot-1", create)).rejects.toBe(refusal);
+
+    const diskFailure = new Error("storage outcome uncertain");
+    const uncertain = new AuthoritativeGameService<TestState>({
+      pack, reducer,
+      store: {
+        read: async () => undefined,
+        list: async () => [],
+        transact: async (_player, _slot, reduce) => {
+          await reduce(undefined);
+          throw diskFailure;
+        },
+      },
+    });
+    const rejected = uncertain.execute("p", "slot-1", create);
+    await expect(rejected).rejects.toBe(diskFailure);
+    await expect(rejected).rejects.not.toBeInstanceOf(ReducerFaultError);
+  });
+
   it("creates state only through the trusted reducer", async () => {
     const service = new AuthoritativeGameService({ pack, reducer, now: () => 1_700_000_000_000 });
     const result = await service.execute("player-a", "slot-1", command(
@@ -553,11 +600,11 @@ describe("AuthoritativeGameService", () => {
   it("rejects every unknown simulation version before store or reducer effects", async () => {
     const store = new InMemoryAuthoritativeSlotStore<TestState>();
     let applications = 0;
-    // Deliberately one past the installed authority: v24 is installed, so v25 is genuinely
+    // Deliberately one past the installed authority: v25 is installed, so v26 is genuinely
     // unknown until its layer actually exists.
     const unknownPack: LogicPackDescriptorV1 = {
       ...pack,
-      simulationVersion: "official-game-v25",
+      simulationVersion: "official-game-v26",
     };
     expect(() => new AuthoritativeGameService({
       pack: unknownPack,

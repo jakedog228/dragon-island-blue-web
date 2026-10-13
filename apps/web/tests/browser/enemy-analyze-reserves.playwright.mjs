@@ -28,6 +28,7 @@ async function openBattle(encounter) {
   });
   await page.addInitScript((configured) => {
     window.advanceTime = () => Promise.resolve();
+    window.__DIB_TEST_BATTLE_SEED__ = 7;
     window.__DIB_TEST_ENCOUNTER__ = configured;
   }, encounter);
   await page.goto(url, { waitUntil: "domcontentloaded" });
@@ -62,6 +63,7 @@ async function waitFor(ctx, predicate, message, limit = 400) {
 }
 
 async function clickBattlePoint(ctx, point) {
+  await ctx.page.evaluate(() => window.__PIXI_APP__.render());
   const css = ctx.geometry.toCss(point);
   await ctx.page.mouse.move(css.x, css.y);
   await ctx.page.mouse.down();
@@ -127,7 +129,7 @@ async function closeOk(ctx, expectedPopup = null) {
 async function useAnalyze(ctx) {
   const choose = await waitFor(
     ctx,
-    (s) => s.presentation.state === "awaitingPlayerChoice" && s.abilityButtons.some((b) => b.abilityPath === "Utility.Analyze"),
+    (s) => s.presentation.state === "awaitingPlayerChoice" && s.panelVisible && !s.turnOrderAnimating && s.abilityButtons.some((b) => b.abilityPath === "Utility.Analyze"),
     "Penguin never received a choice containing Analyze",
   );
   const analyze = choose.abilityButtons.find((button) => button.abilityPath === "Utility.Analyze");
@@ -162,9 +164,9 @@ try {
       { shortType: "UnhappyBird", level: 1 },
     ],
     enemyTeam: [
-      { shortType: "Minotaur", level: 1 },
+      { shortType: "Minotaur", level: 1, currentHp: 1 },
       { shortType: "Spark", level: 1 },
-      { shortType: "UnhappyBird", level: 1 },
+      { shortType: "BlueBabyDragon", level: 1 },
       { shortType: "FireCub", level: 1 },
       { shortType: "SnowCub", level: 1 },
       { shortType: "WhiteDragonling", level: 1 },
@@ -207,7 +209,7 @@ try {
   const withReserves = await openBattle(nineEncounter);
 
   const analyzed = await useAnalyze(withReserves);
-  assert.deepEqual(analyzed.enemyAnalyze.analyzedMonsterIds, ["t1m0:Minotaur", "t1m1:Spark", "t1m2:UnhappyBird"]);
+  assert.deepEqual(analyzed.enemyAnalyze.analyzedMonsterIds, ["t1m0:Minotaur", "t1m1:Spark", "t1m2:BlueBabyDragon"]);
   assert.equal(analyzed.enemyAnalyze.blinking, true);
   const visibility = new Set([analyzed.enemyAnalyze.labelVisible]);
   for (let i = 0; i < 24 && visibility.size < 2; i++) {
@@ -219,15 +221,24 @@ try {
   // This encounter carries reserves on both sides, so the round after Analyze runs long: the next
   // player choice lands around step 490 (~12s of stepped time), past waitFor's 400-step default.
   // The counter also blinks on a 0.5s cycle, so the visible half has to coincide with the panel.
-  const stableAnalyzed = await waitFor(
+  let stableAnalyzed = await waitFor(
     withReserves,
-    (s) => s.enemyAnalyze.labelVisible && s.presentation.state === "awaitingPlayerChoice" && s.panelVisible,
+    (s) => s.enemyAnalyze.labelVisible && s.presentation.state === "awaitingPlayerChoice" && s.panelVisible && !s.turnOrderAnimating && !s.statusText?.visible,
     "counter never became visible during the next stable player choice",
     1200,
   );
   assert.equal(stableAnalyzed.enemyBenchCountShown, stableAnalyzed.enemyBenchIds.length);
   assert(stableAnalyzed.enemyBenchIds.length > 0);
-  // UnhappyBird sacrifices itself deterministically in this fixture, promoting the bench front.
+  // Kill the one-HP front member explicitly; promotion must not depend on enemy AI RNG.
+  const attack = stableAnalyzed.abilityButtons.find((button) => button.abilityPath === "Offensive.Attack");
+  assert(attack);
+  await clickBattlePoint(withReserves, attack.center);
+  const picking = await waitFor(withReserves, (s) => s.picking && s.targetPickerVisuals.outlines.length > 0, "Attack did not open its target picker");
+  await clickBattlePoint(withReserves, picking.monsters.find((monster) => monster.id === "t1m0:Minotaur").targetPoint);
+  stableAnalyzed = await waitFor(withReserves, (s) =>
+    s.monsters.some((monster) => monster.id === "t1m3:FireCub") &&
+    s.presentation.state === "awaitingPlayerChoice" && s.panelVisible,
+  "reserve did not promote after the selected front member died", 1600);
   // Source allowAnalyze touched only the displays that existed at activation time: the promoted
   // FireCub must not silently inherit analyze mode.
   const promoted = stableAnalyzed.monsters.find((monster) => monster.id === "t1m3:FireCub");

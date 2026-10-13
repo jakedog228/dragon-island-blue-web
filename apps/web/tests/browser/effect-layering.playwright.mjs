@@ -27,7 +27,11 @@ try {
   });
   await page.addInitScript(() => {
     window.advanceTime = () => Promise.resolve();
-    window.__DIB_TEST_BATTLE_SEED__ = 3;
+
+
+
+
+    window.__DIB_TEST_BATTLE_SEED__ = 4;
     window.__DIB_TEST_ENCOUNTER__ = {
       backgroundKey: "ForestCombat",
       playerTeam: [{ shortType: "ThunderWolf", level: 20 }],

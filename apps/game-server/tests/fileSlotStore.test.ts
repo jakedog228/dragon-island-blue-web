@@ -33,6 +33,7 @@ import {
   OfficialGameCommandResultV22Schema,
   OfficialGameCommandResultV23Schema,
   OfficialGameCommandResultV24Schema,
+  OfficialGameCommandResultV25Schema,
   OfficialGameProjectionV12Schema,
   OfficialGameProjectionV13Schema,
   OfficialGameProjectionV14Schema,
@@ -46,6 +47,7 @@ import {
   OfficialGameProjectionV22Schema,
   OfficialGameProjectionV23Schema,
   OfficialGameProjectionV24Schema,
+  OfficialGameProjectionV25Schema,
   OFFICIAL_GAME_V11_SIMULATION_VERSION,
   OFFICIAL_GAME_V12_SIMULATION_VERSION,
   OFFICIAL_GAME_V18_SIMULATION_VERSION,
@@ -55,6 +57,7 @@ import {
   OFFICIAL_GAME_V22_SIMULATION_VERSION,
   OFFICIAL_GAME_V23_SIMULATION_VERSION,
   OFFICIAL_GAME_V24_SIMULATION_VERSION,
+  OFFICIAL_GAME_V25_SIMULATION_VERSION,
   OFFICIAL_GAME_V13_SIMULATION_VERSION,
   SlotProjectionV1Schema,
   type GameCommandEnvelopeV1,
@@ -71,6 +74,7 @@ import {
   type OfficialGameProjectionBodyV22,
   type OfficialGameProjectionBodyV23,
   type OfficialGameProjectionBodyV24,
+  type OfficialGameProjectionBodyV25,
 } from "@dib/game-protocol";
 import {
   AuthoritativeGameService,
@@ -97,6 +101,7 @@ import {
   createOfficialGameV22LogicPackDescriptor,
   createOfficialGameV23LogicPackDescriptor,
   createOfficialGameV24LogicPackDescriptor,
+  createOfficialGameV25LogicPackDescriptor,
   migrateOfficialGameV11ToV12,
   migrateOfficialGameV12ToV13,
   migrateOfficialGameV13ToV14,
@@ -110,6 +115,7 @@ import {
   migrateOfficialGameV21ToV22,
   migrateOfficialGameV22ToV23,
   migrateOfficialGameV23ToV24,
+  migrateOfficialGameV24ToV25,
   OfficialGameReducer,
   OfficialGameV12Reducer,
   OfficialGameV13Reducer,
@@ -124,6 +130,7 @@ import {
   OfficialGameV22Reducer,
   OfficialGameV23Reducer,
   OfficialGameV24Reducer,
+  OfficialGameV25Reducer,
   parseOfficialGameStateV1,
   parseOfficialGameStateV12,
   parseOfficialGameStateV13,
@@ -138,6 +145,7 @@ import {
   parseOfficialGameStateV22,
   parseOfficialGameStateV23,
   parseOfficialGameStateV24,
+  parseOfficialGameStateV25,
   validateOfficialGameSupport,
   type OfficialGameStateV1,
   type OfficialGameProjectionBodyV12,
@@ -154,6 +162,7 @@ import {
   type OfficialGameStateV22,
   type OfficialGameStateV23,
   type OfficialGameStateV24,
+  type OfficialGameStateV25,
 } from "@dib/official-game";
 import {
   FileAuthoritativeSlotStore,
@@ -322,6 +331,8 @@ const officialV24Pack = createOfficialGameV24LogicPackDescriptor(
   officialV12Support,
 );
 const officialV24Reducer = new OfficialGameV24Reducer(officialV23Reducer, officialV23Pack);
+const officialV25Pack = createOfficialGameV25LogicPackDescriptor(officialPack.logicPackId, officialV12Support);
+const officialV25Reducer = new OfficialGameV25Reducer(officialV24Reducer, officialV24Pack);
 
 function validOfficialDungeonState(): OfficialGameStateV1 {
   const entrance = officialWorld.pointsOfInterest.find((poi) => poi.zoneChange?.kind === "dungeon");
@@ -994,6 +1005,42 @@ function officialV24Store(directory: string): FileAuthoritativeSlotStore<
         return {
           state: migratedState,
           projection: officialV24Reducer.projectPersistedState(migratedState),
+        };
+      },
+    })],
+  });
+}
+
+function officialV25Store(directory: string): FileAuthoritativeSlotStore<
+  OfficialGameStateV25,
+  OfficialGameProjectionBodyV25
+> {
+  return new FileAuthoritativeSlotStore({
+    dataDirectory: directory,
+    logicPackId: officialV25Pack.logicPackId,
+    simulationVersion: OFFICIAL_GAME_V25_SIMULATION_VERSION,
+    worldId: officialWorld.name,
+    parseState: (value) => parseOfficialGameStateV25(officialData, officialQuests, value, {
+      dungeonResources: officialResources,
+    }),
+    parseProjection: (value) => OfficialGameProjectionV25Schema.parse(value),
+    parseCommandResult: (value) => OfficialGameCommandResultV25Schema.parse(value),
+    validateRecord: (record) => officialV25Reducer.validatePersistedRecord(record),
+    legacyMigrations: [legacySimulationMigration({
+      sourceSimulationVersion: OFFICIAL_GAME_V24_SIMULATION_VERSION,
+      parseSourceProjection: (value) => OfficialGameProjectionV24Schema.parse(value),
+      parseSourceCommandResult: (value) => OfficialGameCommandResultV24Schema.parse(value),
+      migrate: ({ state }) => {
+        const migratedState = migrateOfficialGameV24ToV25({
+          worlds: [officialWorld],
+          data: officialData,
+          quests: officialQuests,
+          state,
+          context: { dungeonResources: officialResources },
+        });
+        return {
+          state: migratedState,
+          projection: officialV25Reducer.projectPersistedState(migratedState),
         };
       },
     })],
@@ -2409,6 +2456,78 @@ describe("Task 6 immutable official v11 to v12 file migration", () => {
     expect(await restartedService.execute(playerId, "slot-1", request)).toEqual({ ...result, idempotentReplay: true });
     const finalService = new AuthoritativeGameService<OfficialGameStateV24, OfficialGameProjectionBodyV24>({
       pack: officialV24Pack, reducer: officialV24Reducer, store: officialV24Store(directory),
+    });
+    expect(await finalService.execute(playerId, "slot-1", request)).toEqual({ ...result, idempotentReplay: true });
+  });
+
+  it.each([false, true])("migrates a file-backed v24 slot to v25 (active battle: %s) and replays receipts after restart", async (activeBattle) => {
+    const directory = await mkdtemp(join(tmpdir(), "dib-game-v24-to-v25-"));
+    directories.push(directory);
+    const sourceStore = officialV24Store(directory);
+    const sourceService = new AuthoritativeGameService<
+      OfficialGameStateV24,
+      OfficialGameProjectionBodyV24
+    >({ pack: officialV24Pack, reducer: officialV24Reducer, store: sourceStore });
+    await sourceService.execute(
+      playerId,
+      "slot-1",
+      command("v24_v25_create_0001", 0, { type: "slot.create", starterElement: "Water" }),
+    );
+    if (activeBattle) {
+      const state = parseOfficialGameStateV24(officialData, officialQuests, {
+        ...activeWorldMigrationState(), collectionClaims: { schemaVersion: 1, claimedGoalIds: [] },
+        nextContinuationSequence: 1,
+      }, { dungeonResources: officialResources });
+      await sourceStore.transact(playerId, "slot-1", async (record) => {
+        if (record === undefined) throw new Error("missing source slot");
+        return { record: { ...record, state, receipts: new Map(), projection: {
+          ...record.projection, ...officialV24Reducer.projectPersistedState(state),
+        } }, value: undefined };
+      });
+    }
+    const before = await sourceStore.read(playerId, "slot-1");
+    if (before === undefined) throw new Error("v24-to-v25 fixture was not stored");
+    const sourcePath = await findSlotFile(directory);
+    const sourceBytes = await readFile(sourcePath, "utf8");
+
+    const targetStore = officialV25Store(directory);
+    const targetService = new AuthoritativeGameService<
+      OfficialGameStateV25,
+      OfficialGameProjectionBodyV25
+    >({ pack: officialV25Pack, reducer: officialV25Reducer, store: targetStore });
+    const projection = OfficialGameProjectionV25Schema.parse(
+      await targetService.bootstrap(playerId, "slot-1"),
+    );
+    const migrated = await targetStore.read(playerId, "slot-1");
+    if (migrated === undefined) throw new Error("v24-to-v25 migration did not persist a record");
+
+    expect(projection.simulationVersion).toBe(OFFICIAL_GAME_V25_SIMULATION_VERSION);
+    expect(migrated.simulationVersion).toBe(OFFICIAL_GAME_V25_SIMULATION_VERSION);
+    expect(migrated.state).toEqual(before.state);
+    if (activeBattle) {
+      expect(projection.battle?.fixedEncounter?.source.kind).toBe("world");
+      expect(projection.battle?.commands).toEqual(before.projection.battle?.commands);
+      expect(projection.battle?.randomDraws).toEqual(before.projection.battle?.randomDraws);
+      expect(findPresentationLeaks(projection)).toEqual([]);
+    }
+
+    expect(migrated.projection.location).toEqual(before.projection.location);
+    expect(migrated.receipts.size).toBe(0);
+    expect(await readFile(sourcePath, "utf8")).toBe(sourceBytes);
+    expect(await findAllSlotFiles(directory)).toEqual([sourcePath]);
+
+    const restartedStore = officialV25Store(directory);
+    const restartedService = new AuthoritativeGameService<
+      OfficialGameStateV25,
+      OfficialGameProjectionBodyV25
+    >({ pack: officialV25Pack, reducer: officialV25Reducer, store: restartedStore });
+    expect(await restartedService.bootstrap(playerId, "slot-1")).toEqual(projection);
+    const request = command("v25_tutorial_0001", projection.revision,
+      { type: "player.claimTutorialFlag", flag: "Tutorial0" }, projection.decision.type === "none" ? undefined : projection.decision.decisionId);
+    const result = await restartedService.execute(playerId, "slot-1", request);
+    expect(await restartedService.execute(playerId, "slot-1", request)).toEqual({ ...result, idempotentReplay: true });
+    const finalService = new AuthoritativeGameService<OfficialGameStateV25, OfficialGameProjectionBodyV25>({
+      pack: officialV25Pack, reducer: officialV25Reducer, store: officialV25Store(directory),
     });
     expect(await finalService.execute(playerId, "slot-1", request)).toEqual({ ...result, idempotentReplay: true });
   });

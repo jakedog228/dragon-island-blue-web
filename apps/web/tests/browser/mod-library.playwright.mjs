@@ -20,13 +20,13 @@ try {
   await author.getByLabel("Username", { exact: true }).fill(name);
   await author.getByRole("button", { name: "Create account", exact: true }).click();
   await author.getByRole("button", { name: "I saved my key" }).click();
-  await author.getByRole("button", { name: "New mod", exact: true }).click();
+  await author.getByRole("button", { name: "New mod", exact: true }).first().click();
   await author.getByLabel("Mod ID").fill(modId);
   await author.getByLabel("Title", { exact: true }).fill("Browser test mod");
   await author.getByLabel("Description", { exact: true }).fill("A scenario-owned mod. It must not execute until Offline launch.");
   await author.getByRole("button", { name: "Create listing" }).click();
   const bytes = zipSync({
-    "manifest.json": strToU8(JSON.stringify({ schemaVersion: 4, id: modId, version: "1.0.0", displayName: "Browser test mod", apiVersion: 4, mode: "offline", dependencies: {}, entry: "main.js" })),
+    "manifest.json": strToU8(JSON.stringify({ schemaVersion: 4, id: modId, version: "1.0.0", displayName: "Browser test mod", apiVersion: 4, mode: "offline", saveCompatibility: "neutral", dependencies: {}, entry: "main.js" })),
     "main.js": strToU8("globalThis.__CATALOG_TEST_EXECUTED__ = true;"),
   });
   await author.locator(".mlp-drop input[type=file]").setInputFiles({ name: "test.dibmod", mimeType: "application/octet-stream", buffer: Buffer.from(bytes) });
@@ -43,6 +43,8 @@ try {
   await game.getByRole("searchbox", { name: "Search mods" }).fill(modId);
   // Browse opens in the screenshot grid by default.
   const tile = game.locator(`.ml-tile[data-mod-id="${modId}"]`);
+  assert.doesNotMatch(await tile.innerText(), /Save-neutral|Save-dependent/);
+  assert.equal(await tile.locator(".ml-tile__version").innerText(), "v1.0.0");
   await tile.getByRole("button", { name: "Install" }).click();
   await game.locator(".ml-sheet").getByRole("button", { name: "Install", exact: true }).click();
   await game.getByText("installed and enabled").waitFor();
@@ -52,6 +54,7 @@ try {
   await tile.getByRole("button", { name: "Browser test mod" }).click();
   const details = game.getByRole("dialog", { name: "Browser test mod" });
   await details.getByText("Some details are missing").waitFor();
+  assert.match(await details.locator(".ml-facts").innerText(), /Save-neutral/);
   assert.match(await details.locator(".ml-detail__byline").innerText(), new RegExp(`^by ${name} \\(@${name}\\)$`));
   await details.getByText("No screenshots").waitFor();
   await game.keyboard.press("Escape");
@@ -71,6 +74,7 @@ try {
   await game.locator(`.ml-row[data-mod-id="${localId}"]`).getByRole("button", { name: "Imported test mod" }).click();
   const localDetails = game.getByRole("dialog", { name: "Imported test mod" });
   await localDetails.getByText("No store page").waitFor();
+  assert.match(await localDetails.locator(".ml-facts").innerText(), /Save-dependent/);
   await localDetails.getByText("unknown author").waitFor();
   await localDetails.getByText("No screenshots").waitFor();
   await localDetails.getByRole("button", { name: "Close details" }).click();
@@ -81,7 +85,10 @@ try {
   const orderRows = manager.locator(".ml-order__row");
   const orderedIds = () => orderRows.evaluateAll((rows) => rows.map((row) => row.dataset.modId));
   await orderRows.nth(1).waitFor();
+  assert.doesNotMatch(await orderRows.filter({ hasText: "Browser test mod" }).innerText(), /Save-neutral|Save-dependent/);
   assert.deepEqual(await orderedIds(), [modId, localId]);
+  assert.equal(await manager.getByText("Recommended priority: 0", { exact: true }).count(), 2);
+  assert.equal(await manager.getByRole("button", { name: /Move (up|down)/ }).count(), 0);
   const handle = await manager.locator(`.ml-order__row[data-mod-id="${localId}"] .ml-order__handle`).boundingBox();
   const above = await manager.locator(`.ml-order__row[data-mod-id="${modId}"]`).boundingBox();
   await game.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
@@ -91,6 +98,8 @@ try {
   await game.mouse.up();
   await manager.getByRole("button", { name: "Use recommended order" }).waitFor();
   assert.deepEqual(await orderedIds(), [localId, modId]);
+  assert.equal(await manager.getByText("Recommended priority: 0", { exact: true }).count(), 2,
+    "Manual order must not replace the author's recommended priority");
   assert.equal(await manager.locator(`.ml-order__row[data-mod-id="${localId}"] .ml-order__rec`).innerText(), "Recommended: 2nd");
   await manager.getByRole("button", { name: "Use recommended order" }).click();
   await manager.locator(".ml-order__status").waitFor();

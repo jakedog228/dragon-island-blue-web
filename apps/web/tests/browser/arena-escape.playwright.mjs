@@ -127,7 +127,7 @@ try {
     await page.mouse.click(canvas.x + bounds.x + bounds.w / 2, canvas.y + bounds.y + bounds.h / 2);
   };
   const dismissGuildChat = async (description) => {
-    for (let pageIndex = 0; pageIndex < 4 &&
+    for (let pageIndex = 0; pageIndex < 32 &&
         await visibleBounds("guildQuestChat") !== null; pageIndex++) {
       // Pixi clamps one oversized ticker delta. Feed the source 0.5s gate normal-sized updates so
       // this really advances 550ms instead of four attempts accumulating only ~400ms.
@@ -184,6 +184,7 @@ try {
   for (let index = 0; index < 2_400; index++) {
     if (
       snapshot.presentation?.state === "awaitingPlayerChoice" &&
+      snapshot.panelVisible === true &&
       snapshot.activeActorId === "t0m0:Cockatrice" &&
       snapshot.abilityButtons?.some(({ abilityPath }) => abilityPath === "Utility.Escape")
     ) break;
@@ -224,6 +225,8 @@ try {
   assert.equal(await visibleBounds("arena"), null, "Arena menu replaced the dead battle");
   assert.deepEqual(errors, []);
 
+  await advance(25);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const dataUrl = await page.locator("canvas").evaluate((node) => node.toDataURL("image/png"));
   mkdirSync("output", { recursive: true });
   writeFileSync("output/arena-escape-source-stall.png", Buffer.from(dataUrl.split(",")[1], "base64"));

@@ -29,6 +29,12 @@ async function officialDir(): Promise<string> {
   return dir;
 }
 describe("official mods", () => {
+  it("projects save neutrality from each official archive without retroactively classifying older versions", async () => {
+    const dir = await officialDir();
+    await writeFile(join(dir, "trail-3.dibmod"), zipMod("dev.official.trail", "1.3.0", "neutral"));
+    const trail = (await loadOfficialMods(dir)).find(mod => mod.view.modId === "dev.official.trail")!.view;
+    expect(trail.releases.map(release => release.saveCompatibility)).toEqual(["neutral", "dependent", "dependent"]);
+  });
   it("groups releases by manifest id, newest first, with the newest sidecar and sanitized screenshots", async () => {
     const mods = await loadOfficialMods(await officialDir());
     expect(mods.map((mod) => mod.view.modId).sort()).toEqual(["dev.official.tools", "dev.official.trail"]);

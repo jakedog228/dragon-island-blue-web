@@ -1,6 +1,6 @@
 import { deflateSync } from "node:zlib";
-export function zipMod(id = "test.author.mod", version = "1.0.0"): Buffer {
-  const files = { "manifest.json": JSON.stringify({ schemaVersion: 4, id, version, displayName: "Test mod", apiVersion: 4, mode: "offline", dependencies: {}, entry: "main.js" }),
+export function zipMod(id = "test.author.mod", version = "1.0.0", saveCompatibility?: "neutral" | "dependent"): Buffer {
+  const files = { "manifest.json": JSON.stringify({ schemaVersion: 4, id, version, displayName: "Test mod", apiVersion: 4, mode: "offline", dependencies: {}, entry: "main.js", saveCompatibility }),
     "main.js": "throw new Error('NEVER EXECUTE THIS ON UPLOAD');" };
   const local: Buffer[] = [], central: Buffer[] = []; let offset = 0;
   for (const [path, source] of Object.entries(files)) {

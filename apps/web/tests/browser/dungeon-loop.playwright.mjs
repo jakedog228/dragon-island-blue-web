@@ -303,6 +303,7 @@ try {
     assert.equal((await labeledNodeCounts())["popupButton:No"], 1,
       `${kind} Egg repeat question did not open`);
     phase(`${kind} Egg repeat question mounted`);
+    await advance(550); // The mounted popup still owns its source opening input gate.
     await clickLabeledNode("popupButton:No");
     await waitForState(
       (value) => value.overlay?.kind !== kind,

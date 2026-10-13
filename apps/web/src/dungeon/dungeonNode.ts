@@ -1934,7 +1934,7 @@ export class DungeonNode {
 
 /** One flat map standing in for the source's per-`RoomNode` `doors` dictionary. */
 function dungeonDoorNodeKey(roomId: string, targetRoomId: string): string {
-  return `${roomId} ${targetRoomId}`;
+  return `${roomId}\u0000${targetRoomId}`;
 }
 
 function directionForDelta(dx: number, dy: number): DungeonDirection {

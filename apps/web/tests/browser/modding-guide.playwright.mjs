@@ -56,7 +56,7 @@ try {
   await manifestBlock.hover();
   await manifestBlock.getByRole("button", { name: "Copy code block" }).click();
   await page.waitForFunction(() => document.querySelector('pre:has([data-example="mod-manifest"]) .copy')?.textContent === "Copied");
-  assert.equal(await page.evaluate(() => navigator.clipboard.readText()),
+  assert.equal((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n"),
     await manifestBlock.locator("code").textContent());
   await page.screenshot({ path: path.join(output, "desktop.png") });
   const theme = page.locator("[data-gate-theme-toggle]");

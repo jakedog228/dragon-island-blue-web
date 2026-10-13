@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { GameData } from "@dib/gamedata";
 import { validatePvpAdapters, requirePvpAdapters, advancePvpBattle, createPvpBattle, restorePvpBattle, type PvpBattleAdapter, type PvpBattleSnapshot, type RestoredPvpBattle, type TeamMemberSetup } from "@dib/engine";
 import {
-  PVP_PROTOCOL_VERSION, PvpBattleSnapshotV1Schema, PvpCommandV1Schema, PvpInviteRequestV1Schema,
+  PVP_PROTOCOL_VERSION, PvpBattleSnapshotV1Schema, PvpCommandV1Schema, PvpInviteRequestV1Schema, PvpClientSetupV1Schema,
   PvpJoinRequestV1Schema, PvpMatchViewV1Schema, PvpRosterMemberV1Schema,
   type PvpClientSetupV1, type PvpCompatibilityIssueV1, type PvpEntryV1, type PvpErrorV1, type PvpMatchViewV1,
 } from "@dib/game-protocol";
@@ -35,6 +35,7 @@ export interface PvpServiceOptions {
   readonly adapters?: ReadonlyMap<string, readonly PvpBattleAdapter[]>;
   /** Read a committed Official slot, verify its rules and that its party can enter an exhibition. */
   readonly officialParty: (playerId: string, slotId: SaveSlotId, logicPackId: string) => Promise<readonly TeamMemberSetup[]>;
+  readonly officialEntrant?: (playerId: string, slotId: SaveSlotId, logicPackId: string) => Promise<{ party: readonly TeamMemberSetup[]; spirits: import("@dib/engine").PvpSpiritSetup }>;
   readonly now?: () => number;
   readonly randomSource?: () => number;
 }
@@ -140,13 +141,16 @@ export class PvpService {
   }
   private async participant(principal: PvpPrincipal, setup: PvpClientSetupV1, entry: PvpEntryV1): Promise<PvpParticipant> {
     let party: readonly TeamMemberSetup[];
+    let spirits: import("@dib/engine").PvpSpiritSetup | undefined;
     if (entry.source === "official") {
       if (!principal.officialPlayerId) throw new PvpServiceError("UNAUTHORIZED", "Sign in to use an Official party for PvP.");
-      party = await this.options.officialParty(principal.officialPlayerId, entry.slotId, setup.logicPackId);
-    } else party = entry.party as TeamMemberSetup[];
+      if (this.options.officialEntrant) {
+        ({ party, spirits } = await this.options.officialEntrant(principal.officialPlayerId, entry.slotId, setup.logicPackId));
+      } else party = await this.options.officialParty(principal.officialPlayerId, entry.slotId, setup.logicPackId);
+    } else { party = entry.party as TeamMemberSetup[]; spirits = entry.spirits; }
     // Strip campaign identity and current HP from trusted Official rosters too.
     const sanitized = party.map(({ currentHp: _hp, sourceInstanceId: _id, capturable: _capture, ...member }) => PvpRosterMemberV1Schema.parse(member));
-    return { principalId: principal.id, name: principal.name, source: entry.source, setup, party: sanitized };
+    return { principalId: principal.id, name: principal.name, source: entry.source, setup, party: sanitized, ...(spirits ? { spirits: structuredClone(spirits) } : {}) };
   }
   private settle(record: PvpMatchRecord, restored: RestoredPvpBattle): void {
     record.updatedAt = this.now(); record.expiresAt = this.now() + TURN_TTL;
@@ -198,7 +202,8 @@ export class PvpService {
       const guest = await this.participant(principal, input.setup, input.entry);
       let battle;
       try {
-        battle = createPvpBattle(this.data(record), [record.players[0]!.party as TeamMemberSetup[], guest.party as TeamMemberSetup[]], this.randomSource, 3, this.adapters(record));
+        battle = createPvpBattle(this.data(record), [record.players[0]!.party as TeamMemberSetup[], guest.party as TeamMemberSetup[]], this.randomSource, 3, this.adapters(record),
+          [record.players[0]!.spirits ?? { energy: 0, savedXp: {} }, guest.spirits ?? { energy: 0, savedXp: {} }]);
       } catch (error) {
         if (error instanceof PvpServiceError) throw error;
         throw new PvpServiceError("INCOMPATIBLE", "A selected party cannot be simulated by this server.", [{ code: "PARTY_UNSUPPORTED", path: "entry.party",
@@ -209,6 +214,12 @@ export class PvpService {
       this.settle(record, battle.restored);
       return this.receipt(record, principal.id, input.requestId, body);
     });
+  }
+
+  validateSetup(value: unknown): void {
+    const setup = PvpClientSetupV1Schema.parse(value);
+    const result = this.options.compatibility.negotiate(setup, setup);
+    if (!result.compatible) throw new PvpServiceError("INCOMPATIBLE", "PvP requires baseline gameplay with reviewed cosmetic mods only.", result.issues);
   }
 
   async read(principal: PvpPrincipal, matchId?: string): Promise<PvpMatchViewV1 | undefined> {
@@ -250,6 +261,9 @@ export class PvpService {
         delete record.turn;
         record.revision++; record.updatedAt = this.now();
         return this.receipt(record, principal.id, input.commandId, body);
+      }
+      if (input.action.type === "adapter") {
+        throw new PvpServiceError("INVALID_REQUEST", "Gameplay mod actions are disabled in PvP.");
       }
       const restored = this.restore(record);
       if (restored.decision.type === "turn" && restored.decision.team !== team) {

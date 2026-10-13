@@ -86,13 +86,23 @@ by older clients. The old content-bound helper retains its historical eligibilit
 legacy callers; production Offline paging uses explicit stable addresses instead.
 
 Changing mods, their order or effective content no longer selects a different set of saves.
-Each occupied slot warns if the selected ordered package digests differ from its last played
+Each occupied slot warns if the selected ordered save-dependent package digests differ from its last played
 selection, if previous mods are unknown, or if its content identity differs. Warnings stay compact; **View setup** expands a bounded comparison with added, removed and
 updated mods in load order. Warnings are advisory: the player is responsible for compatibility. Browsing, exporting and switching pages do not change
 history; actual play does. Imports and rollback reset history to unknown. Missing optional items,
 recipes and spirits retain the existing restore behavior, while essential missing data fails loudly.
 Deleting a save removes its live and retained rollback record after confirmation; its position and
 label remain available for a new game. A rollback becomes the next undo point as before.
+
+Author-declared `saveCompatibility: "neutral"` releases remain in the complete history and
+View setup lists but are excluded from mod-mismatch checks. Adding, removing, updating or moving
+them does not warn if dependent mods and actual content still match. Missing declarations remain
+dependent; a newer neutral release cannot certify older history. Each newly played save also
+records the semantic archive identity before mods execute. If that identity and the dependent
+setup match, changing neutral mods can change effective data (such as encounter weights) without
+a warning. Changed archives, changed output under an identical selection, and insufficient old
+archive evidence retain content warnings. Dependency failures, conflicts and Official restrictions
+still apply. Import, deletion and rollback clear both effective and base-content history.
 
 The compressed last-used archive lives in a separate disposable IndexedDB cache. A quota-blocked
 slot write clears that cache and retries once before reporting failure; automatic pressure handling

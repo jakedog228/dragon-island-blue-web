@@ -630,6 +630,51 @@ describe("WorldTripParty game-menu editor mutations", () => {
     expect(party.ownedSoulStones()).toEqual([{ element: "Fire", level: 4 }]);
   });
 
+  it("re-keys the pool with committed authority ids so later inserts echo server ids", () => {
+    // Authority ids are positional after every command. The mirror's own counter keeps climbing,
+    // which is exactly how an Official client drifted: after a mid-pool insert it named the next
+    // stones soul-stone-3/4 while the server named them soul-stone-2/3.
+    const party = new WorldTripParty(gd, roster(), 3, [
+      { element: "Fire", level: 4 },
+      { element: "Water", level: 7, sourceType: "SnowCub" },
+      { element: "Life", level: 9 },
+    ]);
+    party.insertSoulStoneByToken("a", party.ownedSoulStoneEntries()[0]!.token);
+    party.adoptOwnedSoulStoneIds([
+      { stoneId: "soul-stone-1", element: "Water", level: 7, sourceTypeId: "SnowCub" },
+      { stoneId: "soul-stone-2", element: "Life", level: 9 },
+    ]);
+    expect(party.ownedSoulStoneEntries().map(({ token }) => token))
+      .toEqual(["soul-stone-1", "soul-stone-2"]);
+    party.insertSoulStoneByToken("b", "soul-stone-2");
+    expect(party.monster("b").soulStone).toEqual({ element: "Life", level: 9 });
+
+
+    party.convertToSoulStone("d");
+    const tokens = party.ownedSoulStoneEntries().map(({ token }) => token);
+    expect(new Set(tokens).size).toBe(tokens.length);
+  });
+
+  it("refuses committed ids for a pool the local mirror does not match", () => {
+    const party = new WorldTripParty(gd, roster(), 3, [
+      { element: "Fire", level: 4 },
+      { element: "Water", level: 7 },
+    ]);
+    const before = party.ownedSoulStoneEntries().map(({ token }) => token);
+    expect(() => party.adoptOwnedSoulStoneIds([
+      { stoneId: "soul-stone-1", element: "Fire", level: 4 },
+    ])).toThrow(/1 committed stones for 2 local stones/);
+    expect(() => party.adoptOwnedSoulStoneIds([
+      { stoneId: "soul-stone-1", element: "Water", level: 7 },
+      { stoneId: "soul-stone-2", element: "Fire", level: 4 },
+    ])).toThrow(/disagrees with the local pool/);
+    expect(() => party.adoptOwnedSoulStoneIds([
+      { stoneId: "soul-stone-1", element: "Fire", level: 4 },
+      { stoneId: "soul-stone-1", element: "Water", level: 7 },
+    ])).toThrow(/not unique/);
+    expect(party.ownedSoulStoneEntries().map(({ token }) => token)).toEqual(before);
+  });
+
   it("drops the exact confirmed loose stone without touching its neighbours", () => {
     const party = new WorldTripParty(gd, roster(), 3, [
       { element: "Fire", level: 4 },

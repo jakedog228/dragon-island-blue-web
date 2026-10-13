@@ -1,4 +1,8 @@
-# PvP adapter examples
+# Dormant PvP adapter development fixtures
+
+**Gameplay mods are disabled in live PvP.** These fixtures remain for engine/API development;
+they are not PvP demonstration material. Matching adapters do not bypass cosmetic-only admission.
+The historical recipe below is no longer an enabled play path.
 
 Build with `node examples/pvp-adapters/build.mjs` from the repository root. This creates
 `dist/echo-strike.dibmod`, `dist/turn-counter.dibmod` and the matching operator `dist/server.mjs`.

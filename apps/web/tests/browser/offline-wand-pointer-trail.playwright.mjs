@@ -21,7 +21,10 @@ try {
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
-  await page.addInitScript(() => { window.advanceTime = () => {}; });
+  await page.addInitScript(() => {
+    window.advanceTime = () => {};
+    window.__DIB_TEST_SESSION_RESTARTS__ = true;
+  });
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await loadLocalContent(page, undefined, { modArchives: [mod] });
 
@@ -107,16 +110,27 @@ try {
 
   // Title -> save selection -> the shared Options body. The mod extends this same popup in
   // startup, world, and dungeon, so one startup proof exercises the common integration seam.
+  // The real drag above can also advance the title. Reopen the shell before its selector proof.
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await loadLocalContent(page, undefined, { modArchives: [mod] });
+  for (let frame = 0; frame < 400; frame++) {
+    if (await page.evaluate(() => JSON.parse(window.render_game_to_text()).startup?.phase === "title")) break;
+    await page.evaluate(() => window.advanceTime(25));
+    await page.waitForTimeout(1);
+  }
   const phaseAfterTrail = await page.evaluate(() =>
     JSON.parse(window.render_game_to_text()).startup?.phase,
   );
-  if (phaseAfterTrail === "title") await page.keyboard.press("Enter");
+  if (phaseAfterTrail !== "save-select") {
+    await page.evaluate(() => window.__DIB_TEST_RESTART_SESSION__.presentation());
+  }
   for (let index = 0; index < 400; index += 1) {
     const state = await page.evaluate(() => JSON.parse(window.render_game_to_text()));
     if (state.startup?.phase === "save-select") break;
     await page.evaluate(() => window.advanceTime?.(25));
     if (index % 20 === 0) await page.waitForTimeout(10);
   }
+  await page.evaluate(() => window.advanceTime(550));
   assert(
     await tapPixiLabel(page, "sourcePopupButton:options"),
     "save selection omitted its Options action",
@@ -126,6 +140,7 @@ try {
     undefined,
     { timeout: 10_000 },
   );
+  await page.evaluate(() => window.advanceTime(550));
   const sliderPoints = await page.evaluate(() => {
     const stack = [window.__PIXI_APP__.stage];
     while (stack.length > 0) {

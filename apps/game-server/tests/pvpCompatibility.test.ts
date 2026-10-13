@@ -21,24 +21,23 @@ describe("PvP compatibility negotiation", () => {
   it("reconciles unequal cosmetic modsets", () => {
     expect(registry.negotiate(setup([cosmetic]), setup())).toEqual({ compatible: true, profileId: "base", notes: [expect.stringContaining("cosmetic")] });
   });
-  it("reconciles different releases with reviewed equivalent mechanics", () => {
-    expect(registry.negotiate(setup([mechanics]), setup([equivalent, cosmetic]))).toMatchObject({ compatible: true, profileId: "moves" });
-  });
-  it("identifies the exact gameplay release conflict and remediation", () => {
-    expect(registry.negotiate(setup([mechanics]), setup([changed]))).toMatchObject({ compatible: false,
-      issues: [{ code: "MOD_VERSION_MISMATCH", modId: "dib.moves", path: "setup.rules[0]", suggestion: expect.stringContaining("both devices") }] });
-  });
+  it.each([[mechanics, mechanics], [mechanics, equivalent], [mechanics, changed]])(
+    "rejects gameplay mods even with installed identical or equivalent rules: %j", (hostMod, guestMod) => {
+      expect(registry.negotiate(setup([hostMod]), setup([guestMod]))).toMatchObject({ compatible: false,
+        issues: [expect.objectContaining({ code: "MOD_UNSUPPORTED", path: "host.mods[0]" }),
+          expect.objectContaining({ code: "MOD_UNSUPPORTED", path: "guest.mods[0]" })] });
+    });
   it("does not trust cosmetic claims, an official-looking ID, or a copied digest", () => {
     for (const mod of [{ ...cosmetic, digest: "9".repeat(64) }, { ...cosmetic, id: "dib.official.pvp" }, { ...cosmetic, version: "9.0.0" }]) {
       expect(registry.negotiate(setup([mod]), setup())).toMatchObject({ compatible: false, issues: [expect.objectContaining({ code: "MOD_UNSUPPORTED", modId: mod.id })] });
     }
   });
-  it("preserves mechanical load order", () => {
-    expect(registry.negotiate(setup([mechanics, other]), setup([other, mechanics]))).toMatchObject({ compatible: false,
-      issues: [expect.objectContaining({ code: "MOD_ORDER_MISMATCH" }), expect.objectContaining({ code: "MOD_ORDER_MISMATCH" })] });
-  });
-  it("refuses matching but uninstalled combinations", () => {
-    expect(registry.negotiate(setup([mechanics, other]), setup([mechanics, other]))).toMatchObject({ compatible: false, issues: [{ code: "PROFILE_UNAVAILABLE" }] });
+  it("rejects gameplay selections in any order instead of reconciling them", () => {
+    const result = registry.negotiate(setup([mechanics, other]), setup([other, mechanics]));
+    expect(result.compatible).toBe(false);
+    if (result.compatible) throw new Error("Gameplay mods admitted");
+    expect(result.issues).toHaveLength(4);
+    expect(result.issues.every(issue => issue.code === "MOD_UNSUPPORTED")).toBe(true);
   });
   it("names unsupported hooks instead of silently disabling mechanics", () => {
     const rejected = new PvpCompatibilityRegistry([{ ...mechanics, support: { kind: "unsupported", path: "hooks.battle", reason: "requires client realtime input" } }], []);

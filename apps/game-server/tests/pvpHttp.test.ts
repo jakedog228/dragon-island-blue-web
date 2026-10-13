@@ -47,6 +47,22 @@ async function start(enabled = true) {
 }
 
 describe("PvP HTTP boundary", () => {
+  it("checks current client mods before returning a resumable match", async () => {
+    const { call, session } = await start();
+    const token = await session("Host");
+    const invite = await (await call("/api/pvp/invites", token, body())).json() as { matchId: string };
+    const denied = await call("/api/pvp/matches/current", token, { ...setup,
+      mods: [{ id: "example.echo-strike", version: "1.0.0", digest: "e".repeat(64) }] });
+    expect(denied.status).toBe(409);
+    expect(await denied.json()).toMatchObject({ error: { code: "INCOMPATIBLE", issues: [
+      expect.objectContaining({ code: "MOD_UNSUPPORTED" }), expect.objectContaining({ code: "MOD_UNSUPPORTED" }),
+    ] } });
+    const resumed = await call("/api/pvp/matches/current", token, setup);
+    expect(resumed.status).toBe(200);
+    expect(await resumed.json()).toMatchObject({ match: { matchId: invite.matchId, status: "waiting" } });
+    expect((await call("/api/pvp/matches/current", undefined, setup)).status).toBe(401);
+    expect((await call("/api/pvp/matches/current", token, { ...setup, cosmetic: true })).status).toBe(400);
+  });
   it("runs a real two-client battle from invite through terminal outcome", async () => {
     const { call, session, advance } = await start();
     const tokens = [await session("Host"), await session("Guest")];

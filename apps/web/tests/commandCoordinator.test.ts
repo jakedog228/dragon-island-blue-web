@@ -99,6 +99,43 @@ function authority(
 }
 
 describe("CommandCoordinator", () => {
+  it("recovers an uncertain command before a startup resync and clears a definitive refusal", async () => {
+    let reachable = false;
+    const seen: GameCommandEnvelopeV1[] = [];
+    const coordinator = new CommandCoordinator(authority(async (_slot, envelope) => {
+      seen.push(envelope);
+      if (!reachable) throw new RemoteGameAuthorityError("INTERNAL", "offline", true);
+      return result(envelope);
+    }, async () => projection(2, "Forest")), "slot-1", projection(1), { retryAttempts: 0 });
+    await expect(coordinator.submit({ type: "world.navigate", targetPoiId: "Forest" })).rejects.toMatchObject({ retryable: true });
+    reachable = true;
+    expect((await coordinator.resync()).revision).toBe(2);
+    expect(seen[1]).toEqual(seen[0]);
+    expect(coordinator.pending).toBe(false);
+
+    let code: "INTERNAL" | "ACTION_NOT_ALLOWED" = "INTERNAL";
+    const refused = new CommandCoordinator(authority(async () => {
+      throw new RemoteGameAuthorityError(code, "refused", code === "INTERNAL");
+    }), "slot-1", projection(1), { retryAttempts: 0 });
+    await expect(refused.submit({ type: "world.navigate", targetPoiId: "Forest" })).rejects.toMatchObject({ retryable: true });
+    code = "ACTION_NOT_ALLOWED";
+    await expect(refused.recoverPending()).rejects.toMatchObject({ retryable: false });
+    expect(refused.pending).toBe(false);
+  });
+
+  it("notifies the scene after conflict adoption and after the writer lock is released", async () => {
+    const coordinator = new CommandCoordinator(authority(async () => {
+      throw new RemoteGameAuthorityError("REVISION_CONFLICT", "another tab committed", false);
+    }, async () => projection(2, "Forest")), "slot-1", projection(1));
+    const reconciled = vi.fn(() => {
+      expect(coordinator.projection.revision).toBe(2);
+      expect(coordinator.pending).toBe(false);
+    });
+    coordinator.subscribeReconciliation(reconciled);
+    await expect(coordinator.submit({ type: "world.navigate", targetPoiId: "Forest" })).rejects.toBeInstanceOf(CommandStateResyncedError);
+    expect(reconciled).toHaveBeenCalledOnce();
+  });
+
   it("acknowledges reversible input before waiting for the network", async () => {
     let release!: (value: GameCommandResultV1) => void;
     const response = new Promise<GameCommandResultV1>((resolve) => { release = resolve; });
@@ -134,6 +171,20 @@ describe("CommandCoordinator", () => {
     await coordinator.submit({ type: "world.navigate", targetPoiId: "Forest" });
     expect(seen).toHaveLength(2);
     expect(seen[1]).toEqual(seen[0]);
+  });
+
+  it("reconstructs a rejected scene only from fresh authority state", async () => {
+    const command = vi.fn();
+    const coordinator = new CommandCoordinator(authority(command, async () => projection(3, "Town")), "slot-1", projection(1));
+    const reconciled = vi.fn(() => {
+      expect(coordinator.pending).toBe(false);
+      expect(coordinator.projection.revision).toBe(3);
+    });
+    coordinator.subscribeReconciliation(reconciled);
+    await expect(coordinator.recoverScene(new RemoteGameAuthorityError("ACTION_NOT_ALLOWED", "rejected", false)))
+      .rejects.toBeInstanceOf(CommandStateResyncedError);
+    expect(reconciled).toHaveBeenCalledOnce();
+    expect(command).not.toHaveBeenCalled();
   });
 
   it("rejects a second mutation while one is pending", async () => {

@@ -286,10 +286,10 @@ export class BattleSession {
   }
 
   /** HeroDisplay side command; deliberately valid while a player action is pending. */
-  summonSpirit(shortType: string, savedXp: number): { id: string; events: BattleEvent[] } {
+  summonSpirit(shortType: string, savedXp: number, team: 0 | 1 = 0): { id: string; events: BattleEvent[] } {
     if (!this.started) throw new Error("BattleSession.summonSpirit: battle has not started");
     const before = this.core.events.length;
-    const id = this.core.summonSpirit(shortType, savedXp);
+    const id = this.core.summonSpirit(shortType, savedXp, team);
     return { id, events: this.core.events.slice(before) };
   }
 

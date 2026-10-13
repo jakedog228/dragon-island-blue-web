@@ -34,6 +34,38 @@ const level = (value: PlayerGameStateSnapshot | undefined) =>
   value?.player.profile.schemaVersion === 1 ? value.player.profile.heroLevel : undefined;
 
 describe("paged Offline saves", () => {
+  it("remembers the base archive so neutral encounter overlays can be removed without a content warning", async () => {
+    const storage = new Storage();
+    const neutral: PlayProfileModRef = { ...mod("n"), saveCompatibility: "neutral" };
+    const first = new OfflineSaveLibrary(storage, "neutral-overlay", [mod("a"), neutral], undefined, "archive");
+    await first.open("slot-1").save(state(7));
+    const before = storage.getItem(first.entry("slot-1").id);
+    const reload = new OfflineSaveLibrary(storage, "dependent-overlay", [mod("a")], undefined, "archive");
+    expect(reload.entry("slot-1").lastBaseContent).toBe("archive");
+    expect(reload.warning("slot-1")).toBeUndefined();
+    expect(reload.contentChanged("slot-1")).toBe(false);
+    expect(level(await reload.loadSlotState("slot-1"))).toBe(7);
+    expect(storage.getItem(first.entry("slot-1").id)).toBe(before);
+    expect(new OfflineSaveLibrary(storage, "other", [mod("a")], undefined, "other-archive").warning("slot-1"))
+      .toContain("Different game content");
+    expect(new OfflineSaveLibrary(storage, "neutral-overlay", [mod("a"), neutral], undefined, "archive").warning("slot-1"))
+      .toBeUndefined();
+  });
+  it("persists neutrality per release and shares saves with neutral mods toggled across reloads", async () => {
+    const storage = new Storage();
+    const neutral: PlayProfileModRef = { ...mod("n"), saveCompatibility: "neutral" };
+    const library = new OfflineSaveLibrary(storage, "content", [mod("a"), neutral]);
+    await library.open("slot-1").save(state(7));
+    const savedBytes = storage.getItem(library.entry("slot-1").id);
+    const reload = new OfflineSaveLibrary(storage, "content", [mod("a")]);
+    expect(reload.entry("slot-1").lastMods?.[1]?.saveCompatibility).toBe("neutral");
+    expect(reload.warning("slot-1")).toBeUndefined();
+    expect(level(await reload.loadSlotState("slot-1"))).toBe(7);
+    expect(storage.getItem(library.entry("slot-1").id)).toBe(savedBytes);
+    expect(new OfflineSaveLibrary(storage, "content", [mod("a"), { ...neutral, digest: "new" }]).warning("slot-1")).toBeUndefined();
+    expect(new OfflineSaveLibrary(storage, "content", [neutral]).warning("slot-1")).toContain("Different mods");
+    expect(new OfflineSaveLibrary(storage, "other-content", [mod("a")]).warning("slot-1")).toContain("Different game content");
+  });
   it("migrates all old namespaces, dismissed profiles, gaps and rollback bytes without rewriting them", async () => {
     const storage = new Storage();
     for (const version of [1, 2, 3, 4, 5, 6, 7]) {

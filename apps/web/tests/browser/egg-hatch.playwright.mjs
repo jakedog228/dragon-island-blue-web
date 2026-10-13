@@ -666,6 +666,8 @@ try {
           value.overlay?.selected === null,
         "paid Silver repeat did not build a fresh interactive reel",
       );
+      await waitFor(async () => await boundsForLabel("eggHatch:background") !== null,
+        "paid Silver repeat did not finish mounting its reel background");
       const repeatBounds = await boundsForLabel("eggHatch:background");
       assert(repeatBounds, "paid Silver repeat background is missing");
       await waitFor(

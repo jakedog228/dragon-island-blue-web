@@ -25,6 +25,13 @@ export function enemyNameColor(slot: number): number {
   return ENEMY_NAME_COLORS[slot] ?? ENEMY_NAME_COLOR_FALLBACK;
 }
 
+/** PvP extension: fit four source-sized slots in the same field band; art is never rescaled. */
+export function multiplayerEnemyGap(count: number, mode: DisplayMode): number {
+  if (count === 2) return enemyTeamLayoutMetrics(mode).gapTwo;
+  if (count <= 3) return 0;
+  return (screenPointsForMode(mode).w - enemyTeamLayoutMetrics(mode).offsetX - count * idiomPairPt(128, 256, mode)) / (count - 1);
+}
+
 
 export function turnOrderLabelFill(team: 0 | 1, colorTint?: number): number {
   if (team === 0) return 0xffffff;

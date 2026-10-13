@@ -167,7 +167,12 @@ try {
     return match;
   }, label);
   const clickLabel = async (label) => {
-    const bounds = await boundsForLabel(label);
+    let bounds = await boundsForLabel(label);
+    for (let frame = 0; bounds === null && frame < 400; frame++) {
+      await advance(25);
+      await page.waitForTimeout(1);
+      bounds = await boundsForLabel(label);
+    }
     assert(bounds, `missing visible Pixi node ${label}`);
     const canvas = await page.locator("canvas").first().boundingBox();
     assert(canvas, "Pixi canvas is unavailable");
@@ -469,6 +474,11 @@ try {
     "Gem mutation rebuild replayed the one-shot license guidance",
   );
   await capture("gem-equipped.png");
+  // Equipping appends the displaced Gem to loose inventory; it is now on the final page.
+  for (let index = 0; index < 4 && await boundsForLabel("inventoryItem:item-0") === null; index++) {
+    await clickLabel("inventory:next");
+    await advance(550);
+  }
   await clickLabel("inventoryItem:item-0");
   await waitFor(
     async () =>

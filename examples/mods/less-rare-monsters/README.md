@@ -18,8 +18,12 @@ across seven world files. It changes weighted encounter selection, not the trave
 rate, and does not guarantee a rare monster on any particular battle. See the upstream README
 for the POIs. Missing or ambiguous targets stop activation with an error.
 
-The overlay participates in the port's mechanics save fingerprint, so it gets a different
-Offline save namespace from unmodified content. The original archive and its saves remain intact.
+Version 2.0.1 declares this mod **Save-neutral**: all encounters and captured monsters use
+existing species, and removing the mod only restores the original encounter weights. It adds no
+saved content that needs the mod to remain installed. The overlay still changes the effective
+mechanics fingerprint, but Offline compatibility separately records the archive before mods run:
+toggling this neutral mod does not warn when the archive and save-dependent mods match. Older
+2.0.0 history remains conservatively unclassified. All saves stay in the same paged Offline library.
 Other world mods compose in activation order; a later write to the same weight wins. Because
 this overlays a resource-reader function, the generic interference report cannot enumerate
 individual plist weight collisions.
@@ -27,5 +31,5 @@ individual plist weight collisions.
 Manual check: launch with the mod selected, start a game, and travel to a listed POI such as
 Charles' Hut. Ordinary battles should still work with the same monster roster; the listed
 rare monster's weight is increased. A short play session cannot establish spawn probabilities.
-Automated tests check every changed leaf, source immutability, save identity, loader acceptance,
+Automated tests check every changed leaf, source immutability, effective identity versus save compatibility, loader acceptance,
 and failure on incompatible archives. Browser verification is opt-in and has not been run.

@@ -61,11 +61,12 @@ async function openLocalFixture({
     }));
     window.advanceTime = () => Promise.resolve();
     window.__DIB_TEST_WORLD_DEMO__ = true;
+    window.__DIB_TEST_SKIP_SOURCE_NEW_GAME_INTRO__ = true;
     window.__DIB_TEST_WORLD_SEED__ = 17;
     window.__DIB_TEST_WORLD_NAME__ = "World_1-1";
     window.__DIB_TEST_POI_NAME__ = startPoi;
     window.__DIB_TEST_BATTLE_SEED__ = 5;
-    window.__DIB_TEST_DUNGEON_SEED__ = 20260724;
+    window.__DIB_TEST_DUNGEON_SEED__ = 2; // First neighboring encounter has two enemies.
     window.__DIB_TEST_FINISHED_QUEST_COUNT__ = finishedQuestCount;
     if (finishedQuestCount === 0) {
       window.__DIB_TEST_GUILD_QUEST_NAMES__ = ["LiberateTownsQuest"];
@@ -382,7 +383,12 @@ async function enterDungeonEncounter(ctx) {
     return;
   }
   for (let moves = 0; moves < 80; moves++) {
+    await ctx.advance(550);
     const snapshot = await ctx.state();
+    if (snapshot.floorDetectionChat !== undefined) {
+      await ctx.page.keyboard.press("Enter");
+      continue;
+    }
     if ((snapshot.popups?.scene?.stack ?? []).some(
       (popup) => popup.contentLabel === "catchQuestDisplay" && popup.visible,
     )) {
@@ -438,7 +444,8 @@ async function enterDungeonEncounter(ctx) {
       await ctx.page.keyboard.press(movementKey);
     }
     const result = await ctx.waitFor(
-      (candidate) => candidate.mode === "battle" || (candidate.mode === "dungeon" && !candidate.locked),
+      (candidate) => candidate.mode === "battle" || (candidate.mode === "dungeon" &&
+        candidate.currentRoomId === next.id && !candidate.locked),
       `dungeon move to ${next.id} did not settle`,
     );
     if (result.mode === "battle") {

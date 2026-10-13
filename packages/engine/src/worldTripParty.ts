@@ -605,6 +605,57 @@ export class WorldTripParty {
   }
 
 
+
+
+
+
+
+
+  adoptOwnedSoulStoneIds(
+    committed: readonly {
+      readonly stoneId: string;
+      readonly element: string;
+      readonly level: number;
+      readonly sourceTypeId?: string | undefined;
+    }[],
+  ): void {
+    if (committed.length !== this.stones.length) {
+      throw new Error(
+        `WorldTripParty.adoptOwnedSoulStoneIds: ${committed.length} committed stones for ` +
+          `${this.stones.length} local stones`,
+      );
+    }
+    if (new Set(committed.map(({ stoneId }) => stoneId)).size !== committed.length) {
+      throw new Error("WorldTripParty.adoptOwnedSoulStoneIds: committed stone ids are not unique");
+    }
+    committed.forEach((entry, index) => {
+      const local = this.stones[index]!.stone;
+      if (
+        local.element !== entry.element ||
+        local.level !== entry.level ||
+        local.sourceType !== entry.sourceTypeId
+      ) {
+        throw new Error(
+          `WorldTripParty.adoptOwnedSoulStoneIds: committed stone ${index} ` +
+            `${JSON.stringify(entry)} disagrees with the local pool`,
+        );
+      }
+    });
+    committed.forEach((entry, index) => {
+      this.stones[index]!.token = entry.stoneId;
+
+      const numbered = /^soul-stone-(\d+)$/.exec(entry.stoneId);
+      if (numbered !== null) {
+        this.nextStoneToken = Math.max(this.nextStoneToken, Number(numbered[1]));
+      }
+    });
+  }
+
+
+
+
+
+
   dropSoulStoneByToken(token: string): SoulStoneSetup {
     const index = this.stones.findIndex((entry) => entry.token === token);
     if (index < 0) {

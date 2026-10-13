@@ -115,6 +115,8 @@ export class EnemyMonsterDisplay extends Container {
   readonly monsterNode: Sprite;
 
   private readonly hpBar: ProgressBar;
+  private readonly nameLabel: Text;
+  private wideHealthBar = false;
   private readonly ticker: Ticker;
   private readonly maxHp: number;
   private readonly baseSpriteY: number;
@@ -246,6 +248,7 @@ export class EnemyMonsterDisplay extends Container {
       fill: opts.nameColor,
       outline: true,
     });
+    this.nameLabel = nameLabel;
     nameLabel.anchor.set(0.5, 1);
     nameLabel.position.set(ENEMY_SLOT_WIDTH / 2, hpBarCenterY - hpBarUnscaledH / 2);
     nameLabel.zIndex = 2;
@@ -285,6 +288,52 @@ export class EnemyMonsterDisplay extends Container {
   setHp(hp: number): void {
     this.hpBar.setRatio(Math.max(0, hp / this.maxHp));
     this.hpBar.setTint(hpTint(hp, this.maxHp));
+  }
+
+  /** Mod-only wide layout reuses the actual bar's texture, crop, tint and easing.
+   * Distances derive from existing chrome; only the center strip extends. */
+  get healthBarNodes(): Container[] {
+    return [this.hpBar, this.nameLabel, ...(this.elementIcon ? [this.elementIcon] : [])];
+  }
+
+  get healthBarRowHeight(): number {
+    return Math.max(this.nameLabel.height, this.elementIcon?.height ?? 0)
+      + this.hpBar.contentHeight * ENEMY_HP_BAR_SCALE + ENEMY_ELEMENT_ICON_GAP;
+  }
+
+  get ordinaryHealthBarRowHeight(): number {
+    return this.hpBar.contentHeight + 2 * ENEMY_ELEMENT_ICON_GAP + (this.elementIcon?.height ?? 0)
+      + Math.max(this.nameLabel.height, this.elementIcon?.height ?? 0);
+  }
+
+  layoutWideHealthBar(layout?: { x: number; width: number; y: number }): void {
+    if (!layout && !this.wideHealthBar) return;
+    this.wideHealthBar = layout !== undefined;
+    this.hpBar.setExtendedWidth(layout ? layout.width / ENEMY_HP_BAR_SCALE : undefined);
+    const h = this.hpBar.contentHeight;
+    const width = layout?.width ?? this.hpBar.contentWidth * ENEMY_HP_BAR_SCALE;
+    const x = layout?.x ?? (ENEMY_SLOT_WIDTH - width) / 2;
+    const y = layout?.y ?? 0;
+    const centerX = x + width / 2;
+    this.hpBar.scale.set(ENEMY_HP_BAR_SCALE);
+    this.hpBar.position.set(x, y + h * ENEMY_HP_BAR_SCALE / 2);
+    this.nameLabel.position.set(centerX, y + h * ENEMY_HP_BAR_SCALE - h / 2);
+    if (this.elementIcon) {
+      if (layout) {
+        this.elementIcon.position.set(
+          centerX - this.nameLabel.width / 2 - ENEMY_ELEMENT_ICON_GAP - this.elementIcon.width / 2,
+          this.nameLabel.y - (this.nameLabel.height + this.elementIcon.height) / 2,
+        );
+      } else {
+        this.elementIcon.position.set(centerX, h * ENEMY_HP_BAR_SCALE + h / 2 + ENEMY_ELEMENT_ICON_GAP);
+      }
+    }
+  }
+
+  get healthBarState(): { x: number; y: number; w: number; h: number; ratio: number; displayedRatio: number } {
+    return { x: this.hpBar.x, y: this.hpBar.y,
+      w: this.hpBar.contentWidth * this.hpBar.scale.x, h: this.hpBar.contentHeight * this.hpBar.scale.y,
+      ratio: this.hpBar.ratio, displayedRatio: this.hpBar.displayedRatio };
   }
 
   /** One `ProgressBar.update()` tick (its own per-frame ease step — see progressBar.ts). `dtMs`

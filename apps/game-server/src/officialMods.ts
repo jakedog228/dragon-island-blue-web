@@ -81,7 +81,8 @@ export async function loadOfficialMods(directory: string): Promise<OfficialMod[]
       throw new Error(`Official mod ${pkg.manifest.id} ships version ${pkg.manifest.version} twice.`);
     }
     group.releases.push({ version: pkg.manifest.version, digest: pkg.digest, byteLength: bytes.length,
-      createdAt: info.mtime.toISOString(), dependencies: { ...pkg.manifest.dependencies }, apiVersion: pkg.manifest.apiVersion });
+      createdAt: info.mtime.toISOString(), dependencies: { ...pkg.manifest.dependencies }, apiVersion: pkg.manifest.apiVersion,
+      saveCompatibility: pkg.manifest.saveCompatibility });
     group.files.set(pkg.digest, path);
     group.mtime = Math.max(group.mtime, info.mtimeMs);
     const sidecar = await readSidecar(join(root, `${basename(name, ".dibmod")}.listing.json`));

@@ -9,6 +9,29 @@ const teams = [[{ shortType: "FireCub", level: 5 }], [{ shortType: "SnowCub", le
 const start = () => createPvpBattle(data, teams, () => 0.5, 1);
 
 describe("two-human PvP battles", () => {
+  it("supports each player's spirit in a separate fourth slot and rejects unowned, uncharged or repeated summons", () => {
+    const spirits = [{ energy: 100, savedXp: { Resistance: 1 } }, { energy: 100, savedXp: { Fire: 400 } }] as const;
+    let battle = createPvpBattle(data, teams, () => 0.5, 1, [], spirits);
+    const summon = { type: "spirit", actorId: "t0m0:FireCub", shortType: "Resistance" } as const;
+    const initial = JSON.stringify(battle.snapshot);
+    expect(() => advancePvpBattle(data, battle.snapshot, { team: 0, action: { ...summon, shortType: "Fire" } }, () => 0.5)).toThrow("not available");
+    expect(JSON.stringify(battle.snapshot)).toBe(initial);
+    battle = advancePvpBattle(data, battle.snapshot, { team: 0, action: summon }, () => 0.5);
+    expect(battle.restored.decision).toMatchObject({ team: 0, actorId: summon.actorId });
+    expect(battle.restored.session.targetableIdsOf(0)).toEqual(["t0m0:FireCub", "t0m1:Resistance"]);
+    expect(battle.restored.session.activeIdsOf(0)).toEqual(["t0m0:FireCub"]);
+    expect(() => advancePvpBattle(data, battle.snapshot, { team: 0, action: summon }, () => 0.5)).toThrow("not available");
+    battle = advancePvpBattle(data, battle.snapshot, { team: 0, action: { type: "delay", actorId: summon.actorId } }, () => 0.5);
+    if (battle.restored.decision.type !== "turn") throw new Error("missing decision");
+    expect(battle.restored.decision.team).toBe(1);
+    battle = advancePvpBattle(data, battle.snapshot, { team: 1, action: { type: "spirit", actorId: battle.restored.decision.actorId, shortType: "Fire" } }, () => 0.5);
+    expect(battle.restored.session.targetableIdsOf(1)).toContain("t1m1:Fire");
+    expect(battle.restored.session.isAiControlled("t1m1:Fire")).toBe(true);
+    expect(restorePvpBattle(data, battle.snapshot).events).toEqual(battle.restored.events);
+    expect(spirits[0]).toEqual({ energy: 100, savedXp: { Resistance: 1 } });
+    const empty = createPvpBattle(data, teams, () => 0.5, 1, [], [{ ...spirits[0], energy: 0 }, spirits[1]]);
+    expect(() => advancePvpBattle(data, empty.snapshot, { team: 0, action: summon }, () => 0.5)).toThrow("not available");
+  });
   it("waits for both players, validates ownership and targets, and preserves rejected state", () => {
     const initial = start();
     const first = initial.restored.decision;

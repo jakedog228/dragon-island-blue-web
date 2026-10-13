@@ -1,5 +1,5 @@
 import type { AuthorProfile, CatalogMod, CatalogSort, CatalogTag, CommunityInfo, ModRelease } from "@dib/mod-kernel/catalog";
-import { importCodeModArchive, matchesRange, resolveCodeModProfile, type CodeModPackage, type ModAdvisory } from "@dib/mod-kernel";
+import { importCodeModArchive, matchesRange, modSaveCompatibilityLabel, resolveCodeModProfile, type CodeModPackage, type ModAdvisory } from "@dib/mod-kernel";
 import {
   catalogImageUrl as remoteCatalogImageUrl, catalogLookup, catalogPage, catalogTags, communityInfo, communityJson, disableSelectedMod,
   enableInstalledMod, forgetInstalledDigest, installCatalogPlan, installedCatalogMods, planCatalogInstall, storeLocalMod,
@@ -39,6 +39,8 @@ export interface ModManagerOptions {
   interference?: () => Pick<ModInterferenceReport, "seams" | "warnings"> | undefined;
   /** Commits a new selection; may reload the page when mod code already ran. */
   select: (selection: ModManagerSelection) => Promise<void>;
+  /** Refresh launcher presentation even when only a built-in mod changed. */
+  onApplied?: () => void;
   /** True when applying must reload (full-trust code already executed in this page). */
   applyReloads?: () => boolean;
   /** Opens on a specific tab, e.g. Load order when the current selection cannot resolve. */
@@ -140,7 +142,7 @@ export function showModManager(options: ModManagerOptions): void {
   let rules: OrderRule[] = [];
   let stagedPackages: CodeModPackage[] = [];
   let orderChanged = false;
-  let browseCount: number | undefined;
+  let browseCount = 1; // The included PvP listing is available without a remote catalog.
   let results: { mods: CatalogMod[]; next: number | null; total: number } | undefined;
   let tags: CatalogTag[] = [];
   let tagsExpanded = false;
@@ -218,7 +220,13 @@ export function showModManager(options: ModManagerOptions): void {
     if (lookup && info?.enabled && inventory.length) {
       try { listings = await catalogLookup(inventory.map((row) => row.listingId)); } catch { /* offline: no update hints */ }
     }
-    library = buildLibrary({ device, inventory, staged, applied, listings });
+    const classifiedDevice = await Promise.all(device.map(async row => {
+      // Read the actual release's manifest, including older cache entries lacking metadata.
+      // Invalid packages remain visible/removable and can never claim neutrality.
+      const pkg = await packageOf(row.bytes, row.archiveName).catch(() => undefined);
+      return { ...row, saveCompatibility: pkg?.manifest.saveCompatibility ?? "dependent" as const };
+    }));
+    library = buildLibrary({ device: classifiedDevice, inventory, staged, applied, listings });
     await refreshOrder();
   };
   /**
@@ -422,6 +430,7 @@ export function showModManager(options: ModManagerOptions): void {
     await refreshOrder();
   };
   const totalChanges = (): number => pendingChanges(staged, applied) + (orderChanged ? 1 : 0) + (stagedPvp !== appliedPvp ? 1 : 0);
+  const enabledCount = (): number => staged.length + Number(stagedPvp);
   const apply = async (): Promise<void> => {
     if (order.error) throw new Error("These mods cannot load together yet. Fix it in Load order first.");
     setPvpModEnabled(stagedPvp);
@@ -430,6 +439,7 @@ export function showModManager(options: ModManagerOptions): void {
         await options.select({ files: stagedFiles, priorityOverrides: stagedOverrides, allowDeclaredConflicts: stagedAllow });
       }
     } catch (error) { setPvpModEnabled(appliedPvp); throw error; }
+    options.onApplied?.();
     dialog.close();
   };
   const discard = async (): Promise<void> => {
@@ -615,7 +625,7 @@ export function showModManager(options: ModManagerOptions): void {
   const renderTabs = (): void => {
     tabBar.replaceChildren();
     for (const entry of TABS) {
-      const count = entry.id === "library" ? library.length : entry.id === "order" ? staged.length : browseCount;
+      const count = entry.id === "library" ? library.length : entry.id === "order" ? enabledCount() : browseCount;
       const updates = entry.id === "library" ? library.filter((row) => row.update).length : 0;
       const node = el("button", "ml-tab", el("span", "ml-tab__label", entry.label),
         count !== undefined ? el("span", "ml-tab__count", String(count)) : undefined,
@@ -637,7 +647,7 @@ export function showModManager(options: ModManagerOptions): void {
     applyButton.disabled = order.error !== undefined;
     const detailText = order.error
       ? "These mods cannot load together yet. Open Load order to fix it."
-      : `${plural(staged.length + Number(stagedPvp), "mod")} will be enabled${orderChanged ? " in the new order" : ""}. Changes take effect after you apply.`;
+      : `${plural(enabledCount(), "mod")} will be enabled${orderChanged ? " in the new order" : ""}. Changes take effect after you apply.`;
     applyBar.replaceChildren(
       el("div", "ml-apply__text", el("strong", "", `${plural(changes, "change")} to apply`), el("small", "", detailText)),
       button("Discard", { tone: "ghost", onClick: () => run(discard) }),
@@ -758,15 +768,17 @@ export function showModManager(options: ModManagerOptions): void {
     return `${n}${suffix}`;
   };
   const renderOrder = (): void => {
+    const count = enabledCount();
     if (!staged.length) {
-      main.replaceChildren(emptyState(stagedPvp ? "No load order needed" : "No mods enabled", stagedPvp ? "Multiplayer PvP works on its own. Enable other mods to arrange their load order." : "Enable mods in Installed, then drag them into the order they activate in here.",
+      main.replaceChildren(emptyState(stagedPvp ? "1 mod enabled" : "No mods enabled", stagedPvp ? "Multiplayer PvP is enabled and needs no load order. Enable other mods to arrange their load order." : "Enable mods in Installed, then drag them into the order they activate in here.",
         button("Go to installed mods", { tone: "primary", onClick: () => switchTab("library") })));
       return;
     }
     const recommendedIds = recommended.error ? [] : orderIds(recommended);
     const drifted = !order.error && recommendedIds.length > 0 && orderIds(order).join("\n") !== recommendedIds.join("\n");
     main.replaceChildren(el("div", "ml-toolbar",
-      el("span", "ml-toolbar__summary", el("strong", "", String(staged.length)), ` enabled ${staged.length === 1 ? "mod" : "mods"}, activated top to bottom.`,
+      el("span", "ml-toolbar__summary", el("strong", "", String(count)), ` enabled ${count === 1 ? "mod" : "mods"}`,
+        stagedPvp ? ". Multiplayer PvP needs no load order. Other mods activate top to bottom." : ", activated top to bottom.",
         staged.length > 1 && !order.error ? " Drag to reorder." : ""),
       el("span", "ml-toolbar__spacer"),
       drifted ? button("Use recommended order", { tone: "secondary", small: true, title: "Forget manual moves and use each mod's own priority and load rules", onClick: () => run(resetOrder) })
@@ -810,7 +822,7 @@ export function showModManager(options: ModManagerOptions): void {
       nameButton.addEventListener("click", () => void openModId(id));
       const declared = rules.filter((rule) => rule.declaredBy === id).map((rule) => rule.after === id ? `after ${nameOf(rule.before)}` : `before ${nameOf(rule.after)}`);
       const meta = el("small", "ml-order__meta", el("span", "", `v${pkg.manifest.version}`), el("span", "", ORIGIN_META[entry?.origin ?? "local"].label),
-        pkg.manifest.priority !== 0 ? el("span", "", `priority ${pkg.manifest.priority}`) : undefined,
+        el("span", "", `Recommended priority: ${pkg.manifest.priority}`),
         declared.length ? el("span", "", `loads ${listPhrase(declared, "and")}`) : undefined,
         order.advisories.some((advisory) => advisory.modId === id && advisory.kind === "declared-conflict-overridden")
           ? badge("conflict overridden", "warning") : undefined);
@@ -998,11 +1010,15 @@ export function showModManager(options: ModManagerOptions): void {
       shot ? coverImage(catalogImageUrl(mod, shot), "", "ml-tile__art") : "",
       wip ? el("div", "ml-tile__flag", wipFlag(mod.tags)) : "",
       el("div", "ml-tile__body",
-        el("div", "ml-tile__eyebrow", el("span", "", sourceLabel(mod.source), shown.length ? ` \u00b7 ${shown.slice(0, 2).join(" \u00b7 ")}` : ""),
+        el("div", "ml-tile__eyebrow",
+          el("div", "ml-tile__categories", sourceLabel(mod.source),
+            ...shown.slice(0, 2).map(tag => el("span", "ml-tile__tag", tag))),
           latest ? el("span", "ml-tile__version", `v${latest.version}`) : undefined),
         title,
         mod.summary ? el("p", "ml-tile__summary", mod.summary) : el("p", "ml-tile__summary ml-missing", "No description yet."),
-        el("div", "ml-tile__foot", el("span", "ml-tile__author", `by ${mod.author.displayName}`), latest ? stateAction(mod, state) : badge("No release yet", "muted"))));
+        el("div", "ml-tile__foot",
+          el("span", "ml-tile__author", `by ${mod.author.displayName}`),
+          latest ? stateAction(mod, state) : badge("No release yet", "muted"))));
     return node;
   };
 
@@ -1176,6 +1192,7 @@ export function showModManager(options: ModManagerOptions): void {
     const facts = el("dl", "ml-facts");
     const fact = (label: string, value: Node | string): void => { facts.append(el("div", "", el("dt", "", label), el("dd", "", value))); };
     fact("Version", latest?.version ?? stored?.version ?? manifest?.version ?? missing("unknown", "span"));
+    fact("Save compatibility", modSaveCompatibilityLabel(latest ? latest.saveCompatibility : manifest?.saveCompatibility));
     if (mod) fact("Updated", formatRelative(mod.updatedAt));
     else if (deviceRow?.cachedAt) fact("Added", formatRelative(deviceRow.cachedAt));
     const size = latest?.byteLength ?? stored?.byteLength;
@@ -1185,6 +1202,7 @@ export function showModManager(options: ModManagerOptions): void {
     })));
     if (!mod && deviceRow) fact("File", deviceRow.archiveName);
     head.append(facts);
+    head.append(el("p", "ml-muted", "Save-neutral is the author's declaration that the mod can be added or removed without requiring changes to your save. Dependencies and conflicts still apply. Unclassified mods are treated as save-dependent."));
 
     const about = el("section", "ml-section", el("h3", "", "About"),
       mod?.description ? el("p", "ml-prose", mod.description)
@@ -1208,7 +1226,7 @@ export function showModManager(options: ModManagerOptions): void {
           el("div", "ml-versions__main", el("strong", "", `v${release.version}`), at === 0 ? badge("latest", "update") : undefined,
             copy ? badge("on this device", "muted") : undefined),
           el("small", "ml-versions__meta", el("span", "", formatRelative(release.createdAt)), el("span", "", mod.modId === PVP_MOD.id ? "Included with the game" : formatBytes(release.byteLength)),
-            el("span", "", `API ${release.apiVersion}`), deps ? el("span", "", plural(deps, "requirement")) : undefined),
+            el("span", "", `API ${release.apiVersion}`), el("span", "", modSaveCompatibilityLabel(release.saveCompatibility)), deps ? el("span", "", plural(deps, "requirement")) : undefined),
           rowActions));
       }
       if (!mod.releases.length) list.append(el("li", "ml-versions__row", missing("No release has been uploaded yet.")));
@@ -1246,7 +1264,7 @@ export function showModManager(options: ModManagerOptions): void {
     if (manifest) {
       const rows = el("ul", "ml-rules");
       const line = (label: string, value: string): void => { rows.append(el("li", "", el("span", "ml-rules__label", label), el("span", "", value))); };
-      line("Load priority", manifest.priority === 0 ? "0 (default)" : `${manifest.priority} (${manifest.priority > 0 ? "loads late" : "loads early"})`);
+      line("Recommended priority", manifest.priority === 0 ? "0 (default)" : `${manifest.priority} (${manifest.priority > 0 ? "loads late" : "loads early"})`);
       const after = [...Object.keys(manifest.optionalDependencies), ...manifest.loadAfter];
       if (after.length) line("Loads after", listPhrase([...new Set(after)].map(nameOf), "and"));
       if (manifest.loadBefore.length) line("Loads before", listPhrase(manifest.loadBefore.map(nameOf), "and"));

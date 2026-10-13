@@ -1,4 +1,5 @@
 import type { PlayProfileModRef } from "./playProfiles.js";
+import { modSaveCompatibilityLabel } from "@dib/mod-kernel";
 import { compareSaveMods } from "./saveModComparison.js";
 
 /** Native disclosure supplies Enter/Space behavior and exposes its expanded state to AT. */
@@ -80,6 +81,9 @@ function modList(
     const metadata = document.createElement("span");
     metadata.className = "save-mods__metadata";
     metadata.appendChild(version);
+    const compatibility = document.createElement("small");
+    compatibility.textContent = modSaveCompatibilityLabel(mod.saveCompatibility);
+    metadata.appendChild(compatibility);
     row.append(name, metadata);
     const match = otherById.get(mod.id);
     const change = other === null ? undefined

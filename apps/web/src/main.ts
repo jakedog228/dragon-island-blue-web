@@ -1,10 +1,12 @@
 import { officialReconnectEnemyTeam } from "./authority/battleAppearance.js";
+import { createAuthorityRecoveryPrompt } from "./authority/recoveryPrompt.js";
+import { isCommandReconciliation, type CommandCoordinatorHooks } from "./authority/commandCoordinator.js";
 // Keep Pixi's deterministic renderer implementations installed before any renderer construction.
 // Full-trust Offline mods now deliberately allow same-realm evaluation; this import still avoids
 // swapping Pixi implementations depending on whether a profile happens to be selected.
 import "pixi.js/unsafe-eval";
 import { Graphics, type Container } from "pixi.js";
-import type { PresentationEventV1 } from "@dib/game-protocol";
+import { OFFICIAL_GAME_V25_SIMULATION_VERSION, type PresentationEventV1, type GameCommandV1 } from "@dib/game-protocol";
 import {
   FixedStage,
   bitmapFontFile,
@@ -101,6 +103,7 @@ import {
 } from "./authority/officialDefeatRecovery.js";
 import type { ImportedContentPackage } from "./content/archivePackage.js";
 import { hasImportedModProfile } from "./content/moddedContent.js";
+import type { PlayerReadyContext } from "./content/characterEggGift.js";
 import { identifyContentLogicPack } from "./content/logicPackIdentity.js";
 import { pvpModEnabled } from "./pvp/pvpMod.js";
 import { PvpClient } from "./pvp/pvpClient.js";
@@ -210,7 +213,7 @@ import {
 } from "./player/tournamentRetreat.js";
 import { arenaExitDisposition } from "./player/arenaExit.js";
 import type { ScenarioRuntime } from "./debug/scenarioMode.js";
-import type { InstalledSlotProjection } from "./authority/gameAuthorityClient.js";
+import { RemoteGameAuthorityError, type InstalledSlotProjection } from "./authority/gameAuthorityClient.js";
 import { installAppViewportSizing, installGameViewport } from "./platform/gameViewport.js";
 import {
   initialWorldBootRoute,
@@ -263,6 +266,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
   const acquired = options.acquired ?? await acquireLocalContent(host);
   assertOfficialContentBoundary(acquired);
   const { content, official } = acquired;
+  official?.authority.setRecoveryPrompt?.(createAuthorityRecoveryPrompt());
   const mods = hasImportedModProfile(content) ? content.mods : undefined;
   await mods?.runPhase("boot:starting", { host, acquired, content, scenes, startupDiagnostics });
   const renderHost = installGameViewport(host);
@@ -321,6 +325,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
   globalThis.addEventListener("pagehide", () => keyboard.dispose(), { once: true });
   let guildQuestDebugState: (() => unknown) | undefined;
   let playerDebugState: (() => unknown) | undefined;
+  let modStartupDebugState: (() => unknown) | undefined;
   let defeatRecoveryDebugState: (() => unknown) | undefined;
   let questNotificationHost: WorldNotificationHost | undefined;
   const pendingQuestNotifications: Array<
@@ -371,6 +376,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
       audio: audio.debugState,
       ...(guildQuestDebugState === undefined ? {} : { guildQuests: guildQuestDebugState() }),
       ...(playerDebugState === undefined ? {} : { player: playerDebugState() }),
+      ...(modStartupDebugState === undefined ? {} : { modStartup: modStartupDebugState() }),
       ...(defeatRecoveryDebugState === undefined
         ? {}
         : { defeatRecovery: defeatRecoveryDebugState() }),
@@ -580,6 +586,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
   // `Ticker.remove` dereferences the nulled `_head` -- "Cannot read properties of null (reading
   // 'next')". Retire the startup scenes first, while the ticker is still alive.
   let disposeStartupSequence: (() => void) | undefined;
+  let disposeAuthorityReconciliation: (() => void) | undefined;
   const restartStartupShell = async (): Promise<void> => {
     if (restarting) return;
     restarting = true;
@@ -587,6 +594,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
       delete (globalThis as Record<string, unknown>)["__DIB_TEST_RESTART_SESSION__"];
     }
     scenes.clear("start");
+    disposeAuthorityReconciliation?.();
     disposeStartupSequence?.();
     stopStartupModeSync();
     keyboard.dispose();
@@ -1131,7 +1139,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
     isActive: () => boolean = () => true,
   ): void => {
     runtime.setQuestEventListener((event) => {
-      if (!isActive()) return;
+      if (!isActive() || officialSlot !== undefined) return;
       dispatchGuildQuestEvent({
         id: 8,
         firstIngredientShortType: event.target1.shortType,
@@ -1165,9 +1173,10 @@ async function boot(options: BootOptions = {}): Promise<void> {
     }
     const dungeon = Object.prototype.hasOwnProperty.call(override, "dungeon")
       ? override.dungeon ?? undefined
-      : dungeonFeature?.snapshot();
+      : dungeonFeature?.snapshot() ?? pendingDungeonRestore;
     const quests = guildQuests?.stateSnapshot() ?? collectionDialogs?.stateSnapshot();
-    const pendingBattleRewardKeys = dungeonFeature?.pendingBattleRewardSnapshot();
+    const pendingBattleRewardKeys = dungeonFeature?.pendingBattleRewardSnapshot() ??
+      (pendingDungeonRestore === undefined ? undefined : restoredSave?.pendingBattleRewardKeys);
     return {
       schemaVersion: 1,
       player: runtime.stateSnapshot(),
@@ -1349,7 +1358,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
     }
     return createOfficialDefeatRecoveryAdapter({
       projection: () => officialSlot.coordinator.projection,
-      submit: (command) => officialSlot.coordinator.submit(command),
+      submit: (command) => submitOfficialCommand(command),
       openGoldStore: () => openGoldStoreHandoff(
         runtime,
         () => ({ parent: battle().notificationParent, owner: battle() }),
@@ -1403,6 +1412,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
     // `restartStartupShell` applies identically here.
     disposeStartupSequence?.();
     disposeSaveHealthBanner();
+    disposeAuthorityReconciliation?.();
     stopStartupModeSync();
     keyboard.dispose();
     stage.destroy();
@@ -1422,6 +1432,27 @@ async function boot(options: BootOptions = {}): Promise<void> {
   };
   const restartToMainMenu = (): Promise<void> => tearDownAndRestart(false);
   const restartSession = (): Promise<void> => tearDownAndRestart(true);
+  const rejectedScenePrompt = createAuthorityRecoveryPrompt();
+  const submitOfficialCommand = async (command: GameCommandV1, hooks?: CommandCoordinatorHooks) => {
+    if (officialSlot === undefined) throw new Error("Official command requires an authority slot");
+    try {
+      return await officialSlot.coordinator.submit(command, hooks);
+    } catch (error) {
+      // Battle/Egg coroutines cannot resume after rejection. Hold their presentation until the
+      // player acknowledges it, then rebuild from the committed projection with no local replay.
+      if (error instanceof RemoteGameAuthorityError && !error.retryable &&
+          (command.type.startsWith("battle.") || command.type.startsWith("egg."))) {
+        await rejectedScenePrompt(error);
+        return await officialSlot.coordinator.recoverScene(error);
+      }
+      throw error;
+    }
+  };
+  disposeAuthorityReconciliation = officialSlot?.coordinator.subscribeReconciliation(() => {
+
+
+    queueMicrotask(() => { void restartSession(); });
+  });
   if ((globalThis as Record<string, unknown>)["__DIB_TEST_SESSION_RESTARTS__"] === true) {
     (globalThis as Record<string, unknown>)["__DIB_TEST_RESTART_SESSION__"] = {
       presentation: restartSession,
@@ -1532,6 +1563,14 @@ async function boot(options: BootOptions = {}): Promise<void> {
     playerRuntime.setChangeListener(checkpoint);
     worldRng = FIDELITY_LAB?.rng ?? rosterRng(seed);
     worldSharedState = createWorldTripSharedState();
+    const fixtureCompletedPois = (globalThis as Record<string, unknown>)["__DIB_TEST_WORLD_COMPLETED_POIS__"];
+    if (deterministicHarness && fixtureCompletedPois !== undefined) {
+      if (!Array.isArray(fixtureCompletedPois) || fixtureCompletedPois.some((name) =>
+        typeof name !== "string" || !initialWorldData.pointsOfInterest.some((poi) => poi.name === name))) {
+        throw new Error("Completed world POIs fixture must name existing POIs");
+      }
+      for (const name of fixtureCompletedPois) worldSharedState.completedThisRefresh.add(name);
+    }
     const fixturePoiWins = (globalThis as Record<string, unknown>)["__DIB_TEST_WORLD_POI_WINS__"];
     if (deterministicHarness && fixturePoiWins !== undefined) {
       if (fixturePoiWins === null || typeof fixturePoiWins !== "object" || Array.isArray(fixturePoiWins)) {
@@ -1817,13 +1856,13 @@ async function boot(options: BootOptions = {}): Promise<void> {
     if (officialSlot === undefined) return;
     await resolveOfficialDefeatReturn(
       officialSlot.coordinator.projection,
-      (command) => officialSlot.coordinator.submit(command),
+      (command) => submitOfficialCommand(command),
     );
   };
   const submitOfficialTutorialFlag = async (flag: string): Promise<void> => {
     if (officialSlot === undefined) return;
     try {
-      await officialSlot.coordinator.submit({
+      await submitOfficialCommand({
         type: "player.claimTutorialFlag",
         flag,
       });
@@ -1872,7 +1911,9 @@ async function boot(options: BootOptions = {}): Promise<void> {
     submitEgg: async (command) => {
       const slot = officialSlot;
       if (slot === undefined) throw new Error("Egg continuation requires the official authority");
-      const result = await slot.coordinator.submit(command);
+      const result = await submitOfficialCommand(command);
+      syncOfficialQuestProjection();
+      presentOfficialQuestEvents(result.events);
       return result.events;
     },
     pendingEgg: () => {
@@ -1983,7 +2024,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
       await dungeonFeature.enterFromWorld(request);
       return;
     }
-    const result = await officialSlot.coordinator.submit({
+    const result = await submitOfficialCommand({
       type: "world.activateZone",
       zoneId: request.poi.name,
     });
@@ -2018,7 +2059,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
           return playerRuntime;
         },
         claim: async (goalId) => {
-          const result = await officialSlot.coordinator.submit({
+          const result = await submitOfficialCommand({
             type: "collection.claim",
             goalId,
           });
@@ -2059,6 +2100,42 @@ async function boot(options: BootOptions = {}): Promise<void> {
     const tripForScene = worldTrip;
     const profileForScene = playerRuntime.profile;
     let node!: WorldNode;
+    /**
+     * Official projection adoption replaces the player, quest, and world aggregates wholesale. A
+     * WorldNode that survives an adoption must follow the replacement before field input resumes,
+     * or it navigates with the exhausted pre-adoption trip tape and edits a party no checkpoint
+     * reads. Battle return and the Tournament prize claim are the two retained-node adoptions.
+     */
+    const rebindRetainedOfficialWorld = (): void => {
+      if (!worldData || !worldTrip || !worldRng || !worldSharedState || !playerRuntime?.party) {
+        throw new Error("Official adoption cannot rebind the retained world session");
+      }
+      const adoptedRuntime = playerRuntime;
+      node.rebindRetainedSession({
+        world: worldData,
+        trip: worldTrip,
+        party: adoptedRuntime.party!,
+        playerRuntime: adoptedRuntime,
+        ...(guildQuests === undefined ? {} : { guildQuests }),
+        questRewardRng: worldRng,
+        ...(FIDELITY_LAB?.foundationDictionaryOrder === undefined
+          ? {}
+          : { fidelityFoundationOrder: FIDELITY_LAB.foundationDictionaryOrder }),
+        refreshState: worldSharedState,
+        heroProgress: {
+          get level() { return adoptedRuntime.profile.heroLevel; },
+          get totalHighestLevels() {
+            return adoptedRuntime.profile.heroTotalHighestLevels;
+          },
+        },
+      });
+    };
+    /** Official adoption replaces `playerRuntime`; local play keeps the scene's own aggregate. */
+    const liveRuntimeForScene = (): PlayerRuntimeState => {
+      if (officialSlot === undefined) return runtimeForScene;
+      if (playerRuntime === undefined) throw new Error("Official world scene lost its player runtime");
+      return playerRuntime;
+    };
     // `entry` distinguishes walking into the encounter from a Save Me restart of the fight that was
     // just lost (see BattleExitOutcome). The roster is deterministic from `arrival`, so a restart
     // rebuilds the identical enemies; only the player team differs, being freshly derived from the
@@ -2096,32 +2173,10 @@ async function boot(options: BootOptions = {}): Promise<void> {
       let markReady!: () => void;
       const ready = new Promise<void>((resolve) => { markReady = resolve; });
       const returnToRetainedWorld = async (autoEnterTownName?: string): Promise<void> => {
-        if (officialSlot !== undefined) {
-          if (!worldData || !worldTrip || !worldRng || !worldSharedState || !playerRuntime?.party) {
-            throw new Error("Official battle return cannot rebind the retained world session");
-          }
-          const adoptedRuntime = playerRuntime;
-          const adoptedParty = playerRuntime.party;
-          node.rebindRetainedSession({
-            world: worldData,
-            trip: worldTrip,
-            party: adoptedParty,
-            playerRuntime: adoptedRuntime,
-            ...(guildQuests === undefined ? {} : { guildQuests }),
-            questRewardRng: worldRng,
-            ...(FIDELITY_LAB?.foundationDictionaryOrder === undefined
-              ? {}
-              : { fidelityFoundationOrder: FIDELITY_LAB.foundationDictionaryOrder }),
-            refreshState: worldSharedState,
-            heroProgress: {
-              get level() { return adoptedRuntime.profile.heroLevel; },
-              get totalHighestLevels() {
-                return adoptedRuntime.profile.heroTotalHighestLevels;
-              },
-            },
-          });
-        }
-        node.prepareBattleReturn();
+        if (officialSlot !== undefined) rebindRetainedOfficialWorld();
+
+
+        await node.prepareBattleReturn();
         await scenes.replace(node, async ({ outgoing, activate, retireOutgoing }) => {
           if (outgoing?.sceneKind !== "battle") {
             throw new Error("Retained world battle return requires an outgoing battle scene");
@@ -2179,7 +2234,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
                 battleId: projectedBattle.battleId,
                 replay: officialBattleReplay(projectedBattle),
                 submit: async (command) => {
-                  const result = await officialSlot!.coordinator.submit(command);
+                  const result = await submitOfficialCommand(command);
                   const replay = result.events.find((event) =>
                     event.type === "battle.replayAdvanced");
                   if (replay === undefined || replay.battleId !== projectedBattle.battleId) {
@@ -2199,7 +2254,9 @@ async function boot(options: BootOptions = {}): Promise<void> {
           ? {}
           : {
               requestChatPresentation: (name: string, alwaysShow: boolean) =>
-                guildQuests!.requestChatPresentation(name, alwaysShow),
+                (officialSlot === undefined
+                  ? guildQuests!.requestChatPresentation(name, alwaysShow)
+                  : officialSlot.coordinator.battleChatHistory.request(name, alwaysShow)),
             }),
           onReady: markReady,
           onExit: async (outcome) => {
@@ -2341,6 +2398,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
           run.then(() => { throw new Error("BattleNode ended before its transition-ready callback"); }),
         ]);
         void run.catch((error: unknown) => {
+          if (isCommandReconciliation(error)) return;
           console.error("World-owned BattleNode failed", error);
           queueMicrotask(() => { throw error; });
         });
@@ -2393,7 +2451,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
         if (currentPoiId === undefined) {
           throw new Error("Official world exit requires a world projection");
         }
-        const result = await officialSlot.coordinator.submit({
+        const result = await submitOfficialCommand({
           type: "world.activateZone",
           zoneId: currentPoiId,
         });
@@ -2441,8 +2499,9 @@ async function boot(options: BootOptions = {}): Promise<void> {
         : loadChatDefinition(content.resources, challenge.winChatKey);
       const officialStart = officialSlot === undefined
         ? undefined
-        : await officialSlot.coordinator.submit({ type: "arena.startLicenseChallenge" });
+        : await submitOfficialCommand({ type: "arena.startLicenseChallenge" });
       const projectedBattle = officialStart?.projection.battle;
+      if (officialStart !== undefined) retainOfficialQuestEvents(officialStart.events);
       if (officialSlot !== undefined && projectedBattle === undefined) {
         throw new Error("Official Arena challenge omitted its battle projection");
       }
@@ -2490,27 +2549,32 @@ async function boot(options: BootOptions = {}): Promise<void> {
       let markReady!: () => void;
       const ready = new Promise<void>((resolve) => { markReady = resolve; });
       let battle!: BattleNode;
+      // An Official field battle earlier on this map adopted a new aggregate; the Arena fight's
+      // XP/level pages must read that live party, exactly as world and Tournament battles do.
+      const arenaRuntime = liveRuntimeForScene();
       battle = new BattleNode({
         stage,
         game,
         audio,
         keyboard,
         encounter: arenaEncounter,
-        tripParty: runtimeForScene.battleParty(),
+        tripParty: arenaRuntime.battleParty(),
         captureInstanceId: (shortType) => nextPartyInstanceId("arena-capture", shortType),
-        playerState: runtimeForScene.battleState(),
+        playerState: arenaRuntime.battleState(),
         openGoldStore: () => openGoldStoreHandoff(
-          runtimeForScene,
+          arenaRuntime,
           () => ({ parent: battle.notificationParent, owner: battle }),
           officialSlot === undefined ? checkpoint : () => undefined,
           officialSlot === undefined
             ? undefined
             : "Purchases are unavailable while an Official battle is active.",
         ),
-        ...(officialSlot === undefined && guildQuests !== undefined
+        ...(guildQuests !== undefined
           ? {
               requestChatPresentation: (name: string, alwaysShow: boolean) =>
-                guildQuests!.requestChatPresentation(name, alwaysShow),
+                (officialSlot === undefined
+                  ? guildQuests!.requestChatPresentation(name, alwaysShow)
+                  : officialSlot.coordinator.battleChatHistory.request(name, alwaysShow)),
             }
           : {}),
         ...(projectedBattle === undefined || officialArenaRng === undefined
@@ -2520,7 +2584,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
                 battleId: projectedBattle.battleId,
                 replay: officialBattleReplay(projectedBattle),
                 submit: async (command) => {
-                  const result = await officialSlot!.coordinator.submit(command);
+                  const result = await submitOfficialCommand(command);
                   const replayEvent = result.events.find((event) =>
                     event.type === "battle.replayAdvanced");
                   if (
@@ -2597,7 +2661,9 @@ async function boot(options: BootOptions = {}): Promise<void> {
               ticker: stage.app.ticker,
               keyboard,
               imageKey: "plot_start1",
-              textKey: `WonLicense${profileForScene.licenseOrdinal}PlotKey`,
+              // Read after the license increase: the scene-captured profile is the pre-adoption
+              // object on Official and would name the previous license (or `WonLicense0`).
+              textKey: `WonLicense${liveRuntimeForScene().profile.licenseOrdinal}PlotKey`,
             });
 
 
@@ -2605,6 +2671,10 @@ async function boot(options: BootOptions = {}): Promise<void> {
             wonChat.root.visible = true;
           } else {
             if (officialSlot !== undefined) {
+              // The authority records every loss as a pending defeat decision and then admits only
+              // `battle.resolveDefeat`; settle it before adopting, exactly as world and Tournament
+              // losses do, or every later command on the slot is refused until a reload.
+              await submitOfficialDefeatReturn();
               adoptOfficialProjection();
               presentRetainedOfficialQuestEvents();
             }
@@ -2624,7 +2694,9 @@ async function boot(options: BootOptions = {}): Promise<void> {
           await startWorld({
             kind: "arenaReturn",
             townName,
-            autoEnterTown: disposition === "defeat",
+            autoEnterTown: officialSlot === undefined
+              ? disposition === "defeat"
+              : officialSlot.coordinator.projection.location.kind === "town",
           });
         },
       });
@@ -2641,6 +2713,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
             run.then(() => { throw new Error("Arena BattleNode ended before becoming ready"); }),
           ]);
           void run.catch((error: unknown) => {
+            if (isCommandReconciliation(error)) return;
             console.error("Arena-owned BattleNode failed", error);
             queueMicrotask(() => { throw error; });
           });
@@ -2695,7 +2768,8 @@ async function boot(options: BootOptions = {}): Promise<void> {
       }
       const officialStart = officialSlot === undefined || entry === "restart"
         ? undefined
-        : await officialSlot.coordinator.submit({ type: "tournament.startBattle" });
+        : await submitOfficialCommand({ type: "tournament.startBattle" });
+      if (officialStart !== undefined) retainOfficialQuestEvents(officialStart.events);
       const projectedBattle = entry === "arrival"
         ? officialStart?.projection.battle
         : officialSlot?.coordinator.projection.battle;
@@ -2745,6 +2819,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
       const officialTournamentRng = projectedBattle === undefined
         ? undefined
         : replayableRng(projectedBattle.randomDraws);
+      pendingOfficialBattleRewards.length = 0;
       let markReady!: () => void;
       const ready = new Promise<void>((resolve) => { markReady = resolve; });
       let battle!: BattleNode;
@@ -2775,7 +2850,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
                 battleId: projectedBattle.battleId,
                 replay: officialBattleReplay(projectedBattle),
                 submit: async (command) => {
-                  const result = await officialSlot!.coordinator.submit(command);
+                  const result = await submitOfficialCommand(command);
                   const replayEvent = result.events.find((event) =>
                     event.type === "battle.replayAdvanced");
                   if (
@@ -2786,6 +2861,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
                   }
                   officialTournamentRng.appendCommittedDraws(replayEvent.randomDraws);
                   retainOfficialQuestEvents(result.events);
+                  retainOfficialBattleRewards(result.events);
                 },
                 claimTutorialFlag: submitOfficialTutorialFlag,
               },
@@ -2822,8 +2898,31 @@ async function boot(options: BootOptions = {}): Promise<void> {
           let presentedLoot = false;
           if (outcome === "victory") {
             if (officialSlot !== undefined) {
+              // Every shipped round awards a fixed Egg. The authority commits the loot, leaves the
+              // Egg continuation pending (the only command it will admit until `egg.finish`), and
+              // routes a treasure-bearing win to the world map. Present the committed batch and
+              // hatch before returning, exactly as an Official world victory does; skipping both
+              // left the slot Egg-locked with the browser auto-entered in town.
+              const committedRewards = pendingOfficialBattleRewards.splice(0);
               adoptOfficialProjection();
               presentRetainedOfficialQuestEvents();
+              if (committedRewards.length > 0) {
+                presentedLoot = true;
+                await showDungeonLootManagement({
+                  parent: battle.notificationParent,
+                  owner: battle,
+                  game,
+                  audio,
+                  ticker: stage.app.ticker,
+                }, committedRewards, () => {
+                  // Already committed atomically by the authority; presentation only.
+                });
+              }
+              await runOfficialEggHatch({
+                parent: battle.notificationParent,
+                owner: battle,
+                instanceIdPrefix: "official-tournament-egg",
+              });
             } else {
               profileForScene.tournament.settleBattle("victory");
               checkpoint();
@@ -2921,7 +3020,10 @@ async function boot(options: BootOptions = {}): Promise<void> {
           await startWorld({
             kind: "arenaReturn",
             townName,
-            autoEnterTown: !presentedLoot,
+            // Official play lands exactly where the authority committed the return.
+            autoEnterTown: officialSlot === undefined
+              ? !presentedLoot
+              : officialSlot.coordinator.projection.location.kind === "town",
           });
         },
       });
@@ -2939,6 +3041,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
             run.then(() => { throw new Error("Tournament BattleNode ended before becoming ready"); }),
           ]);
           void run.catch((error: unknown) => {
+            if (isCommandReconciliation(error)) return;
             console.error("Tournament battle failed", error);
           });
         })();
@@ -3028,7 +3131,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
       onArenaChallenge,
       onTournamentBattle,
       get onPvp() { return pvpModEnabled() ? (parent: Container, onClose: () => void) => showPvpFlow({
-        parent, onClose, game, ticker: stage.app.ticker,
+        parent, onClose, game, ticker: stage.app.ticker, stage, audio, keyboard,
         connect: async () => {
           const identity = await identifyContentLogicPack(content);
           const setup = { logicPackId: identity.logicPackId, mods: hasImportedModProfile(content)
@@ -3040,15 +3143,18 @@ async function boot(options: BootOptions = {}): Promise<void> {
           return { client: await PvpClient.offline(), setup };
         },
         entry: () => official === undefined
-          ? { source: "offline", party: partyForScene.projectAliveBattingPrefix().map(({ currentHp: _hp, sourceInstanceId: _id, capturable: _capture, ...member }) => member) }
+          ? { source: "offline", spirits: { energy: profileForScene.spiritSnapshot().energy, savedXp: Object.fromEntries(profileForScene.spiritSnapshot().spirits.map(spirit => [spirit.shortType, spirit.savedXp])) }, party: partyForScene.projectAliveBattingPrefix().map(({ currentHp: _hp, sourceInstanceId: _id, capturable: _capture, ...member }) => member) }
           : { source: "official", slotId: saveSession.slotId },
       }) : undefined; },
       onTournamentPrize: async () => {
         if (officialSlot === undefined) {
           throw new Error("local Tournament prize claim must stay scene-owned");
         }
-        await officialSlot.coordinator.submit({ type: "tournament.claimPrize" });
+        await submitOfficialCommand({ type: "tournament.claimPrize" });
         adoptOfficialProjection();
+        // The Official Tournament exit keeps this node (no committed day advance), so it must
+        // follow the adopted aggregates the egg hatch below and later field input mutate.
+        rebindRetainedOfficialWorld();
         // The claim leaves the Egg continuation pending, and it is the only command the slot will
         // admit until `egg.finish` clears it. `tournament.settlePrize` is retired — see
         // RESERVED_GAME_COMMAND_TYPES_V1.
@@ -3094,6 +3200,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
       },
       onWorldExit,
       onSceneRequest: (request) => worldSceneHandlers.dispatch(request),
+      chatDefinition: (name) => loadChatDefinition(content.resources, name),
       ...(onTownPortal === undefined ? {} : { onTownPortal }),
       ...(onTournamentExit === undefined ? {} : { onTournamentExit }),
       tournamentEnabled: official === undefined ? true : official.authority.pack.capabilities.tournaments,
@@ -3106,7 +3213,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
               visitedTownNames,
               onTravel: async (townName: string): Promise<void> => {
                 if (officialSlot !== undefined) {
-                  const result = await officialSlot.coordinator.submit({
+                  const result = await submitOfficialCommand({
                     type: "world.usePortal",
                     destinationTownId: townName,
                   });
@@ -3135,6 +3242,10 @@ async function boot(options: BootOptions = {}): Promise<void> {
       onTownEntered: (townName) => {
 
 
+
+        dungeonFeature?.clear();
+
+
         if (guildQuests !== undefined && officialSlot === undefined) {
           presentQuestEventResult(guildQuests.enteredTown(townName));
         }
@@ -3155,8 +3266,9 @@ async function boot(options: BootOptions = {}): Promise<void> {
         ? {}
         : {
             authority: {
+              sourceStoryRules: officialSlot.coordinator.projection.simulationVersion === OFFICIAL_GAME_V25_SIMULATION_VERSION,
               navigate: async (targetPoiId: string, onIntentAccepted: () => void) => {
-                const result = await officialSlot.coordinator.submit(
+                const result = await submitOfficialCommand(
                   { type: "world.navigate", targetPoiId },
                   { onIntentAccepted },
                 );
@@ -3181,12 +3293,14 @@ async function boot(options: BootOptions = {}): Promise<void> {
                     if (result.projection.location.kind !== "battle") {
                       syncOfficialQuestProjection();
                       presentOfficialQuestEvents(result.events);
+                    } else {
+                      retainOfficialQuestEvents(result.events);
                     }
                   },
                 };
               },
               leaveTown: async () => {
-                const result = await officialSlot.coordinator.submit({ type: "world.leaveTown" });
+                const result = await submitOfficialCommand({ type: "world.leaveTown" });
                 syncOfficialWorldProjection();
                 return result.projection.updatedAt === undefined
                   ? {}
@@ -3196,7 +3310,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
                 await submitOfficialTutorialFlag(flag);
               },
               claimDialog: async (dialogId) => {
-                const result = await officialSlot.coordinator.submit({
+                const result = await submitOfficialCommand({
                   type: "player.claimDialog",
                   dialogId,
                 });
@@ -3208,7 +3322,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
                 syncOfficialQuestProjection();
               },
               submitParty: async (command) => {
-                const result = await officialSlot.coordinator.submit(command);
+                const result = await submitOfficialCommand(command);
                 syncOfficialQuestProjection();
                 presentOfficialQuestEvents(result.events);
                 return result;
@@ -3218,7 +3332,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
                 if (runtime === undefined) {
                   throw new Error("official quest command requires the Guild/story runtime");
                 }
-                const result = await officialSlot.coordinator.submit(command);
+                const result = await submitOfficialCommand(command);
                 syncOfficialQuestProjection();
                 presentOfficialQuestEvents(result.events);
                 for (const event of result.events) {
@@ -3232,10 +3346,16 @@ async function boot(options: BootOptions = {}): Promise<void> {
                 return result;
               },
               submitPlayer: async (command) => {
-                return await officialSlot.coordinator.submit(command);
+                const result = await submitOfficialCommand(command);
+                syncOfficialQuestProjection();
+                presentOfficialQuestEvents(result.events);
+                return result;
               },
               submitStore: async (command) => {
-                return await officialSlot.coordinator.submit(command);
+                const result = await submitOfficialCommand(command);
+                syncOfficialQuestProjection();
+                presentOfficialQuestEvents(result.events);
+                return result;
               },
               egg: officialEggAuthority(),
             },
@@ -3640,7 +3760,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
     : officialSlot === undefined
       ? async (): Promise<void> => { await returnToSavedTown("townPortal"); }
       : async (): Promise<void> => {
-          const result = await officialSlot.coordinator.submit({
+          const result = await submitOfficialCommand({
             type: "world.useDirectTownReturn",
           });
           if (result.projection.location.kind !== "town") {
@@ -3661,10 +3781,23 @@ async function boot(options: BootOptions = {}): Promise<void> {
 
 
 
-
-  onTournamentExit = townPortalDestinations.length === 0 || officialSlot !== undefined
+  onTournamentExit = townPortalDestinations.length === 0
     ? undefined
-    : async (): Promise<void> => { await returnToTown(lastTownName, "tournamentExit"); };
+    : officialSlot === undefined
+      ? async (): Promise<void> => { await returnToTown(lastTownName, "tournamentExit"); }
+      : async (): Promise<void> => {
+          if (officialSlot.coordinator.projection.location.kind === "town") {
+            await submitOfficialCommand({ type: "world.leaveTown" });
+          }
+          const result = await submitOfficialCommand({ type: "world.selectCurrentPoi" });
+          if (result.projection.location.kind !== "town") {
+            throw new Error("Official Tournament exit did not return to its town");
+          }
+          adoptOfficialProjection();
+          retainOfficialQuestEvents(result.events);
+          await returnToTown(result.projection.location.townId, "tournamentExit", true);
+          presentRetainedOfficialQuestEvents();
+        };
 
   if (pendingDungeonRestore !== undefined && !content.hasDungeonCapability) {
     throw new Error("saved dungeon state is unavailable in the selected content package");
@@ -3841,7 +3974,9 @@ async function boot(options: BootOptions = {}): Promise<void> {
                 }
               : {}),
             requestChatPresentation: (name: string, alwaysShow: boolean) =>
-              currentDungeonGuildQuests().requestChatPresentation(name, alwaysShow),
+              (officialSlot === undefined
+                ? currentDungeonGuildQuests().requestChatPresentation(name, alwaysShow)
+                : officialSlot.coordinator.battleChatHistory.request(name, alwaysShow)),
             onNotificationHostReady: attachQuestNotificationHost,
           }),
       onDiagnostic: (message, detail) => console.warn(`[dungeon] ${message}`, detail ?? {}),
@@ -3851,7 +3986,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
             authority: {
               projection: () => officialSlot.coordinator.projection,
               submit: async (command, hooks) => {
-                const result = await officialSlot.coordinator.submit(command, hooks);
+                const result = await submitOfficialCommand(command, hooks);
                 retainOfficialQuestEvents(result.events);
                 retainOfficialInfiniteFloorEntries(result.events);
                 return result;
@@ -3889,6 +4024,17 @@ async function boot(options: BootOptions = {}): Promise<void> {
   };
   if (useWorldDemo) {
     const reconnectBattle = officialSlot?.coordinator.projection.battle;
+    // Offline mods may present after the starter/restored aggregate exists, before town entry
+    // starts Leslie's dialogue. A pending dungeon snapshot remains part of these checkpoints.
+    if (mods !== undefined && officialSlot === undefined && playerRuntime !== undefined && worldRng !== undefined) {
+      await mods.runPhase("player:ready", {
+        player: playerRuntime, game, stage, audio, rng: worldRng,
+        nextMonsterInstanceId: (shortType: string) => nextPartyInstanceId("mod-gift", shortType),
+        checkpoint: checkpointAsync,
+        reveal: startup.finishTransition,
+        setDebugState: (read: (() => unknown) | undefined) => { modStartupDebugState = read; },
+      } satisfies PlayerReadyContext);
+    }
     const reconnectDungeonBattleReturn = officialSlot === undefined ||
         !("dungeonBattleReturn" in officialSlot.coordinator.projection)
       ? undefined
@@ -3962,7 +4108,9 @@ async function boot(options: BootOptions = {}): Promise<void> {
           ? {}
           : {
               requestChatPresentation: (name: string, alwaysShow: boolean) =>
-                guildQuests!.requestChatPresentation(name, alwaysShow),
+                (officialSlot === undefined
+                  ? guildQuests!.requestChatPresentation(name, alwaysShow)
+                  : officialSlot.coordinator.battleChatHistory.request(name, alwaysShow)),
             }),
         onReady: markReady,
         ...(reconnectDungeonBattle && dungeonFeature !== undefined
@@ -3977,7 +4125,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
           replay: officialBattleReplay(reconnectBattle),
           resumeExisting: true,
           submit: async (command) => {
-            const result = await officialSlot!.coordinator.submit(command);
+            const result = await submitOfficialCommand(command);
             const replay = result.events.find((event) =>
               event.type === "battle.replayAdvanced");
             if (replay === undefined || replay.battleId !== reconnectBattle.battleId) {
@@ -4098,6 +4246,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
         run.then(() => { throw new Error("Official battle ended before reconnect became ready"); }),
       ]);
       void run.catch((error: unknown) => {
+        if (isCommandReconciliation(error)) return;
         console.error("Official reconnect BattleNode failed", error);
         queueMicrotask(() => { throw error; });
       });
@@ -4251,6 +4400,7 @@ async function boot(options: BootOptions = {}): Promise<void> {
       run.then(() => { throw new Error("BattleNode ended before its startup-ready callback"); }),
     ]);
     void run.catch((error: unknown) => {
+      if (isCommandReconciliation(error)) return;
       console.error("Startup-owned BattleNode failed", error);
       queueMicrotask(() => { throw error; });
     });

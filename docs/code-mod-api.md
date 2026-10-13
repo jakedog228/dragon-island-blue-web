@@ -40,6 +40,7 @@ data/rules.json
   "displayName": "Total Conversion",
   "apiVersion": 4,
   "mode": "offline",
+  "saveCompatibility": "dependent",
   "dependencies": { "dev.example.library": "^1.2.0" },
   "optionalDependencies": { "dev.example.hud": ">=1.0.0 <2.0.0" },
   "conflicts": { "dev.example.rival-conversion": "*" },
@@ -67,6 +68,36 @@ The ZIP reader still rejects path traversal, duplicate paths, malformed manifest
 cycles, and archive bombs. Those are package-integrity and resource-exhaustion checks, not a
 capability boundary. Current limits are 64 MiB compressed, 128 MiB expanded, 512 entries, and
 32 MiB per entry.
+
+### Save compatibility declarations
+
+`saveCompatibility` is optional: `"dependent"` (the default) or `"neutral"`. The Mod Manager
+labels these **Save-dependent** and **Save-neutral** in the detail modal, including individual
+releases; overview cards, rows and load order omit them. This is separate from gameplay/presentation
+tags and the package's source.
+
+- **Save-neutral** means the mod can be added, removed or updated without a save migration or
+  leaving saved content that needs the mod to load. Read-only tools, presentation changes and
+  helpers that persist only ordinary, independently valid base-game values qualify. Changes to
+  progression need not be reversible; they must remain usable without this mod. Private mod
+  preferences outside the game save also qualify.
+- **Save-dependent** covers new monsters, items, persistent custom identities/state, migrations,
+  or any other behavior that needs a matching setup. Leave the field out if this is uncertain.
+
+Offline save comparisons omit neutral releases when checking added/removed/updated mods and the
+relative order of dependent mods. Complete ordered selections still appear in history and restore
+exactly; the activation digest still includes every package. Offline history also records the
+semantic archive fingerprint before any mod executes. When that archive and the dependent mods
+match, a neutral selection change may alter the effective data fingerprint without warning (for
+example Less Rare Monsters' encounter weights). Changed archives, changed output from an identical
+selection, and histories without enough archive evidence retain content warnings. Unknown save history
+remains unknown. Historical releases without the field stay dependent: a new declaration never
+retroactively certifies an older package. Publish a new version when adding the field.
+
+This is an author's promise, not an enforced permission or a guarantee of universal compatibility.
+Full-trust code retains access to saves. Dependencies, declared conflicts, ordering and observed
+runtime interference still apply to neutral mods, and all mods remain Offline-only. Older clients
+with a strict manifest parser need an engine update before importing the new field.
 
 ## Entry environment
 
@@ -206,7 +237,21 @@ mod order:
   audio, diagnostics, and deterministic `advanceTime` function;
 - `game:loaded` — receives `LoadedGame` and may return a replacement;
 - `startup:loaded` — receives the startup result/save session plus game, stage, scenes, audio, and
-  content.
+  content;
+- `player:ready` — Offline world play only, after the selected starter or restored player exists
+  and before the first scene starts its entry dialogue. Receives `player`, `game`, `stage`,
+  `audio`, `rng`, `nextMonsterInstanceId`, async `checkpoint`, async `reveal` (finishes the startup
+  fade), and `setDebugState` (publishes a reader as `render_game_to_text().modStartup`). Handlers
+  are awaited in mod order. Pending dungeon state remains in checkpoints during this phase.
+
+The four standalone playable-character examples use this phase and the discoverable
+`web/content/characterEggGift.ts` module to offer one guaranteed golden Egg per character/save.
+Party, reserves, and both pooled and equipped soul stones count as ownership; owning a character
+already consumes eligibility. Keep or Feed consumes a presented gift, paid repeats are disabled,
+and an interrupted unclaimed reel retries on load. Version-independent namespaced tutorial flags
+persist the receipt through browser saves and native backup/export. The ordinary golden-Egg level
+rule applies (level 1 for a new starter-only party). Gifts run after starter selection and before
+Leslie's first-town dialogue. These updated packages require a client with `player:ready` support.
 
 `mods:ready` runs before all of these, once every package entry has executed, and receives the
 interference report. It is where a compatibility patch belongs.
@@ -251,7 +296,7 @@ undo and confirmed deletion controls; **Move save** applies the chosen destinati
 Names are shell labels and export filenames only;
 imports adopt the filename without changing in-game identity.
 
-Each save remembers its last played ordered mod packages. Different selections show a warning
+Each save remembers its last played ordered mod packages. Different save-dependent selections show a warning
 on that slot and a page warning summary in the gate; unknown history uses a neutral information
 marker, distinct from the amber changed-setup warning.
 The compact **View setup** disclosure compares the previous and selected mods in load order,
@@ -344,6 +389,12 @@ to prevent a second encounter draw. Cleared POIs and inactive/completed quests c
 replayed with their authored monsters, levels, dialogue and rewards. Battle settlement remains
 durable. Ordinary-only destinations keep their original checks; turning the toggle off restores
 normal eligibility. Version 1.1.1 removes 1.1.0's dependency on undeployed engine predicates.
+Version 1.1.2 declares save neutrality: its preferences live separately and its gameplay helpers
+persist ordinary base-game state, without introducing mod-owned species, items or save schemas.
+Wand Pointer Trail 1.1.2 also declares neutrality; it only draws pointer feedback and stores its
+own display preference. Content-adding examples retain the conservative dependent default.
+Less Rare Monsters 2.0.1 is also neutral: its 15 encounter-weight changes only affect how often
+existing species appear and introduce no mod-owned saved identities.
 
 Its dungeon reveal is also the profile's worked example of a presentation change that has to reach
 input to be real. Revealing a room draws it, but the shipped scene arbitration
@@ -389,6 +440,10 @@ emission density immediately in startup, world, and dungeon Options. It also dem
 up DOM, ticker, and display-object ownership across renderer restarts and mod disposal.
 
 ## PvP adapters
+
+Gameplay mods are currently disabled in PvP, even with matching selections and installed adapters.
+Only reviewed cosmetic mods are admitted; custom action UI has been removed. The API below is
+retained development infrastructure, not an enabled play path.
 
 Single-player hooks are not implicitly supported by the two-human PvP board.
 The [PvP adapter API](pvp-adapter-api.md) provides shared deterministic rules, strict custom

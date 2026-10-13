@@ -12,7 +12,9 @@ const webModules = import.meta.glob([
 ]) as Record<string, () => Promise<unknown>>;
 const loaders = new Map<string, () => Promise<unknown>>([
   ...Object.entries(webModules).map(([path, load]) => [
-    `web/${path.replace(/^\.\.\//, "")}`,
+    // Vite normalizes matches in this directory to ./ even though the glob starts at ../.
+    // Public module IDs are always relative to src, including these content siblings.
+    path.startsWith("./") ? `web/content/${path.slice(2)}` : `web/${path.replace(/^\.\.\//, "")}`,
     load,
   ] as const),
   ["@dib/engine", () => import("@dib/engine")],

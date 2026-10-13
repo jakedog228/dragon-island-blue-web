@@ -55,6 +55,12 @@ const record = (overrides: Partial<PlayProfileRecord> = {}): PlayProfileRecord =
 });
 
 describe("play profile records", () => {
+  it("retains release-specific neutrality and treats legacy metadata conservatively", () => {
+    const storage = new MemoryStorage();
+    const legacy = record().mods[0]!;
+    rememberPlayProfile(storage, record({ mods: [legacy, { ...legacy, id: "dev.example.hud", saveCompatibility: "neutral" }] }));
+    expect(readPlayProfiles(storage)[0]!.mods.map(mod => mod.saveCompatibility)).toEqual(["dependent", "neutral"]);
+  });
   it("remembers newest first, refreshes in place, and forgets without touching saves", () => {
     const storage = new MemoryStorage();
     storage.setItem("dib-save-v1:sha-256:dib-content-v7:feed:slot-1", "{}");

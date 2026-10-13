@@ -61,7 +61,7 @@ try {
   let page = await context.newPage();
   observe(page, false);
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  await page.locator('[data-offline-shell="ready"]').waitFor({ timeout: 120_000 });
+  await page.locator('[data-offline-shell="ready"]').waitFor({ state: "attached", timeout: 120_000 });
   console.log("Engine cache ready; importing local content");
   await page.locator('input[name="asset-archive"]').setInputFiles(archive);
   await play(page);
@@ -76,7 +76,7 @@ try {
   observe(page, true);
   const response = await page.goto(url + "?offline-proof=1", { waitUntil: "domcontentloaded" });
   assert(response?.fromServiceWorker(), "Cold offline navigation must be served by the worker");
-  await page.locator('[data-offline-shell="ready"]').waitFor({ timeout: 120_000 });
+  await page.locator('[data-offline-shell="ready"]').waitFor({ state: "attached", timeout: 120_000 });
   await page.getByRole("button", { name: "Play Offline", exact: true }).waitFor({ timeout: 120_000 });
   assert(await page.getByRole("radio", { name: "Online (Beta)", exact: true }).isDisabled());
   await page.locator('[data-offline-shell="ready"]').scrollIntoViewIfNeeded();

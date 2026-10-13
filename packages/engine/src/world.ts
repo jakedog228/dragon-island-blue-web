@@ -815,8 +815,8 @@ export class WorldTrip {
     | "breeder"
     | "rewards"
   > | undefined {
-    // The shipped world corpus has at most one candidate in a selected populator. The source
-    // advances one candidate per build and never seeks a later candidate after a rejection.
+    // The source advances one candidate per build and never seeks a later candidate after a
+    // rejection. A fresh world encounter populator starts with its first candidate.
     const candidate = populator.fixedEncounters?.[0];
     if (candidate === undefined) return undefined;
 

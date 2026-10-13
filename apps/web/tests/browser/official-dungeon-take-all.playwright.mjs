@@ -135,6 +135,16 @@ const finishBattle = async () => {
       continue;
     }
     assert.equal(decision.type, "battle.playerTurn");
+    const capture = committed.projection.player.party.length < 3
+      ? decision.captureTargets.find((target) => target.availableCardLevels.some((level) => committed.projection.player.captureCards[level] > 0))
+      : undefined;
+    if (capture !== undefined) {
+      await execute({
+        type: "battle.attemptCapture", battleId: decision.battleId, actorId: decision.actorId,
+        targetId: capture.targetId, cardLevel: capture.availableCardLevels.find((level) => committed.projection.player.captureCards[level] > 0),
+      });
+      continue;
+    }
     if (!summoned && decision.summonableSpiritTypes.length > 0) {
       await execute({
         type: "battle.summonSpirit",

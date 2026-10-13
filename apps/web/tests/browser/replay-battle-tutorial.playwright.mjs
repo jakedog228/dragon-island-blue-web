@@ -31,6 +31,8 @@ try {
     // First arrival is suppressed at Field 1. Seed 7 makes Field 2's first occurrence roll pass;
     // the level-100 party then takes WorldEncounter.allowSkip's exact easy-ordinary branch.
     window.__DIB_TEST_POI_NAME__ = "1-1_Field_1";
+    window.__DIB_TEST_WORLD_POI_WINS__ = { "1-1_Field_1": 1 };
+    window.__DIB_TEST_WORLD_COMPLETED_POIS__ = ["1-1_Field_1"];
     window.__DIB_TEST_WORLD_SEED__ = 7;
     window.__DIB_TEST_WORLD_PARTY__ = { size: 3, battingOrderSize: 3, levelRange: [100, 100] };
     window.__DIB_TEST_PLAYER_PROFILE__ = {
@@ -101,6 +103,7 @@ try {
     buttons: ["Ok"],
   }]);
   await page.screenshot({ path: path.join(outputDir, "replay-battle-popup.png") });
+  await advance(550);
 
   const okCenter = await page.evaluate(() => {
     let result = null;

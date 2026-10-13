@@ -173,6 +173,7 @@ try {
   };
   /** Clicks a popup button by its rendered label text. */
   const clickPopupButton = async (text) => {
+    await advance(550);
     const center = await page.evaluate((wanted) => {
       const visible = (node) => {
         for (let current = node; current; current = current.parent) {
@@ -184,8 +185,8 @@ try {
       while (stack.length > 0) {
         const node = stack.pop();
         if (node?.text === wanted && visible(node)) {
-          const target = node.parent ?? node;
-          const bounds = target.getBounds();
+          // Popup rows include a stretched plate; touch arbitration uses the label rectangle.
+          const bounds = node.getBounds();
           const screen = window.__PIXI_APP__.renderer.screen;
           return {
             x: bounds.x + bounds.width / 2,

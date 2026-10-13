@@ -115,4 +115,17 @@ describe("KeyboardShortcutRouter", () => {
     expect(target.listener).toBeUndefined();
     expect(() => router.register(handler)).toThrow(/disposed/);
   });
+
+  it("leaves recovery-dialog keys to the DOM before consulting gameplay handlers", () => {
+    const target = new FakeKeyboardTarget();
+    const router = new KeyboardShortcutRouter(target);
+    let calls = 0;
+    router.register(() => { calls++; return true; });
+    const button = { tagName: "BUTTON", closest: (selector: string) =>
+      selector === '[data-game-shortcuts="blocked"]' ? {} : null } as unknown as EventTarget;
+    for (const key of ["1", "Escape", "Enter", "Tab"]) {
+      expect(target.dispatch(key, { target: button })).toEqual({ prevented: false, stopped: false });
+    }
+    expect(calls).toBe(0);
+  });
 });

@@ -13,7 +13,8 @@ const forbiddenExtensions = new Set([
 const licensedFontHashes = new Map([
   ["d0a980bb5e0a5142d67caddf37dd28eab5aea167e758d2ac0de5f4e9af3998dc", "Marker Felt (evolve-chain rows)"],
 ]);
-// Content-neutral engine-shell artwork. Bind each reviewed hash to its stable output path so this
+// Engine-shell icons and the explicitly requested PvP promotional capture. Bind each hash to its
+// stable output path so this
 // exception cannot admit an arbitrary PNG (or even a renamed copy) into the distributable build.
 const shellIconHashes = new Map([
   ["app-icon-192.png", "bc5c2b81462e3df3645274c21771c44d0de46552c5e614bc3f38ec4393adf9cf"],

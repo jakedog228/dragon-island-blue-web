@@ -1,4 +1,8 @@
 const MOD_ID = "dev.dragonislandblue.pirate-panic-dancer";
+dibMod.hooks.on("player:ready", async ({ value }) => {
+  const { offerCharacterEgg } = await dibMod.modules.load("web/content/characterEggGift.ts");
+  await offerCharacterEgg(value, dibMod.manifest.id, "PirateMan");
+});
 const NAMESPACE = "ModPirate";
 const MONSTER_PATH = `${NAMESPACE}.PirateMan`;
 const PANIC_PATH = `${NAMESPACE}.Panic`;

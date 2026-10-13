@@ -1,17 +1,21 @@
 # Mod Manager and author profiles
 
 **Multiplayer PvP** is included as a normal Official listing in Browse and Installed, with search,
-tags, author filtering, grid/list layouts, a description, and a lobby-layout screenshot gallery.
-The preview uses labeled neutral artwork; in-game PvP reuses the selected package's Tournament
-background, popup frames and menu buttons throughout the flow.
+tags, author filtering, grid/list layouts, a description, and an actual in-game lobby screenshot.
+The capture uses the selected package's popup frames and menu buttons, as they appear in play.
 Enable/disable uses the shared staged Apply/Discard flow. It remains available without the remote
-catalog; there is no download or Remove action for this built-in release. It adds **PvP** directly
-below **Tournament** in the Arena menu. The listing explains the server-adapter requirement for
+catalog and counts as one mod in the Installed, enabled, Load order, Apply and launcher totals.
+PvP needs no load-order position; the Load order screen counts it alongside the sortable mods.
+The launcher updates immediately after Apply, including when PvP is the only changed mod.
+It remains compatible with Official play.
+There is no download or Remove action for this built-in release. It adds **PvP** directly
+below **Tournament** in the Arena menu. The listing explains that PvP accepts reviewed cosmetic mods only and rejects
 gameplay mods and does not claim native support for other gameplay mods. Its local release token is presentation metadata,
 never a downloadable digest or a relaxation of archive/trust checks.
 
 The opt-in `apps/web/tests/browser/pvp-listing.playwright.mjs` covers desktop/phone Browse,
-details/gallery, staged changes, Installed, and unavailable-catalog search against `DIB_WEB_URL`.
+details/gallery, staged changes, Installed, PvP-only and mixed mod counts, and unavailable-catalog
+search against `DIB_WEB_URL`.
 
 The launcher's **Mod Manager** button, directly under the asset archive field, opens the one place
 for Offline mods: browsing, installing, enabling, disabling, removing, load order and conflicts.
@@ -27,6 +31,25 @@ setting files on it replaces the whole selection, exactly as the old picker did,
 scenarios use it.
 
 This is a port feature. It does not change original-game fidelity or permit mods in Official play.
+
+The detail modal shows each package/release's **Save-neutral** or **Save-dependent** label, taken from its
+manifest's `saveCompatibility` declaration. Neutral mods can vary between save setups without
+mod-mismatch warnings; dependent mods retain byte/order comparisons. The saved pre-mod archive
+fingerprint also lets neutral data overlays (such as
+Less Rare Monsters' encounter weights) vary without a content warning when the archive and
+dependent setup still match. Missing declarations default
+to dependent, including historical releases. Neutrality describes save portability, not whether a
+mod changes gameplay, and does not override dependencies, conflicts or runtime interference.
+See [the declaration contract](code-mod-api.md#save-compatibility-declarations). Official and
+community catalog release metadata comes from the validated archive; labels are never inferred
+from tags, names or publisher identity. Existing immutable releases are not relabeled.
+
+For the opt-in save comparison smoke test, start a strict Vite dev server and run
+`node apps/web/tests/browser/save-neutral-mods.playwright.mjs` (set `DIB_WEB_URL` if needed).
+It uses isolated scenario saves, needs no IPA/API, and captures the neutral, dependent-change and
+content-change disclosures at phone/desktop widths. Expect removing the neutral HUD to retain
+the save and show **Save-compatible setup**; removing its content mod or changing content still
+warns. The broader `mod-library.playwright.mjs` scenario also checks catalog/imported labels.
 
 ## Sources
 
@@ -51,6 +74,8 @@ specific to this game rather than a generic app kit:
   toolbar, remembered per device in `dib.mods.view.v1`; grid by default). A grid tile *is* the
   mod's first screenshot, with source, tags, title, the one-line summary, author and the single
   primary action laid over a bottom scrim; hovering lowers the scrim to show more of the frame.
+  Browse tiles keep only the version on the right of the source/tags row; tags wrap as whole
+  labels. Save compatibility appears only in the detail modal, keeping cards and rows compact.
   Over art, tiles always read light-on-dark whatever the theme. List rows keep dividers and a small
   thumbnail. A mod without a screenshot gets a plain tile or row; there is no generated
   placeholder art.
@@ -116,8 +141,9 @@ edges still win, so a forbidden drop snaps back as far as the rules require and 
 ("Realtime Combat (WIP) asks to load after Devtools"). Each row shows its **recommended**
 position, the order the mods' own load priorities and declared rules produce with every manual
 move forgotten: quiet ("Recommended spot") where the mod already is, gold ("Recommended: 3rd")
-where a move took it elsewhere, plus a note above the list. Rows also show a non-default load
-priority and the rules that mod declares ("loads after Devtools"). **Use recommended order**
+where a move took it elsewhere, plus a note above the list. Rows also show the author's recommended
+priority (including the default 0; lower numbers load first) and the rules that mod declares
+("loads after Devtools"). Manual moves do not change that recommendation. **Use recommended order**
 forgets manual moves. When the selection cannot
 resolve, the tab is marked "needs attention", the launcher opens the manager on it, Apply is
 disabled, and the problem is shown with the fix: **Load anyway** for a declared conflict, or the

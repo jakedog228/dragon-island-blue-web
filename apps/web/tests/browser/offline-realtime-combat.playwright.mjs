@@ -214,8 +214,8 @@ try {
     }
     return false;
   });
-  await advance(250); // let the stock 0.2-second pop-in become visible while combat continues
-  assert.equal((await state()).activePopup, "captureChooser");
+  // The actor may die during the opening tween: opening must remain free even in that case.
+  await advance(100);
   await screenshot("capture-under-fire");
   const captureInvalidations = s.codeMods.realtimeCombat.invalidatedChoices;
   s = await wait((s) => s.codeMods.realtimeCombat.invalidatedChoices > captureInvalidations,

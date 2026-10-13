@@ -19,6 +19,12 @@ function listing(id: string, modId: string, versions: string[], source: "officia
 const device = (modId: string, version: string): DevicePackage => ({ digest: `${modId}@${version}`, modId, version, displayName: modId, byteLength: 100 });
 
 describe("mod library model", () => {
+  it("labels installed versions individually instead of borrowing the latest release's neutrality", () => {
+    const entries = buildLibrary({ device: [device("dev.a", "1.0.0"),
+      { ...device("dev.a", "1.1.0"), saveCompatibility: "neutral" }],
+      inventory: [], staged: [], applied: [], listings: [] });
+    expect(entries[0]!.versions.map(version => version.saveCompatibility)).toEqual(["neutral", "dependent"]);
+  });
   it("groups versions per mod, keeps provenance separate from local imports, and flags updates", () => {
     const library = buildLibrary({
       device: [device("dev.a", "1.0.0"), device("dev.a", "1.1.0"), device("dev.local", "0.1.0"), device("dev.off", "2.0.0")],
@@ -38,7 +44,7 @@ describe("mod library model", () => {
     expect(byId["dev.off"]).toMatchObject({ origin: "official", update: undefined });
     expect(byId["dev.local"]).toMatchObject({ origin: "local", listingId: undefined });
     // Evicted bytes stay visible so the player can download them again.
-    expect(byId["dev.gone"]!.versions).toEqual([{ digest: "dev.gone@1.0.0", version: "1.0.0", byteLength: 0, stored: false }]);
+    expect(byId["dev.gone"]!.versions).toEqual([{ digest: "dev.gone@1.0.0", version: "1.0.0", byteLength: 0, stored: false, saveCompatibility: "dependent" }]);
   });
   it("derives one primary action per listing", () => {
     const mod = listing("L-a", "dev.a", ["1.1.0", "1.0.0"]);

@@ -244,6 +244,13 @@ try {
   await page.waitForTimeout(50);
   await captureCanvas(page, "tournament-exit-day-town.png");
 
+  // Advancing the day may unlock the next authored Leslie town-entry conversation.
+  await advance(1_000);
+  for (let index = 0; index < 24 && (await state()).overlay?.kind === "townEnterChat"; index++) {
+    await advance(550);
+    await invokeLabel("guildQuestChat");
+  }
+
   snapshot = await waitFor(
     (value) => value.mode === "town" && value.locked === false &&
       value.town?.buildings?.length > 0 && value.overlay == null,

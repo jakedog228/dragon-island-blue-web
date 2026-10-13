@@ -15,6 +15,17 @@ async function setup() {
 }
 const fields = { modId: "test.author.mod", title: "A mod", description: "Test description", tags: ["Gameplay"] };
 describe("community catalog", () => {
+  it("persists each release's save declaration from the validated package across restart", async () => {
+    const { catalog, directory } = await setup();
+    const draft = await catalog.create("alice", fields);
+    const old = await catalog.upload("alice", draft.id, draft.revision, zipMod());
+    expect(old.releases[0]?.saveCompatibility).toBe("dependent");
+    const next = await catalog.upload("alice", draft.id, old.revision, zipMod(undefined, "1.1.0", "neutral"));
+    const published = await catalog.edit("alice", draft.id, { ...fieldsWithoutId(), published: true, revision: next.revision, screenshots: [] });
+    const restored = await new ModCatalog(directory).get(draft.id);
+    expect(restored.releases).toEqual(published.releases);
+    expect(restored.releases.map(release => release.saveCompatibility)).toEqual(["neutral", "dependent"]);
+  });
   it("makes a restorable snapshot and supports operator takedowns that authors cannot undo", async () => {
     const { catalog, directory } = await setup();
     const draft = await catalog.create("alice", fields);

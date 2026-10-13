@@ -145,6 +145,7 @@ try {
     "terminal Tournament scene did not finish entering",
   );
 
+  await advance(50); // Render the newly mounted Plot before reading Pixi worldAlpha.
   const plot = await page.evaluate(() => {
     const stack = [window.__PIXI_APP__.stage];
     while (stack.length > 0) {
@@ -153,7 +154,11 @@ try {
         const bounds = node.getBounds();
         return {
           parentLabel: node.parent?.label ?? null,
-          worldAlpha: node.worldAlpha,
+          worldAlpha: (() => {
+            let alpha = 1;
+            for (let current = node; current; current = current.parent) alpha *= current.alpha;
+            return alpha;
+          })(),
           bounds: { w: bounds.width, h: bounds.height },
         };
       }
@@ -174,7 +179,7 @@ try {
   // A real pointer tap after the source two-second early-finish gate must reach the Plot blocker.
   await advance(1_250);
   await clickLabel("sourceNewGamePlot");
-  snapshot = await waitFor((value) => value.mode === "town", "ending plot did not return to town");
+  snapshot = await waitFor((value) => value.mode === "town" && value.overlay?.kind !== "tournament", "ending plot did not return to town");
   assert.equal(snapshot.overlay, null);
   assert.deepEqual(errors, [], errors.join("\n"));
   console.log("tournament-finished: PASS");

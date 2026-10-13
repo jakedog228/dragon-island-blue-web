@@ -3,6 +3,7 @@ import {
   type CodeModPackage,
   type ResolveCodeModProfileOptions,
   type ResolvedCodeModProfile,
+  type ModSaveCompatibility,
 } from "@dib/mod-kernel";
 import {
   createFullTrustCodeModRuntime,
@@ -20,6 +21,7 @@ export interface ImportedModProfile {
     readonly displayName: string;
     readonly digest: string;
     readonly priority: number;
+    readonly saveCompatibility?: ModSaveCompatibility;
   }[];
   readonly advisories: readonly string[];
   /** Where the activated profile overlapped itself. Carried so callers need not hold the runtime. */
@@ -89,6 +91,7 @@ function profileProjection(
       displayName: pkg.manifest.displayName,
       digest: pkg.digest,
       priority: pkg.manifest.priority,
+      saveCompatibility: pkg.manifest.saveCompatibility,
     }))),
     advisories: Object.freeze(profile.advisories.map((advisory) => advisory.message)),
     interference,

@@ -37,7 +37,7 @@ fs.mkdirSync(outputDirectory, { recursive: true });
 
 let browser;
 
-async function openWorld({ archive, startWorld, startPoi }) {
+async function openWorld({ archive, startWorld, startPoi, monster = CUSTOM_MONSTER_SHORT_TYPE }) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
   const errors = [];
@@ -68,7 +68,7 @@ async function openWorld({ archive, startWorld, startPoi }) {
       captureCards: { 1: 1, 2: 0, 3: 0 },
       tutorialFlags: ["Tutorial0", "Tutorial1", "Tutorial2", "flashTownExit"],
     };
-  }, { world: startWorld, poi: startPoi, monster: CUSTOM_MONSTER_SHORT_TYPE });
+  }, { world: startWorld, poi: startPoi, monster });
   await page.goto(process.env.DIB_WEB_URL ?? "http://localhost:5173", {
     waitUntil: "domcontentloaded",
   });
@@ -110,7 +110,7 @@ async function openWorld({ archive, startWorld, startPoi }) {
   assert.equal(snapshot.currentPoi, startPoi);
   assert.deepEqual(
     snapshot.party.map(({ shortType }) => shortType),
-    [CUSTOM_MONSTER_SHORT_TYPE],
+    [monster],
     "the parent-only custom Jobs child did not produce a usable world-party member",
   );
   assert.deepEqual(errors, [], errors.join(" | "));
@@ -257,6 +257,7 @@ try {
     archive: sourceArchive,
     startWorld: ORIGINAL_SOURCE_WORLD,
     startPoi: NORMAL_TO_CUSTOM_EXIT,
+    monster: "MetalSlime",
   });
   try {
     await followCardinalSlide(cardinalRoute);

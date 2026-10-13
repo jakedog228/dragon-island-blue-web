@@ -1,4 +1,4 @@
-import { compareModVersions, ModPackageError, type CodeModManifestV4 } from "@dib/mod-kernel";
+import { compareModVersions, ModPackageError, type CodeModManifestV4, type ModSaveCompatibility } from "@dib/mod-kernel";
 import type { CatalogMod, ModRelease, ModSource } from "@dib/mod-kernel/catalog";
 import type { InstalledCatalogMod } from "./communityClient.js";
 
@@ -7,6 +7,7 @@ export type LibraryOrigin = ModSource | "local";
 export const LIBRARY_ORIGINS: readonly LibraryOrigin[] = ["official", "community", "local"];
 
 export interface StoredVersion {
+  readonly saveCompatibility?: ModSaveCompatibility;
   readonly digest: string;
   readonly version: string;
   readonly byteLength: number;
@@ -30,6 +31,7 @@ export interface LibraryEntry {
   readonly update: ModRelease | undefined;
 }
 export interface DevicePackage {
+  readonly saveCompatibility?: ModSaveCompatibility;
   readonly digest: string;
   readonly modId: string;
   readonly version: string;
@@ -59,7 +61,8 @@ export function buildLibrary(input: {
   };
   for (const row of input.device) {
     touch(row.modId, row.displayName, row.version).versions.set(row.digest,
-      { digest: row.digest, version: row.version, byteLength: row.byteLength, stored: true });
+      { digest: row.digest, version: row.version, byteLength: row.byteLength, stored: true,
+        saveCompatibility: row.saveCompatibility ?? "dependent" });
   }
   for (const row of input.inventory) {
     const group = touch(row.modId, row.displayName, row.version);
@@ -69,8 +72,10 @@ export function buildLibrary(input: {
   }
   const entries: LibraryEntry[] = [];
   for (const [modId, group] of groups) {
-    const versions = [...group.versions.values()].sort((a, b) => compareModVersions(b.version, a.version));
     const listing = group.listingId ? input.listings.find((mod) => mod.id === group.listingId) : undefined;
+    const versions = [...group.versions.values()].map(version => ({ ...version,
+      saveCompatibility: version.saveCompatibility ?? listing?.releases.find(release => release.digest === version.digest)?.saveCompatibility ?? "dependent" as const,
+    })).sort((a, b) => compareModVersions(b.version, a.version));
     const newestStored = versions[0]?.version;
     const latest = listing?.releases[0];
     entries.push({

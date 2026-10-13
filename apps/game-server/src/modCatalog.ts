@@ -306,7 +306,8 @@ export class ModCatalog {
       if (image) mod.screenshots = [...new Set([...mod.screenshots, digest])];
       else if (pkg) {
         const release: ModRelease = { version: pkg.manifest.version, digest, byteLength: bytes.length,
-          createdAt: new Date().toISOString(), dependencies: { ...pkg.manifest.dependencies }, apiVersion: pkg.manifest.apiVersion };
+          createdAt: new Date().toISOString(), dependencies: { ...pkg.manifest.dependencies }, apiVersion: pkg.manifest.apiVersion,
+          saveCompatibility: pkg.manifest.saveCompatibility };
         mod.releases.unshift(release);
       }
       mod.revision++;

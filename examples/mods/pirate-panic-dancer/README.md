@@ -3,6 +3,11 @@
 An Offline mod that adds **Pirate**, a Water monster built from Giant
 Turtle's exact natural stat progression, quality, rarity stars, and renderer scale.
 
+Version 1.0.1 offers one Pirate-only golden Egg when absent from the party, bench, and
+stored/equipped soul stones. New saves receive it after starter selection and before Leslie's
+intro dialogue. Keep or Feed consumes the gift for that save, with no paid repeat. Requires the
+updated client; companion saves are optional.
+
 Pirate has no usable moves. His one passive, **Panic**, combines the engine's Berserk control
 handoff with the native Easy Target taunt value. Whenever he receives an ordinary turn, the mod
 queues the game's real `Utility.Dance` transaction (100 TU, no damage and no targets) instead of

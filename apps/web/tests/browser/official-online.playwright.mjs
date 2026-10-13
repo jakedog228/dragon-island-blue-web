@@ -40,7 +40,7 @@ const createSession = async () => {
   return response.json();
 };
 let apiSession = await createSession();
-assert.equal(apiSession.pack.simulationVersion, "official-game-v22");
+assert.equal(apiSession.pack.simulationVersion, "official-game-v25");
 const authHeaders = () => ({
   Authorization: `Bearer ${apiSession.token}`,
   "Content-Type": "application/json",
@@ -128,17 +128,19 @@ try {
   await page.locator('input[name="asset-archive"]').setInputFiles(archive);
   await page.getByLabel("Offline", { exact: true }).waitFor();
   await page.getByLabel("Online (Beta)", { exact: true }).waitFor();
+  await page.getByLabel("Offline", { exact: true }).check();
+  await page.locator('[data-local-save-status].content-gate__mode-detail-status--success').waitFor();
 
   await page.getByRole("button", { name: "Offline settings" }).click();
   let storageDialog = page.getByRole("dialog", { name: "Offline settings" });
-  await storageDialog.getByText("Offline save slots").waitFor();
+  await storageDialog.getByRole("navigation", { name: "Offline save pages" }).waitFor();
   assert.equal(
-    await storageDialog.getByRole("button", { name: /^Export Slot / }).count(),
+    await storageDialog.getByRole("button", { name: /^Export Slot /, includeHidden: true }).count(),
     3,
     "Offline settings omitted a slot export control",
   );
   assert.equal(
-    await storageDialog.getByRole("button", { name: /^Undo last save in Slot / }).count(),
+    await storageDialog.getByRole("button", { name: /^Undo last save in Slot /, includeHidden: true }).count(),
     3,
     "Offline settings omitted rollback controls",
   );
@@ -168,7 +170,7 @@ try {
     "Online settings omitted a slot export control",
   );
   assert.equal(
-    await storageDialog.getByRole("button", { name: /^Undo last save in Slot / }).count(),
+    await storageDialog.getByRole("button", { name: /^Undo last save in Slot /, includeHidden: true }).count(),
     0,
     "Online settings exposed rollback",
   );

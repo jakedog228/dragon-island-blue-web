@@ -1,3 +1,5 @@
+import type { ModSaveCompatibility } from "./index.js";
+
 /** Public community DTOs. No private player IDs or credentials belong in these types. */
 export interface AuthorProfile {
   id: string;
@@ -8,6 +10,8 @@ export interface AuthorProfile {
   revision: number;
 }
 export interface ModRelease {
+  /** Absent on historical releases; treated as dependent. */
+  saveCompatibility?: ModSaveCompatibility;
   version: string;
   digest: string;
   byteLength: number;

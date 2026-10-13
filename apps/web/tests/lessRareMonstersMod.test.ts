@@ -7,6 +7,7 @@ import { GameData, loadWorldData } from "@dib/gamedata/browser";
 import { createFullTrustCodeModRuntime } from "../src/content/codeModRuntime.js";
 import { importContentArchive, type ImportedContentPackage, type ReadonlyPlistValue } from "../src/content/archivePackage.js";
 import { fingerprintContentPackage } from "../src/content/contentFingerprint.js";
+import { compareSaveMods, saveContentChanged } from "../src/content/saveModComparison.js";
 
 const workspace = resolve(import.meta.dirname, "../../..");
 const root = resolve(workspace, "examples/mods/less-rare-monsters");
@@ -102,7 +103,14 @@ describe("Less Rare Monsters native conversion", () => {
       expect(modded.resources.text("anything")).toBe("original text");
       expect(modded.resources.url("anything")).toBe("blob:original");
       const originalHash = await fingerprintContentPackage(base);
-      expect((await fingerprintContentPackage(modded)).digest).not.toBe(originalHash.digest);
+      const overlayHash = await fingerprintContentPackage(modded);
+      expect(overlayHash.digest).not.toBe(originalHash.digest);
+      const pkg = runtime.profile.packages[0]!;
+      expect(pkg.manifest.saveCompatibility).toBe("neutral");
+      const selected = [{ ...pkg.manifest, digest: pkg.digest, byteLength: undefined }];
+      const previous = { lastMods: selected, lastContent: overlayHash.digest, lastBaseContent: originalHash.digest };
+      expect(compareSaveMods(selected, [], saveContentChanged(previous, [], originalHash.digest, originalHash.digest)).kind).toBe("same");
+      expect(saveContentChanged({ lastMods: [], lastContent: originalHash.digest }, selected, overlayHash.digest, originalHash.digest)).toBe(false);
     } finally { runtime.dispose(); }
   });
 

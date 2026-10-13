@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { loadGameData } from "@dib/gamedata";
-import { createPvpBattle, type PlayerChoice } from "@dib/engine";
 import type { PvpMatchViewV1 } from "@dib/game-protocol";
 import { PvpClient, PvpClientError } from "../src/pvp/pvpClient.js";
 import { PvpMatchController } from "../src/pvp/pvpMatchController.js";
-import { pvpChosenTargets, pvpLayout, pvpTargets, pvpRulesMismatch } from "../src/pvp/pvpBattleModel.js";
+import { pvpRulesMismatch } from "../src/pvp/pvpBattleModel.js";
 import { pvpModEnabled, setPvpModEnabled } from "../src/pvp/pvpMod.js";
 
 const setup = { logicPackId: `logic-v1:${"a".repeat(64)}`, mods: [] };
@@ -99,27 +97,5 @@ describe("PvP selection and display", () => {
     const blocked = { getItem: () => null, setItem: () => { throw new Error("quota"); } };
     setPvpModEnabled(true, blocked); expect(pvpModEnabled(blocked)).toBe(true);
     setPvpModEnabled(false, blocked); expect(pvpModEnabled(blocked)).toBe(false);
-  });
-  it.each([ ["iphone", 480, 320], ["ipad", 512, 384] ] as const)("scales the new %s board to its window", (mode, w, h) => {
-    const layout = pvpLayout(mode); expect(layout.w).toBe(w); expect(layout.h).toBe(h);
-    expect(layout.cellW * 4 + layout.margin * 2).toBeLessThanOrEqual(w);
-    expect(layout.controlsY + layout.buttonH * 2).toBeLessThan(h);
-    expect(layout.modButton.x).toBeGreaterThan(layout.margin + w * 0.22); // Delay ends here.
-    expect(layout.modButton.x + layout.modButton.w).toBeLessThan(w * 0.68); // More abilities starts here.
-    expect(layout.modButton.y).toBeGreaterThan(layout.controlsY + layout.buttonH * 2);
-    expect(layout.modButton.y + layout.modButton.h).toBeLessThan(h);
-    expect(layout.titleFont).toBe(h * 0.045);
-  });
-  it("resolves target pools relative to either human team and rejects duplicate or wrong-side selections", () => {
-    const { restored } = createPvpBattle(loadGameData(), [[{ shortType: "FireCub", level: 5 }], [{ shortType: "SnowCub", level: 5 }]], () => 0.5);
-    const choice: PlayerChoice = { slot: "usable1", abilityPath: "test", displayName: "test", tier: undefined, activationLength: 100, targeting: { kind: "enemies", count: 2 } };
-    const requirement = pvpTargets(restored.session, "t1m0:SnowCub", choice);
-    expect(requirement.enemyCount).toBe(1);
-    expect(pvpChosenTargets(requirement, ["t0m0:FireCub"])).toEqual(["t0m0:FireCub"]);
-    expect(pvpChosenTargets(requirement, ["t1m0:SnowCub"])).toBeUndefined();
-    expect(pvpChosenTargets(requirement, ["t0m0:FireCub", "t0m0:FireCub"])).toBeUndefined();
-    const mixed = pvpTargets(restored.session, "t1m0:SnowCub", { ...choice, targeting: { kind: "mixed", enemyCount: 0, friendlyCount: 1, allEnemies: true, allFriends: false } });
-    expect(pvpChosenTargets(mixed, ["t1m0:SnowCub", "t0m0:FireCub"])).toEqual(["t0m0:FireCub", "t1m0:SnowCub"]);
-    expect(pvpTargets(restored.session, "t1m0:SnowCub", { ...choice, targeting: { kind: "self" } })).toMatchObject({ enemyCount: 0, friendCount: 0 });
   });
 });

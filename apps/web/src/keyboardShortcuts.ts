@@ -102,7 +102,9 @@ function isEditableKeyboardTarget(target: EventTarget | null): boolean {
   const candidate = target as {
     readonly tagName?: unknown;
     readonly isContentEditable?: unknown;
+    readonly closest?: (selector: string) => unknown;
   };
+  if (candidate.closest?.('[data-game-shortcuts="blocked"]')) return true;
   if (candidate.isContentEditable === true) return true;
   if (typeof candidate.tagName !== "string") return false;
   return ["INPUT", "TEXTAREA", "SELECT"].includes(candidate.tagName.toUpperCase());

@@ -73,7 +73,7 @@ try {
         top: rect.top,
         bottom: rect.bottom,
         cardHeight: card?.getBoundingClientRect().height ?? 0,
-        dialogHeight: rect.height,
+        dialogHeight: node.clientHeight,
         builderOverflowY: builder === null ? "missing" : getComputedStyle(builder).overflowY,
       };
     });

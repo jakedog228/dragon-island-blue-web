@@ -6,7 +6,8 @@ describe("included PvP listing", () => {
   it("has real gallery metadata and uses normal installed/enabled listing states", () => {
     expect(PVP_LISTING.screenshots).toEqual([]);
     expect(PVP_LISTING.description).toContain("Arena");
-    expect(PVP_LISTING.description).toContain("not supported yet");
+    expect(PVP_LISTING.description).toContain("Only reviewed cosmetic mods are allowed");
+    expect(PVP_LISTING.description).toContain("even when both players select the same mod");
     expect(listingState(PVP_LISTING, [pvpLibraryEntry(false, false)])).toBe("installed");
     expect(listingState(PVP_LISTING, [pvpLibraryEntry(true, false)])).toBe("enabled");
   });

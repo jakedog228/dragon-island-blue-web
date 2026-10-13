@@ -9,6 +9,7 @@ import type { SaveSlotId } from "@dib/save-protocol";
 import type { GameAuthority } from "./gameAuthorityClient.js";
 import { RemoteGameAuthorityError } from "./gameAuthorityClient.js";
 import type { InstalledCommandResult, InstalledSlotProjection } from "./gameAuthorityClient.js";
+import { BattleChatHistory } from "./battleChatHistory.js";
 
 export interface CommandCoordinatorHooks {
   /**
@@ -65,6 +66,7 @@ export class CommandStateResyncedError extends Error {
  * and every retry reuses the byte-equivalent command envelope so a lost response cannot reroll.
  */
 export class CommandCoordinator {
+  readonly battleChatHistory: BattleChatHistory;
   private currentProjection: InstalledSlotProjection;
   private inFlight = false;
   private uncertainEnvelope: GameCommandEnvelopeV1 | undefined;
@@ -72,6 +74,7 @@ export class CommandCoordinator {
   private readonly retryAttempts: number;
   private readonly listeners = new Set<(pending: boolean) => void>();
   private readonly projectionListeners = new Set<(projection: InstalledSlotProjection) => void>();
+  private readonly reconciliationListeners = new Set<() => void>();
 
   constructor(
     private readonly authority: GameAuthority,
@@ -83,6 +86,7 @@ export class CommandCoordinator {
       throw new Error(`projection ${initialProjection.slotId} does not belong to ${slotId}`);
     }
     this.currentProjection = initialProjection;
+    this.battleChatHistory = new BattleChatHistory(initialProjection);
     this.commandId = options.commandId ?? defaultCommandId;
     this.retryAttempts = options.retryAttempts ?? 1;
     if (!Number.isSafeInteger(this.retryAttempts) || this.retryAttempts < 0 || this.retryAttempts > 5) {
@@ -110,6 +114,12 @@ export class CommandCoordinator {
     return () => { this.projectionListeners.delete(listener); };
   }
 
+  /** A fresh projection replaced the live scene's decision; its owner must reconstruct that scene. */
+  subscribeReconciliation(listener: () => void): () => void {
+    this.reconciliationListeners.add(listener);
+    return () => { this.reconciliationListeners.delete(listener); };
+  }
+
   async submit(
     command: GameCommandV1,
     hooks: CommandCoordinatorHooks = {},
@@ -117,7 +127,10 @@ export class CommandCoordinator {
     if (this.inFlight) throw new CommandBusyError();
     if (this.uncertainEnvelope !== undefined) {
       const recovered = await this.recoverPending();
-      if (recovered !== undefined) throw new CommandRecoveredBeforeNewIntentError(recovered);
+      if (recovered !== undefined) {
+        for (const listener of this.reconciliationListeners) listener();
+        throw new CommandRecoveredBeforeNewIntentError(recovered);
+      }
     }
     const decision = this.currentProjection.decision;
     const envelope: GameCommandEnvelopeV1 = {
@@ -128,6 +141,7 @@ export class CommandCoordinator {
       command,
     };
     this.setPending(true);
+    let reconciled = false;
     hooks.onIntentAccepted?.();
     try {
       const result = await this.sendWithRetry(envelope);
@@ -139,6 +153,7 @@ export class CommandCoordinator {
         this.uncertainEnvelope = envelope;
       } else if (isRevisionConflict(error)) {
         this.setProjection(await this.authority.bootstrap(this.slotId));
+        reconciled = true;
         const resynced = new CommandStateResyncedError(error);
         hooks.onRejected?.(resynced);
         throw resynced;
@@ -147,12 +162,13 @@ export class CommandCoordinator {
       throw error;
     } finally {
       this.setPending(false);
+      if (reconciled) for (const listener of this.reconciliationListeners) listener();
     }
   }
 
   async resync(): Promise<InstalledSlotProjection> {
     if (this.inFlight) throw new CommandBusyError();
-    if (this.uncertainEnvelope !== undefined) throw new CommandRecoveryRequiredError();
+    if (this.uncertainEnvelope !== undefined) await this.recoverPending();
     this.setProjection(await this.authority.bootstrap(this.slotId));
     return this.currentProjection;
   }
@@ -163,14 +179,31 @@ export class CommandCoordinator {
     const envelope = this.uncertainEnvelope;
     if (envelope === undefined) return undefined;
     this.setPending(true);
+    let reconciled = false;
     try {
       const result = await this.sendWithRetry(envelope);
       this.setProjection(result.projection);
       this.uncertainEnvelope = undefined;
       return result;
+    } catch (error) {
+      if (!isRetryableTransportFailure(error)) this.uncertainEnvelope = undefined;
+      if (isRevisionConflict(error)) {
+        this.setProjection(await this.authority.bootstrap(this.slotId));
+        reconciled = true;
+        throw new CommandStateResyncedError(error);
+      }
+      throw error;
     } finally {
       this.setPending(false);
+      if (reconciled) for (const listener of this.reconciliationListeners) listener();
     }
+  }
+
+  /** Resume a scene whose rejected command ended its presentation coroutine. */
+  async recoverScene(error: RemoteGameAuthorityError): Promise<never> {
+    await this.resync();
+    for (const listener of this.reconciliationListeners) listener();
+    throw new CommandStateResyncedError(error);
   }
 
   private async sendWithRetry(envelope: GameCommandEnvelopeV1): Promise<InstalledCommandResult> {
@@ -196,9 +229,14 @@ export class CommandCoordinator {
     if (projection.slotId !== this.slotId) {
       throw new Error(`projection ${projection.slotId} does not belong to ${this.slotId}`);
     }
+    this.battleChatHistory.observe(projection);
     this.currentProjection = projection;
     for (const listener of this.projectionListeners) listener(projection);
   }
+}
+
+export function isCommandReconciliation(error: unknown): boolean {
+  return error instanceof CommandRecoveredBeforeNewIntentError || error instanceof CommandStateResyncedError;
 }
 
 function isRetryableTransportFailure(error: unknown): boolean {

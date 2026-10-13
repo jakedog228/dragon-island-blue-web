@@ -86,6 +86,11 @@ export class PvpHttp {
       if (request.method === "GET" && path === "/api/pvp/matches/current") {
         send(response, 200, { match: await service.read(principal) ?? null }); return;
       }
+      if (request.method === "POST" && path === "/api/pvp/matches/current") {
+        // Reopening with a different local mod selection must pass the same admission policy.
+        service.validateSetup(await readBody(request));
+        send(response, 200, { match: await service.read(principal) ?? null }); return;
+      }
       const match = /^\/api\/pvp\/matches\/([a-f0-9-]+)(?:\/(commands|cancel))?$/.exec(path);
       if (match) {
         const id = z.uuid().parse(match[1]);

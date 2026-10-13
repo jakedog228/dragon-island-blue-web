@@ -78,6 +78,10 @@ try {
   // so rows are inert and the menu container arbitrates the tap. Assert an OWNER exists rather
   // than a listener on the row, which is the property that actually keeps the control live.
   const invokePointerLabel = async (label) => {
+    for (let frame = 0; frame < 600 && !await pixiLabelVisible(page, label); frame++) {
+      await page.evaluate(() => window.advanceTime(25));
+      await page.waitForTimeout(1);
+    }
     const owner = await tapPixiLabel(page, label);
     assert(owner, `missing interactive Pixi node ${label}`);
   };
@@ -238,6 +242,11 @@ try {
     path.join(outputDir, "restored-state.json"),
     `${JSON.stringify(restored, null, 2)}\n`,
   );
+  // The arrival chat covers the retained waypoint popup until its dialogue is acknowledged.
+  for (let index = 0; index < 8 && (await state()).floorDetectionChat !== undefined; index++) {
+    await page.keyboard.press("Enter");
+    await page.evaluate(() => window.advanceTime(500));
+  }
   await invokePointerLabel("waypointGoTo");
   const travelled = await waitForState(
     (value) =>

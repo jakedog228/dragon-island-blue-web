@@ -21,6 +21,8 @@
 
 
 
+
+
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -71,7 +73,7 @@ async function openSession(browser, name, { mods, init = {} }) {
   const errors = [];
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.stack ?? error}`));
   page.on("console", (message) => {
-    if (message.type() === "error") errors.push(`console: ${message.text()}`);
+    if (message.type() === "error") errors.push(`console: ${message.text()} (${message.location().url ?? "unknown URL"})`);
   });
   await page.addInitScript((config) => {
     localStorage.setItem("dib.portSettings.v1", JSON.stringify({
@@ -646,9 +648,12 @@ const published = (name) => existsSync(resolve(repositoryRoot, "examples/mods", 
 const selected = requested.length > 0 ? requested : Object.keys(recipes).filter(published);
 mkdirSync(outputDirectory, { recursive: true });
 
+const browserChannel = process.env.DIB_MOD_SHOT_BROWSER_CHANNEL;
 const browser = await chromium.launch({
   headless: true,
-  args: ["--use-gl=angle", "--use-angle=swiftshader", "--mute-audio"],
+  ...(browserChannel ? { channel: browserChannel } : {}),
+  args: ["--use-gl=angle", browserChannel && process.platform === "win32"
+    ? "--use-angle=d3d11" : "--use-angle=swiftshader", "--mute-audio"],
 });
 const failures = [];
 const results = [];

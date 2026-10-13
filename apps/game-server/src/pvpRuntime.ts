@@ -23,11 +23,12 @@ export function createInstalledPvpService(options: {
       ...installation.profiles.map(({ id, logicPackId, rules }) => ({ id, logicPackId, rules })),
       { id: "pvp-baseline-v1", logicPackId: options.logicPackId, rules: [] },
     ]),
-    officialParty: async (playerId, slotId, logicPackId) => {
+    officialParty: async () => { throw new Error("Installed PvP requires the atomic entrant projection"); },
+    officialEntrant: async (playerId, slotId, logicPackId) => {
       if (logicPackId !== options.logicPackId) throw new PvpServiceError("INCOMPATIBLE", "Your Official slot and PvP server use different rules.");
       const state = await options.readOfficialState(playerId, slotId);
       if (!state) throw new PvpServiceError("NOT_FOUND", "This Official save slot no longer exists.");
-      try { return projectOfficialPvpParty(options.data, state); }
+      try { return { party: projectOfficialPvpParty(options.data, state), spirits: { energy: state.profile.spiritEnergy, savedXp: state.profile.spiritSavedXp } }; }
       catch (error) { throw new PvpServiceError("INVALID_REQUEST", error instanceof Error ? error.message : "Your Official party cannot enter PvP."); }
     },
   });

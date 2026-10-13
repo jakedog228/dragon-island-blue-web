@@ -12,6 +12,12 @@ import { stageGeometry } from "./stageGeometry.mjs";
 const url = process.env.DIB_WEB_URL ?? "http://localhost:5173";
 const outputDir = path.resolve("output/analyze-turn-continuation");
 const FRAME_MS = 1000 / 60;
+
+
+
+
+
+const BATTLE_SEED = 3;
 fs.mkdirSync(outputDir, { recursive: true });
 
 const browser = await chromium.launch({
@@ -28,10 +34,11 @@ async function openBattle(encounter) {
       errors.push(`console: ${message.text()}`);
     }
   });
-  await page.addInitScript((configured) => {
+  await page.addInitScript(({ configured, seed }) => {
     window.advanceTime = () => Promise.resolve();
+    window.__DIB_TEST_BATTLE_SEED__ = seed;
     window.__DIB_TEST_ENCOUNTER__ = configured;
-  }, encounter);
+  }, { configured: encounter, seed: BATTLE_SEED });
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await loadLocalContent(page);
   await page.waitForFunction(() => typeof window.render_game_to_text === "function");

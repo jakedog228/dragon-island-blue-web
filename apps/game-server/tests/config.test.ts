@@ -83,6 +83,7 @@ describe("loadGameServerConfig", () => {
       DIB_COMMUNITY_ORIGIN: "https://authors.example.com", DIB_GAME_PUBLIC_ORIGIN: "https://play.example.com",
       DIB_COMMUNITY_DATA_DIR: join(paths.repositoryRoot, "community") };
     expect(loadGameServerConfig({ environment }).communityOrigin).toBe(environment.DIB_COMMUNITY_ORIGIN);
+    expect(problemsOf(() => loadGameServerConfig({ environment: { ...environment, DIB_GAME_PUBLIC_ORIGIN: "https://play.example.com, alias.example.com" } })).join(" ")).toContain("DIB_GAME_PUBLIC_ORIGIN");
     expect(problemsOf(() => loadGameServerConfig({ environment: { ...environment, DIB_GAME_PUBLIC_ORIGIN: environment.DIB_COMMUNITY_ORIGIN } })).join(" ")).toContain("different");
     expect(problemsOf(() => loadGameServerConfig({ environment: { ...environment, DIB_GAME_PUBLIC_ORIGIN: environment.DIB_COMMUNITY_ORIGIN + "/" } })).join(" ")).toContain("bare");
     expect(problemsOf(() => loadGameServerConfig({ environment: { ...environment, DIB_COMMUNITY_DATA_DIR: "" } })).join(" ")).toContain("DIB_COMMUNITY_DATA_DIR");

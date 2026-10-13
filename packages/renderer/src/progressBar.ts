@@ -1,6 +1,7 @@
-import { Container, Rectangle, Sprite, Texture } from "pixi.js";
+import { Container, Graphics, NineSliceSprite, Rectangle, Sprite, Texture } from "pixi.js";
 import { BAR_GROW_SPEED, cropTextureRect, easeBarStep, formatBarFraction, type PixelRect } from "./barMath.js";
 import { pointSprite } from "./pointSprite.js";
+import { CONTENT_SCALE_FACTOR } from "./scale9.js";
 
 export interface ProgressBarBarOffset {
   x: number;
@@ -68,6 +69,11 @@ export interface ProgressBarOpts {
 export class ProgressBar extends Container {
   private readonly background: Sprite;
   private readonly foreground: Sprite;
+  private readonly foregroundTexture: Texture;
+  private extended: {
+    root: Container; background: NineSliceSprite; foreground: NineSliceSprite;
+    mask: Graphics; width: number; fillWidth: number;
+  } | undefined;
   private readonly foregroundInset: { x: number; y: number };
   private readonly fullForegroundRect: PixelRect;
   private readonly horizontal: boolean;
@@ -113,6 +119,7 @@ export class ProgressBar extends Container {
 
 
 
+    this.foregroundTexture = opts.foregroundTexture;
     this.foreground = pointSprite(opts.foregroundTexture);
     const f = opts.foregroundTexture.frame;
     this.fullForegroundRect = { x: f.x, y: f.y, w: f.width, h: f.height };
@@ -142,11 +149,55 @@ export class ProgressBar extends Container {
   /** Cocos `contentSize` belongs to the ProgressBar's background sprite; labels are children and
    * do not enlarge it. Parent layout must use these values instead of Pixi union bounds. */
   get contentWidth(): number {
-    return this.background.width;
+    return this.extended?.width ?? this.background.width;
   }
 
   get contentHeight(): number {
     return this.background.height;
+  }
+
+  /** Mod-only horizontal extension: stretch the central texture column, preserving
+   * both native end regions. Width is in unscaled points; undefined restores the source bar.
+   * The fill is clipped in destination space, with no texel/HP rounding or segment counts. */
+  setExtendedWidth(width?: number): void {
+    if (width === this.extended?.width) return;
+    if (width !== undefined && (!Number.isFinite(width) || width < this.background.width || !this.horizontal)) {
+      throw new Error("ProgressBar: extended width requires a horizontal bar at least its native width");
+    }
+    if (width === undefined) {
+      this.extended?.root.destroy({ children: true });
+      this.extended = undefined;
+      this.background.visible = this.foreground.visible = true;
+    } else {
+      if (!this.extended) {
+        const slice = (texture: Texture): NineSliceSprite => {
+          // Texture-derived geometry, not a new iPhone/iPad layout constant: leave a
+          // symmetric central strip (one texel for odd widths, two for even widths).
+          const cap = Math.floor((texture.width - 1) / 2);
+          const sprite = new NineSliceSprite({ texture, leftWidth: cap, rightWidth: cap,
+            topHeight: 0, bottomHeight: 0, width: texture.width, height: texture.height });
+          sprite.scale.set(1 / CONTENT_SCALE_FACTOR);
+          return sprite;
+        };
+        const root = new Container();
+        const foreground = slice(this.foregroundTexture), background = slice(this.background.texture);
+        const mask = new Graphics();
+        foreground.position.copyFrom(this.foreground.position);
+        foreground.tint = this.foreground.tint;
+        root.addChild(foreground, mask, background);
+        foreground.mask = mask;
+        this.addChildAt(root, 0);
+        this.extended = { root, foreground, background, mask, width, fillWidth: 0 };
+        this.background.visible = this.foreground.visible = false;
+      }
+      const extended = this.extended;
+      extended.width = width;
+      extended.fillWidth = this.fullForegroundRect.w / CONTENT_SCALE_FACTOR + width - this.background.width;
+      extended.background.width = width * CONTENT_SCALE_FACTOR;
+      extended.foreground.width = extended.fillWidth * CONTENT_SCALE_FACTOR;
+    }
+    this.applyCrop();
+    this.placeLabel();
   }
 
   /** Current eased fill, used by the source's particlesWhenFull presentation adapter. */
@@ -176,6 +227,7 @@ export class ProgressBar extends Container {
   /** `[[hpBar foregroundBar] setColor:]` (followup-consts.md §1) — tints the foreground sprite. */
   setTint(color: number): void {
     this.foreground.tint = color;
+    if (this.extended) this.extended.foreground.tint = color;
   }
 
 
@@ -208,6 +260,14 @@ export class ProgressBar extends Container {
   }
 
   private applyCrop(): void {
+    if (this.extended) {
+      const { mask, foreground, fillWidth } = this.extended;
+      const width = fillWidth * this.currentPercent;
+      foreground.visible = this.currentPercent > 0;
+      mask.clear().rect(foreground.x + (this.backwards ? fillWidth - width : 0), foreground.y,
+        width, this.fullForegroundRect.h / CONTENT_SCALE_FACTOR).fill(0xffffff);
+      return;
+    }
     const cropped = cropTextureRect(this.fullForegroundRect, this.currentPercent, this.horizontal, this.backwards);
     const base = this.foreground.texture;
     this.foreground.texture = new Texture({
@@ -248,7 +308,7 @@ export class ProgressBar extends Container {
     if (!this.labelNode) return;
     const bounds = this.labelNode.getLocalBounds();
     this.labelNode.position.set(
-      this.background.width / 2 - (bounds.x + bounds.width / 2) * this.labelNode.scale.x,
+      this.contentWidth / 2 - (bounds.x + bounds.width / 2) * this.labelNode.scale.x,
       this.background.height / 2 - (bounds.y + bounds.height / 2) * this.labelNode.scale.y,
     );
   }

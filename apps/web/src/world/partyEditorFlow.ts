@@ -103,6 +103,20 @@ const STAT_ENUM: ReadonlyArray<readonly [1 | 2 | 3 | 4 | 5, StatName]> = [
   [5, "Resist"],
 ];
 
+/** The part of a committed authoritative party-command result the editor consumes. */
+export interface AuthoritativePartyCommandResult {
+  readonly projection: {
+    readonly player: {
+      readonly ownedSoulStones: readonly {
+        readonly stoneId: string;
+        readonly element: string;
+        readonly level: number;
+        readonly sourceTypeId?: string | undefined;
+      }[];
+    };
+  };
+}
+
 export interface PartyEditorFlowOpts {
   parent: Container;
   assets: AssetLibrary;
@@ -121,9 +135,10 @@ export interface PartyEditorFlowOpts {
     nowSeconds: number,
   ) => { ok: true; cost: number } | { ok: false; cost: number } |
     Promise<{ ok: true; cost: number } | { ok: false; cost: number }>;
+
   submitAuthoritative?: (
     command: Extract<GameCommandV1, { type: `party.${string}` }>,
-  ) => Promise<void>;
+  ) => Promise<AuthoritativePartyCommandResult>;
   /**
    * Local-simulation quest events. Install only when no Official authority is active — the command
    * service already reduces the same mutation server-side. See `localGuildQuestEventOption`.
@@ -403,12 +418,13 @@ export class PartyEditorFlow {
     }
     const chosen = await this.showStonePicker();
     if (chosen === null || this.disposed) return;
-    await this.opts.submitAuthoritative?.({
+    const committed = await this.opts.submitAuthoritative?.({
       type: "party.insertSoulStone",
       instanceId: member.instanceId,
       stoneId: chosen,
     });
     this.opts.party.insertSoulStoneByToken(member.instanceId, chosen);
+    this.adoptCommittedSoulStoneIds(committed);
     this.opts.onStateChanged();
     this.refreshNode(
       this.session.selectedBattingIndex(),
@@ -465,11 +481,12 @@ export class PartyEditorFlow {
       return false;
     }
     return await this.showDestructiveConfirm(instanceId, "ConfirmMakeSoulStone", async () => {
-      await this.opts.submitAuthoritative?.({
+      const committed = await this.opts.submitAuthoritative?.({
         type: "party.convertToSoulStone",
         instanceId,
       });
       const stone = this.opts.party.convertToSoulStone(instanceId);
+      this.adoptCommittedSoulStoneIds(committed);
 
 
       this.opts.onQuestEvent?.({ id: 3 });
@@ -501,6 +518,15 @@ export class PartyEditorFlow {
         this.session.selectedReserveIndex(),
       );
     });
+  }
+
+  /**
+   * After the local mirror of a committed convert/insert, take the authority's ids for the pool so
+   * the next insert echoes a server-issued id instead of a client-minted one.
+   */
+  private adoptCommittedSoulStoneIds(committed: AuthoritativePartyCommandResult | undefined): void {
+    if (committed === undefined) return;
+    this.opts.party.adoptOwnedSoulStoneIds(committed.projection.player.ownedSoulStones);
   }
 
   private handleElementHelp(element: string): void {

@@ -20,6 +20,7 @@ import {
   OFFICIAL_GAME_V22_SIMULATION_VERSION,
   OFFICIAL_GAME_V23_SIMULATION_VERSION,
   OFFICIAL_GAME_V24_SIMULATION_VERSION,
+  OFFICIAL_GAME_V25_SIMULATION_VERSION,
   OfficialGameCommandResultV12Schema,
   OfficialGameCommandResultV13Schema,
   OfficialGameCommandResultV14Schema,
@@ -33,6 +34,7 @@ import {
   OfficialGameCommandResultV22Schema,
   OfficialGameCommandResultV23Schema,
   OfficialGameCommandResultV24Schema,
+  OfficialGameCommandResultV25Schema,
   OfficialGameProjectionV12Schema,
   OfficialGameProjectionV13Schema,
   OfficialGameProjectionV14Schema,
@@ -46,6 +48,7 @@ import {
   OfficialGameProjectionV22Schema,
   OfficialGameProjectionV23Schema,
   OfficialGameProjectionV24Schema,
+  OfficialGameProjectionV25Schema,
   PRESENTATION_EVENT_VERSION,
   RegistrationInfoV1Schema,
   ScoreboardResponseV1Schema,
@@ -70,6 +73,7 @@ import {
   type OfficialGameCommandResultV22,
   type OfficialGameCommandResultV23,
   type OfficialGameCommandResultV24,
+  type OfficialGameCommandResultV25,
   type OfficialGameProjectionV13,
   type OfficialGameProjectionV14,
   type OfficialGameProjectionV15,
@@ -82,6 +86,7 @@ import {
   type OfficialGameProjectionV22,
   type OfficialGameProjectionV23,
   type OfficialGameProjectionV24,
+  type OfficialGameProjectionV25,
   type ScoreboardResponseV1,
   type SlotProjectionV1,
 } from "@dib/game-protocol";
@@ -106,7 +111,8 @@ export type InstalledSlotProjection =
   | OfficialGameProjectionV21
   | OfficialGameProjectionV22
   | OfficialGameProjectionV23
-  | OfficialGameProjectionV24;
+  | OfficialGameProjectionV24
+  | OfficialGameProjectionV25;
 export type InstalledCommandResult =
   | GameCommandResultV1
   | OfficialGameCommandResultV13
@@ -120,7 +126,8 @@ export type InstalledCommandResult =
   | OfficialGameCommandResultV21
   | OfficialGameCommandResultV22
   | OfficialGameCommandResultV23
-  | OfficialGameCommandResultV24;
+  | OfficialGameCommandResultV24
+  | OfficialGameCommandResultV25;
 
 /** Browser/server mechanics contract. A different simulation must never be entered with this
  * client: command availability and projection semantics can otherwise fail only after gameplay
@@ -128,6 +135,7 @@ export type InstalledCommandResult =
 export const OFFICIAL_CLIENT_SIMULATION_VERSION = OFFICIAL_GAME_SIMULATION_VERSION;
 
 export interface GameAuthority {
+  setRecoveryPrompt?(prompt: (error: RemoteGameAuthorityError) => Promise<void>): void;
   /** Scoped authenticated PvP transport. Offline clients never receive the Official token. */
   readonly pvpTransport?: (path: string, init: RequestInit) => Promise<Response>;
   readonly trustTier: "official";
@@ -165,6 +173,11 @@ export class RemoteGameAuthorityError extends Error {
 }
 
 export class RemoteGameAuthority implements GameAuthority {
+  private recoveryPrompt: ((error: RemoteGameAuthorityError) => Promise<void>) | undefined;
+
+  setRecoveryPrompt(prompt: (error: RemoteGameAuthorityError) => Promise<void>): void {
+    this.recoveryPrompt = prompt;
+  }
   readonly pvpTransport = async (path: string, init: RequestInit): Promise<Response> => {
     if (!/^\/api\/pvp\/(?:invites|join|matches(?:\/|$))/.test(path)) throw new Error("Invalid PvP route");
     const send = () => {
@@ -323,6 +336,9 @@ export class RemoteGameAuthority implements GameAuthority {
     if (this.pack.simulationVersion === OFFICIAL_GAME_V24_SIMULATION_VERSION) {
       return OfficialGameProjectionV24Schema.parse(value);
     }
+    if (this.pack.simulationVersion === OFFICIAL_GAME_V25_SIMULATION_VERSION) {
+      return OfficialGameProjectionV25Schema.parse(value);
+    }
     if (this.pack.simulationVersion === OFFICIAL_GAME_V21_SIMULATION_VERSION) {
       return OfficialGameProjectionV21Schema.parse(value);
     }
@@ -365,6 +381,9 @@ export class RemoteGameAuthority implements GameAuthority {
     if (this.pack.simulationVersion === OFFICIAL_GAME_V24_SIMULATION_VERSION) {
       return OfficialGameCommandResultV24Schema.parse(value);
     }
+    if (this.pack.simulationVersion === OFFICIAL_GAME_V25_SIMULATION_VERSION) {
+      return OfficialGameCommandResultV25Schema.parse(value);
+    }
     if (this.pack.simulationVersion === OFFICIAL_GAME_V21_SIMULATION_VERSION) {
       return OfficialGameCommandResultV21Schema.parse(value);
     }
@@ -398,14 +417,22 @@ export class RemoteGameAuthority implements GameAuthority {
   }
 
   private async authorizedJson(path: string, init: RequestInit): Promise<unknown> {
-    try {
-      return await this.authorizedJsonOnce(path, init);
-    } catch (error) {
-      if (!(error instanceof RemoteGameAuthorityError) || error.code !== "SESSION_EXPIRED") {
-        throw error;
+    for (;;) {
+      try {
+        try {
+          return await this.authorizedJsonOnce(path, init);
+        } catch (error) {
+          if (!(error instanceof RemoteGameAuthorityError) || error.code !== "SESSION_EXPIRED") throw error;
+          await this.reauthenticate();
+          return await this.authorizedJsonOnce(path, init);
+        }
+      } catch (error) {
+        if (this.recoveryPrompt === undefined || !(error instanceof RemoteGameAuthorityError) ||
+            (!error.retryable && error.code !== "PACK_UNAVAILABLE")) throw error;
+        // Preserve the exact serialized intent, including command ID/revision, across arbitrary
+        // outage duration. The owning battle/Egg/transition continues only on the committed reply.
+        await this.recoveryPrompt(error);
       }
-      await this.reauthenticate();
-      return await this.authorizedJsonOnce(path, init);
     }
   }
 
@@ -551,7 +578,7 @@ async function requestJson(url: string, init: RequestInit): Promise<unknown> {
         ? `Official online is unavailable (HTTP ${response.status}). ` +
           "Make sure the authoritative server is running: `pnpm game:dev`."
         : `authoritative service returned HTTP ${response.status} without JSON`,
-      response.status >= 500,
+      response.status >= 500 || response.ok,
     );
   }
   if (!response.ok) {

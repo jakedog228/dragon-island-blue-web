@@ -34,6 +34,28 @@ const delay = (view: PvpMatchViewV1, actorId = "t0m0:FireCub") => ({ commandId: 
   decisionId: view.decisionId, action: { type: "delay", actorId } });
 
 describe("PvP service", () => {
+  it("captures Official spirits atomically with the roster and keeps summon receipts exact", async () => {
+    const entrant = { party: [{ shortType: "FireCub", level: 5 }], spirits: { energy: 100, savedXp: { Resistance: 1 } } };
+    const officialEntrant = vi.fn(async () => structuredClone(entrant));
+    const store = new InMemoryPvpStore();
+    const options = { store, profiles: new Map([["base", data]]),
+      compatibility: new PvpCompatibilityRegistry([], [{ id: "base", logicPackId, rules: [] }]),
+      officialParty: async () => { throw new Error("must use atomic entrant projection"); }, officialEntrant,
+      now: () => 1_000_000, randomSource: () => 0.5 };
+    const service = new PvpService(options);
+    const invite = await service.invite(host, { requestId: randomUUID(), setup, entry: { source: "official", slotId: "slot-1" } });
+    const joined = await service.join(guest, { ...request("SnowCub"), code: invite.code });
+    expect(officialEntrant).toHaveBeenCalledTimes(1);
+    const command = { ...delay(joined), action: { type: "spirit", actorId: "t0m0:FireCub", shortType: "Resistance" } };
+    const summoned = await service.command(host, joined.matchId, command);
+    expect(summoned.turn).toBe(0);
+    expect(summoned.revision).toBe(joined.revision + 1);
+    const restarted = new PvpService(options);
+    expect(await restarted.command(host, joined.matchId, command)).toEqual(summoned);
+    await expect(restarted.command(host, joined.matchId, { ...delay(summoned), action: command.action })).rejects.toThrow("not available");
+    expect(entrant.spirits).toEqual({ energy: 100, savedXp: { Resistance: 1 } });
+    await expect(service.invite(host, { requestId: randomUUID(), setup, entry: { source: "official", slotId: "slot-1", spirits: entrant.spirits } })).rejects.toThrow();
+  });
   it("refuses to replay a stored match when a restarted server reuses its profile ID for different rules", async () => {
     const store = new InMemoryPvpStore(); const first = harness(store);
     const { joined } = await pair(first.service);

@@ -1628,7 +1628,16 @@ export class BattleCore {
   }
 
 
-  summonSpirit(shortType: string, savedXp: number): string {
+
+
+
+
+
+
+
+
+
+  summonSpirit(shortType: string, savedXp: number, team: 0 | 1 = 0): string {
     if (this.winnerValue !== undefined || this.retreatedValue) {
       throw new Error("BattleCore.summonSpirit: battle has ended");
     }
@@ -1636,11 +1645,11 @@ export class BattleCore {
     const level = spiritCombatLevel(monster, savedXp);
     const baseStatsRaw = {} as Record<StatName, number>;
     for (const stat of STAT_NAMES) baseStatsRaw[stat] = baseStatRaw(monster, stat, level);
-    const id = battleLivingId(0, this.nextConstructionIndex[0]++, shortType);
+    const id = battleLivingId(team, this.nextConstructionIndex[team]++, shortType);
     const living: LivingState = {
       id,
       sourceInstanceId: undefined,
-      team: 0,
+      team,
       shortType,
       monster,
       level,
@@ -1671,7 +1680,7 @@ export class BattleCore {
     living.maxHp = this.statOf(living, "MaxHP");
     living.hp = living.maxHp;
     this.livings.set(id, living);
-    this.setSummon(0, id, undefined, "spirit");
+    this.setSummon(team, id, undefined, "spirit");
     return id;
   }
 

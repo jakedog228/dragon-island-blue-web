@@ -231,6 +231,8 @@ button.ml-chip:hover { background: var(--ml-hover); color: var(--ml-text); }
 .ml-tile:has(.ml-tile__corner) .ml-tile__eyebrow { padding-right: 52px; }
 .ml-tile--art:has(.ml-tile__corner) .ml-tile__eyebrow { padding-right: 0; }
 .ml-tile__version { flex: none; font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; }
+.ml-tile__categories { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
+.ml-tile__tag { max-width: 100%; overflow-wrap: anywhere; }
 .ml-tile__title { display: block; width: fit-content; max-width: 100%; margin: 0; padding: 0; border: 0; background: none; color: var(--ml-text); font-size: 25px; line-height: 1.1; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
 h4.ml-tile__title { cursor: default; }
 .ml-tile--art .ml-tile__title { text-shadow: 0 1px 2px #0009; }
@@ -239,7 +241,7 @@ button.ml-tile__title:hover { text-decoration: underline 2px var(--ml-gold); tex
 .ml-tile__badges { display: flex; flex-wrap: wrap; gap: 2px 12px; }
 .ml-tile__foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 10px; margin-top: auto; padding-top: 8px; }
 .ml-tile--art .ml-tile__foot { margin-top: 6px; }
-.ml-tile__author { color: var(--ml-faint); font-size: 13.5px; }
+.ml-tile__author { max-width: 100%; overflow-wrap: anywhere; color: var(--ml-faint); font-size: 13.5px; }
 .ml-tile__foot .ml-row__meta { margin: 0; }
 .ml-tile__foot .ml-row__actions { margin-left: auto; }
 .ml-tile__corner { position: absolute; top: 12px; right: 12px; }

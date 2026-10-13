@@ -1,11 +1,13 @@
 import { officialEncounterResources, withoutEncounterRenderers } from "./encounterPresentation.js";
 export { officialEncounterResources, withoutEncounterRenderers } from "./encounterPresentation.js";
 import {
+  loadChatDefinition,
   loadDungeonData,
   loadCollectionCatalog,
   loadSourceTutorialTopics,
   loadTownPortalDestinations,
   parseDungeonTreasureData,
+  type ChatDefinition,
   type DungeonResourceSource,
   type DungeonTreasureData,
   type CollectionGoalDefinition,
@@ -30,6 +32,7 @@ import {
   canOfferSaveMe,
   collectionGoalProgress,
   buildPlayerChoices,
+  dungeonGemSlotWeights,
   dungeonTerminalFlowIdentity,
   dungeonRunUsesLegacyTopology,
   emptyGuildQuestStateSnapshot,
@@ -79,6 +82,7 @@ import {
   OFFICIAL_GAME_V22_SIMULATION_VERSION,
   OFFICIAL_GAME_V23_SIMULATION_VERSION,
   OFFICIAL_GAME_V24_SIMULATION_VERSION,
+  OFFICIAL_GAME_V25_SIMULATION_VERSION,
   OFFICIAL_EGG_POOL_MAX_ENTRIES,
   CollectionClaimsV1Schema,
   CurrentLogicPackDescriptorV1Schema,
@@ -98,6 +102,7 @@ import {
   OfficialGameProjectionV22Schema,
   OfficialGameProjectionV23Schema,
   OfficialGameProjectionV24Schema,
+  OfficialGameProjectionV25Schema,
   SlotProjectionV1Schema,
   CurrentGameCommandV1Schema,
   type GameCommandV1,
@@ -119,6 +124,7 @@ import {
   type OfficialGameProjectionBodyV22,
   type OfficialGameProjectionBodyV23,
   type OfficialGameProjectionBodyV24,
+  type OfficialGameProjectionBodyV25,
   type OfficialGameProjectionV13,
   type OfficialGameProjectionV14,
   type OfficialGameProjectionV15,
@@ -131,6 +137,7 @@ import {
   type OfficialGameProjectionV22,
   type OfficialGameProjectionV23,
   type OfficialGameProjectionV24,
+  type OfficialGameProjectionV25,
   type OfficialGameProjectionV12,
   type OfficialDefeatDecisionV1,
   type OfficialDungeonBattleReturnV1,
@@ -810,6 +817,21 @@ interface OfficialInternalReductionContext {
   /** v21-only: accept replay-derived Arena Escape without inventing Arena loss/Tournament return.
    * The live client remains in state 6; the committed town location is recovery-only. */
   readonly allowArenaEscapeStall?: boolean;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  readonly sourceStoryRules?: boolean;
 }
 
 interface OfficialInternalReductionResult extends CommandReducerResult<OfficialGameStateV1> {
@@ -1574,13 +1596,28 @@ export function validateOfficialGameSupport(options: {
       tutorialFlags.add(tutorial4.key);
     }
   }
+
+
+  tutorialFlags.add("RevistPOI");
   for (const world of worlds) for (const poi of world.pointsOfInterest) {
     for (const building of poi.town?.buildings ?? []) {
       if (building.tutorialFlashKey !== undefined) {
         requireId(building.tutorialFlashKey, "tutorial flag");
         tutorialFlags.add(building.tutorialFlashKey);
       }
+      // First-use popups the town services claim through `showTutorialForFlag:` before showing:
+      // Store's `FirstShop` and the Hero house's gem display `FirstCharacterDisplay`.
+      if (building.className === "StoreMenuItem") tutorialFlags.add("FirstShop");
+      if (building.className === "CharacterDisplayMenuItem") {
+        tutorialFlags.add("FirstCharacterDisplay");
+      }
     }
+  }
+  if (dungeonIds.size > 0) {
+
+
+    tutorialFlags.add("WaypointReached");
+    tutorialFlags.add("NewInfiniteMonsterSlot");
   }
   const report: OfficialGameSupportReport = Object.freeze({
     worldId: options.world.name,
@@ -2400,6 +2437,10 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
   private pendingSpiritQuestEvents: UnsequencedPresentationEventV1[] = [];
   /** Synchronous reduction-local version behavior, also used by projection restore. */
   private sourceDungeonPopulationInheritanceForCurrentReduction = false;
+  /** Synchronous reduction-local v25 source story rules (see `sourceStoryRules`). */
+  private sourceStoryRulesForCurrentReduction = false;
+  /** Parsed `Chats.plist` definitions; the catalog is immutable installed data. */
+  private readonly encounterChatDefinitions = new Map<string, ChatDefinition>();
 
   constructor(private readonly options: OfficialGameReducerOptions) {
     requireValidatedSupport(options.support);
@@ -2541,6 +2582,10 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
     this.sourceDungeonPopulationInheritanceForCurrentReduction =
       (context as CommandReducerContext<OfficialGameStateV1> & OfficialInternalReductionContext)
         .sourceDungeonPopulationInheritance === true;
+    const previousStoryRules = this.sourceStoryRulesForCurrentReduction;
+    this.sourceStoryRulesForCurrentReduction =
+      (context as CommandReducerContext<OfficialGameStateV1> & OfficialInternalReductionContext)
+        .sourceStoryRules === true;
     try {
       const result = this.applyRestored(context, command);
       const spiritEvents = this.pendingSpiritQuestEvents;
@@ -2549,6 +2594,50 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
     } finally {
       this.pendingSpiritQuestEvents = [];
       this.sourceDungeonPopulationInheritanceForCurrentReduction = previousPopulationBehavior;
+      this.sourceStoryRulesForCurrentReduction = previousStoryRules;
+    }
+  }
+
+
+
+
+
+
+  private recordEncounterChat(quests: GuildQuestRuntime, chatKey: string | undefined): void {
+    if (!this.sourceStoryRulesForCurrentReduction || chatKey === undefined) return;
+    let chat = this.encounterChatDefinitions.get(chatKey);
+    if (chat === undefined) {
+      if (this.options.resources === undefined) {
+        throw new GameServiceError(
+          "CAPABILITY_UNSUPPORTED",
+          `encounter chat ${chatKey} requires the installed Chats.plist`,
+        );
+      }
+      chat = loadChatDefinition(this.options.resources, chatKey);
+      this.encounterChatDefinitions.set(chatKey, chat);
+    }
+    quests.requestChatPresentation(chat.name, chat.alwaysShow);
+  }
+
+  /** v25: fire source quest event 0 for each enemy death in a newly committed engine batch. */
+  private fireEnemyDeathQuestEvents(
+    events: UnsequencedPresentationEventV1[],
+    quests: GuildQuestRuntime,
+    restored: RestoredBattleReplay,
+    engineEvents: readonly BattleEvent[],
+  ): void {
+    if (!this.sourceStoryRulesForCurrentReduction) return;
+
+
+
+    const enemyDead = new Set(restored.session.deadIdsOf(1));
+    for (const event of engineEvents) {
+      if (event.type !== "died" || !enemyDead.has(event.living)) continue;
+      const shortType = restored.session.xpStateOf(event.living).shortType;
+      appendGuildQuestEvents(events, quests, () => quests.fireEvent({
+        id: 0,
+        target: { shortType, inEnemyDeadMembers: true },
+      }));
     }
   }
 
@@ -3088,6 +3177,15 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
         randomDraws: first.randomDraws!,
       },
     };
+    const events: UnsequencedPresentationEventV1[] = [
+      {
+        type: "tournament.battleStarted",
+        tournamentIndex: tournament.index,
+        round,
+      },
+      { type: "battle.started", battleId },
+    ];
+    this.fireEnemyDeathQuestEvents(events, quests, first, first.events);
     const state: OfficialGameStateV1 = {
       ...this.snapshot(
         prior,
@@ -3108,14 +3206,7 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
     return {
       state,
       projection: this.project(state, party, profile, quests, first),
-      events: [
-        {
-          type: "tournament.battleStarted",
-          tournamentIndex: tournament.index,
-          round,
-        },
-        { type: "battle.started", battleId },
-      ],
+      events,
     };
   }
 
@@ -3280,6 +3371,8 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
     }
     const challenge = buildLicenseChallengeEncounter(next);
     const built = buildOfficialArenaBattle(challenge.encounter, party);
+    // v25: the license challenge's startEvent runs (and records its chat) before combat starts.
+    this.recordEncounterChat(quests, challenge.startChatKey);
     const battleId = `battle-${prior.nextBattleSequence}`;
     const initialReplay: BattleReplaySnapshotV1 = {
       schemaVersion: 1,
@@ -3312,6 +3405,8 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
         randomDraws: first.randomDraws!,
       },
     };
+    const events: UnsequencedPresentationEventV1[] = [{ type: "battle.started", battleId }];
+    this.fireEnemyDeathQuestEvents(events, quests, first, first.events);
     const state: OfficialGameStateV1 = {
       ...this.snapshot(
         prior,
@@ -3332,7 +3427,7 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
     return {
       state,
       projection: this.project(state, party, profile, quests, first),
-      events: [{ type: "battle.started", battleId }],
+      events,
     };
   }
 
@@ -3727,6 +3822,22 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
     if (poi?.zoneChange === undefined) {
       throw new GameServiceError("ACTION_NOT_ALLOWED", `world zone ${command.zoneId} is not an exit`);
     }
+
+
+
+
+    if (
+      this.sourceStoryRulesForCurrentReduction &&
+      !sourceConditionsAreMet(
+        poi.zoneChange.conditions,
+        this.townPortalConditionContext(prior.world, quests),
+      )
+    ) {
+      throw new GameServiceError(
+        "ACTION_NOT_ALLOWED",
+        `world zone ${command.zoneId} conditions are not met`,
+      );
+    }
     if (poi.zoneChange.kind === "dungeon") {
       if (
         this.options.resources === undefined ||
@@ -3987,6 +4098,10 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       encounter: built.encounter,
       replay,
     };
+    // Snapshot construction never reads `events`; pushing first only lets v25 append the opening
+    // prefix's quest events after `battle.started` and before the quest snapshot is taken.
+    events.push({ type: "battle.started", battleId });
+    this.fireEnemyDeathQuestEvents(events, quests, first, first.events);
     const state: OfficialGameStateV1 = {
       ...this.snapshot(
         prior,
@@ -4004,7 +4119,6 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       ),
       nextBattleSequence: prior.nextBattleSequence + 1,
     };
-    events.push({ type: "battle.started", battleId });
     return { state, projection: this.project(state, party, profile, quests, first), events };
   }
 
@@ -4394,6 +4508,8 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       randomDraws: [...advanced.committedDraws],
     }];
     appendCommonBattleEvents(events, battle.battleId, newEngineEvents);
+    // v25 counts each committed enemy death now, whatever the battle's eventual outcome.
+    this.fireEnemyDeathQuestEvents(events, quests, advanced.restored, newEngineEvents);
 
     const nextBattle: OfficialBattleStateV1 = {
       ...battle,
@@ -4480,7 +4596,9 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
     let world = prior.world!;
     let location: OfficialLocationV1;
     if (outcome === "victory") {
-      for (const id of restored.session.deadIdsOf(1)) {
+      // Historical reducers count enemy deaths only here, at victory. v25 already fired them as
+      // each death was committed (`fireEnemyDeathQuestEvents`), so it must not count them twice.
+      for (const id of this.sourceStoryRulesForCurrentReduction ? [] : restored.session.deadIdsOf(1)) {
         appendGuildQuestEvents(events, quests, () => quests.fireEvent({
           id: 0,
           target: {
@@ -4722,6 +4840,14 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
           "victory",
           restored.session.capturedIds().map((id) => restored.session.xpStateOf(id).shortType),
         );
+
+
+        if (this.sourceStoryRulesForCurrentReduction) {
+          this.recordEncounterChat(
+            quests,
+            dungeonEncounterChatKey(battle.encounter.encounter.winEvent, battle.encounter.encounter.id),
+          );
+        }
         location = this.dungeonLocation(run);
         prior = {
           ...prior,
@@ -4734,6 +4860,16 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
         profile.increaseLicenseAfterChallenge(
           this.options.data.license(battle.origin.licenseType),
         );
+        // v25: ArenaEncounter does not override `performWinLogic`, so the license winEvent chat
+        // (Apprentice `HaraldDefeated`) is recorded exactly like a world win chat.
+        if (this.sourceStoryRulesForCurrentReduction) {
+          this.recordEncounterChat(
+            quests,
+            buildLicenseChallengeEncounter(
+              this.options.data.license(battle.origin.licenseType),
+            ).winChatKey,
+          );
+        }
 
 
         location = {
@@ -5380,7 +5516,11 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       }
       events.push({ type: "quest.accepted", questId: command.questId });
     } else if (command.type === "quest.dropAll") {
-      if (quests.activeQuestNames().length === 0) {
+
+
+
+
+      if (quests.activeQuestNames().length === 0 && !this.sourceStoryRulesForCurrentReduction) {
         throw new GameServiceError("ACTION_NOT_ALLOWED", "there are no active quests to drop");
       }
       quests.clearAllQuests();
@@ -5721,6 +5861,14 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       },
     };
     const dungeon = this.dungeonState(run, prior.dungeon.worldId, prior.dungeon.entrancePoiId);
+
+
+
+    if (this.sourceStoryRulesForCurrentReduction) {
+      this.recordEncounterChat(quests, dungeonEncounterChatKey(encounter.startEvent, encounter.id));
+    }
+    events.push({ type: "battle.started", battleId });
+    this.fireEnemyDeathQuestEvents(events, quests, first, first.events);
     const state: OfficialGameStateV1 = {
       ...this.snapshot(
         prior,
@@ -5739,7 +5887,6 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
       ),
       nextBattleSequence: prior.nextBattleSequence + 1,
     };
-    events.push({ type: "battle.started", battleId });
     return {
       state,
       projection: this.project(state, party, profile, quests, first),
@@ -5958,8 +6105,15 @@ export class OfficialGameReducer implements GameCommandReducer<OfficialGameState
         })),
         battingOrderSize: party.battingOrderSize,
         battingOrderIds: party.battingOrderMonsters().map((monster) => monster.instanceId),
-        ownedSoulStones: party.ownedSoulStoneEntries().map(({ token, stone }) => ({
-          stoneId: token,
+
+
+
+
+
+
+
+        ownedSoulStones: party.ownedSoulStoneEntries().map(({ stone }, index) => ({
+          stoneId: `soul-stone-${index + 1}`,
           element: stone.element,
           level: stone.level,
           ...(stone.sourceType === undefined ? {} : { sourceTypeId: stone.sourceType }),
@@ -6336,6 +6490,27 @@ export class OfficialGameV12Reducer implements GameCommandReducer<OfficialGameSt
     });
   }
 
+  /** Internal v25 delegate; earlier public simulation behavior remains immutable. */
+  applyForV25(
+    context: CommandReducerContext<OfficialGameStateV12>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV12, OfficialGameProjectionBodyV12> {
+    return this.applyVersioned(context, command, {
+      restartSaveMe: true,
+      restorePartyOnOrdinaryReturn: true,
+      deferDungeonTreasureRewards: true,
+      chargeBattleSpiritEnergy: true,
+      sourceDungeonPopulationInheritance: true,
+      sourceTownBattleLifecycle: true,
+      allowTournamentRetreat: true,
+      sourceTournamentSaveMe: true,
+      allowArenaEscapeStall: true,
+      sourceWorldDungeonSaveMe: true,
+      sourceEggRng: true,
+      sourceStoryRules: true,
+    });
+  }
+
   private applyVersioned(
     context: CommandReducerContext<OfficialGameStateV12>,
     command: GameCommandV1,
@@ -6351,6 +6526,7 @@ export class OfficialGameV12Reducer implements GameCommandReducer<OfficialGameSt
       readonly allowArenaEscapeStall?: boolean;
       readonly sourceWorldDungeonSaveMe?: boolean;
       readonly sourceEggRng?: boolean;
+      readonly sourceStoryRules?: boolean;
     },
   ): CommandReducerResult<OfficialGameStateV12, OfficialGameProjectionBodyV12> {
     if (context.pack.simulationVersion !== OFFICIAL_GAME_V12_SIMULATION_VERSION) {
@@ -6507,6 +6683,9 @@ export class OfficialGameV12Reducer implements GameCommandReducer<OfficialGameSt
         : {}),
       ...(behavior.allowArenaEscapeStall
         ? { allowArenaEscapeStall: true }
+        : {}),
+      ...(behavior.sourceStoryRules
+        ? { sourceStoryRules: true }
         : {}),
     } as CommandReducerContext<OfficialGameStateV1>, command);
     const pendingEgg = reduced.pendingEgg;
@@ -7852,6 +8031,20 @@ export class OfficialGameV15Reducer implements GameCommandReducer<
     };
   }
 
+  /** Internal v25 delegate; earlier public simulation behavior remains immutable. */
+  applyForV25(
+    context: CommandReducerContext<OfficialGameStateV15>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV15, OfficialGameProjectionBodyV15> {
+    this.requireV15Pack(context.pack);
+    const result = this.v12.applyForV25({ ...context, pack: this.v12Pack }, command);
+    return {
+      ...result,
+      state: result.state,
+      projection: projectOfficialGameStateV15(result.projection, result.state),
+    };
+  }
+
   /** Internal v21 delegate entry; v15 stays immutable while the v12 core admits Arena Escape. */
   applyForV21(
     context: CommandReducerContext<OfficialGameStateV15>,
@@ -8195,6 +8388,20 @@ export class OfficialGameV16Reducer implements GameCommandReducer<
     };
   }
 
+  /** Internal v25 delegate; earlier public simulation behavior remains immutable. */
+  applyForV25(
+    context: CommandReducerContext<OfficialGameStateV16>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV16, OfficialGameProjectionBodyV16> {
+    this.requireV16Pack(context.pack);
+    const result = this.v15.applyForV25({ ...context, pack: this.v15Pack }, command);
+    return {
+      ...result,
+      state: result.state,
+      projection: projectOfficialGameStateV16(result.projection, result.state),
+    };
+  }
+
   /** Internal v21 delegate entry; v16 stays immutable while passing the Arena Escape gate. */
   applyForV21(
     context: CommandReducerContext<OfficialGameStateV16>,
@@ -8475,6 +8682,7 @@ export class OfficialGameV17Reducer implements GameCommandReducer<
     allowArenaEscapeStall = false,
     sourceWorldDungeonSaveMe = false,
     sourceEggRng = false,
+    sourceStoryRules = false,
   ): CommandReducerResult<OfficialGameStateV17, OfficialGameProjectionBodyV17> {
     this.requireV17Pack(context.pack);
     const prior = context.state;
@@ -8483,7 +8691,9 @@ export class OfficialGameV17Reducer implements GameCommandReducer<
       pack: this.v16Pack,
       state: prior === undefined ? undefined : officialGameStateWithoutV17Handoff(prior),
     };
-    const result = sourceEggRng
+    const result = sourceStoryRules
+      ? this.v16.applyForV25(delegateContext, command)
+      : sourceEggRng
       ? this.v16.applyForV23(delegateContext, command)
       : sourceWorldDungeonSaveMe
       ? this.v16.applyForV22(delegateContext, command)
@@ -8573,6 +8783,14 @@ export class OfficialGameV17Reducer implements GameCommandReducer<
     command: GameCommandV1,
   ): CommandReducerResult<OfficialGameStateV17, OfficialGameProjectionBodyV17> {
     return this.applyVersioned(context, command, true, true, true, true, true, true);
+  }
+
+  /** Internal v25 delegate; earlier public simulation behavior remains immutable. */
+  applyForV25(
+    context: CommandReducerContext<OfficialGameStateV17>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV17, OfficialGameProjectionBodyV17> {
+    return this.applyVersioned(context, command, true, true, true, true, true, true, true);
   }
 }
 
@@ -8790,6 +9008,20 @@ export class OfficialGameV18Reducer implements GameCommandReducer<
       projection: projectOfficialGameStateV18(result.projection),
     };
   }
+
+  /** Internal v25 delegate; earlier public simulation behavior remains immutable. */
+  applyForV25(
+    context: CommandReducerContext<OfficialGameStateV18>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV18, OfficialGameProjectionBodyV18> {
+    this.requireV18Pack(context.pack);
+    const result = this.v17.applyForV25({ ...context, pack: this.v17Pack }, command);
+    return {
+      ...result,
+      state: result.state,
+      projection: projectOfficialGameStateV18(result.projection),
+    };
+  }
 }
 
 /** v19 keeps v18's state shape and wire exactly; only Tournament Escape settlement is new. */
@@ -8993,6 +9225,20 @@ export class OfficialGameV19Reducer implements GameCommandReducer<
       projection: projectOfficialGameStateV19(result.projection),
     };
   }
+
+  /** Internal v25 delegate; earlier public simulation behavior remains immutable. */
+  applyForV25(
+    context: CommandReducerContext<OfficialGameStateV19>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV19, OfficialGameProjectionBodyV19> {
+    this.requireV19Pack(context.pack);
+    const result = this.v18.applyForV25({ ...context, pack: this.v18Pack }, command);
+    return {
+      ...result,
+      state: result.state,
+      projection: projectOfficialGameStateV19(result.projection),
+    };
+  }
 }
 
 /** v20 keeps v19's strict state and wire exactly; Tournament Save Me now follows the source town
@@ -9183,6 +9429,20 @@ export class OfficialGameV20Reducer implements GameCommandReducer<
       projection: projectOfficialGameStateV20(result.projection),
     };
   }
+
+  /** Internal v25 delegate; earlier public simulation behavior remains immutable. */
+  applyForV25(
+    context: CommandReducerContext<OfficialGameStateV20>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV20, OfficialGameProjectionBodyV20> {
+    this.requireV20Pack(context.pack);
+    const result = this.v19.applyForV25({ ...context, pack: this.v19Pack }, command);
+    return {
+      ...result,
+      state: result.state,
+      projection: projectOfficialGameStateV20(result.projection),
+    };
+  }
 }
 
 /** v21 keeps v20 state/wire shape. Arena Escape remains an in-process state-6 dead-end while the
@@ -9359,6 +9619,20 @@ export class OfficialGameV21Reducer implements GameCommandReducer<
       projection: projectOfficialGameStateV21(result.projection),
     };
   }
+
+  /** Internal v25 delegate; earlier public simulation behavior remains immutable. */
+  applyForV25(
+    context: CommandReducerContext<OfficialGameStateV21>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV21, OfficialGameProjectionBodyV21> {
+    this.requireV21Pack(context.pack);
+    const result = this.v20.applyForV25({ ...context, pack: this.v20Pack }, command);
+    return {
+      ...result,
+      state: result.state,
+      projection: projectOfficialGameStateV21(result.projection),
+    };
+  }
 }
 
 /** v22 keeps v21's strict state/wire. World and Dungeon Save Me now settle through the source
@@ -9516,6 +9790,16 @@ export class OfficialGameV22Reducer implements GameCommandReducer<
     return { ...result, projection: projectOfficialGameStateV22(result.projection) };
   }
 
+  /** Internal v25 delegate; earlier public simulation behavior remains immutable. */
+  applyForV25(
+    context: CommandReducerContext<OfficialGameStateV22>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV22, OfficialGameProjectionBodyV22> {
+    this.requireV22Pack(context.pack);
+    const result = this.v21.applyForV25({ ...context, pack: this.v21Pack }, command);
+    return { ...result, projection: projectOfficialGameStateV22(result.projection) };
+  }
+
 }
 
 /** v23 preserves state and corrects Egg RNG generation and release arithmetic. */
@@ -9661,6 +9945,16 @@ export class OfficialGameV23Reducer implements GameCommandReducer<
       state: result.state,
       projection: projectOfficialGameStateV23(result.projection),
     };
+  }
+
+  /** Internal v25 delegate; earlier public simulation behavior remains immutable. */
+  applyForV25(
+    context: CommandReducerContext<OfficialGameStateV23>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV23, OfficialGameProjectionBodyV23> {
+    this.requireV23Pack(context.pack);
+    const result = this.v22.applyForV25({ ...context, pack: this.v22Pack }, command);
+    return { ...result, projection: projectOfficialGameStateV23(result.projection) };
   }
 }
 
@@ -9842,6 +10136,328 @@ export class OfficialGameV24Reducer implements GameCommandReducer<
       ...result,
       state: result.state,
       projection: projectOfficialGameStateV24(result.projection, result.state),
+    };
+  }
+
+  /** Internal v25 delegate; v24's public behavior remains immutable. */
+  applyForV25(
+    context: CommandReducerContext<OfficialGameStateV24>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV24, OfficialGameProjectionBodyV24> {
+    this.requireV24Pack(context.pack);
+    const result = this.v23.applyForV25({ ...context, pack: this.v23Pack }, command);
+    return {
+      ...result,
+      state: result.state,
+      projection: projectOfficialGameStateV24(result.projection, result.state),
+    };
+  }
+}
+
+/**
+ * v25 keeps v24's state and wire shape. It adopts the source story rules documented on
+ * `OfficialInternalReductionContext.sourceStoryRules`: Arena license and dungeon fixed-encounter
+ * chats enter `dialogsSeen`, zone-change conditions gate `world.activateZone`, quest event 0
+ * follows every committed enemy death, and an empty Drop Quests is accepted.
+ */
+export type OfficialGameStateV25 = OfficialGameStateV24;
+
+export function parseOfficialGameStateV25(
+  data: GameData,
+  quests: QuestCatalog,
+  value: unknown,
+  context: OfficialGameStateParseContext = {},
+): OfficialGameStateV25 {
+  return parseOfficialGameStateV24(data, quests, value, context);
+}
+
+export function cloneOfficialGameStateV25(
+  data: GameData,
+  quests: QuestCatalog,
+  state: unknown,
+  context: OfficialGameStateParseContext = {},
+): OfficialGameStateV25 {
+  return parseOfficialGameStateV25(data, quests, structuredClone(state), context);
+}
+
+export function parseOfficialGameProjectionV25(
+  value: unknown,
+): OfficialGameProjectionBodyV25 {
+  assertJsonSafeTree(value, "official v25 projection");
+  assertPlainObject(value, "official v25 projection");
+  for (const key of ["slotId", "revision", "updatedAt", "logicPackId", "simulationVersion", "trustTier"]) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      throw new Error(`official v25 projection body contains envelope field ${key}`);
+    }
+  }
+  const parsed = OfficialGameProjectionV25Schema.parse({
+    slotId: "slot-1",
+    revision: 1,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    logicPackId: `logic-v1:${"0".repeat(64)}`,
+    simulationVersion: OFFICIAL_GAME_V25_SIMULATION_VERSION,
+    trustTier: "official",
+    ...(value as Record<string, unknown>),
+  });
+  return structuredClone(
+    projectionBody(parsed as unknown as OfficialGameProjectionV25),
+  ) as unknown as OfficialGameProjectionBodyV25;
+}
+
+export function projectOfficialGameStateV25(
+  body: OfficialGameProjectionBodyV24,
+): OfficialGameProjectionBodyV25 {
+  return parseOfficialGameProjectionV25(body);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export function officialV25ProvenEncounterDialogs(options: {
+  readonly data: GameData;
+  readonly worlds: readonly WorldData[];
+  readonly resources?: DungeonResourceSource;
+  readonly state: OfficialGameStateV24;
+}): readonly string[] {
+  const { data, worlds, resources, state } = options;
+  const dialogs = new Set<string>();
+  const licenses = data.allLicenses();
+  const licenseType = (state.profile as { readonly licenseType?: string }).licenseType ?? "Novice";
+  const ordinal = licenses.findIndex(({ type }) => type === licenseType);
+  if (ordinal < 0) throw new Error(`official v25 migration found unknown license ${licenseType}`);
+  for (const license of licenses.slice(1, ordinal + 1)) {
+    const challenge = buildLicenseChallengeEncounter(license);
+    if (challenge.startChatKey !== undefined) dialogs.add(challenge.startChatKey);
+    if (challenge.winChatKey !== undefined) dialogs.add(challenge.winChatKey);
+  }
+  const battle = state.battle;
+  if (battle?.encounter.kind === "arena" && battle.origin.kind === "arena") {
+    const start = buildLicenseChallengeEncounter(data.license(battle.origin.licenseType)).startChatKey;
+    if (start !== undefined) dialogs.add(start);
+  }
+  if (battle?.encounter.kind === "dungeon") {
+    const start = dungeonEncounterChatKey(
+      battle.encounter.encounter.startEvent,
+      battle.encounter.encounter.id,
+    );
+    if (start !== undefined) dialogs.add(start);
+  }
+
+  const completed = new Set(state.quests.completedFixedEncounterKeys);
+  if (resources !== undefined && completed.size > 0) {
+    interface AuthoredFixedEncounter {
+      readonly uniqueKey?: string;
+      readonly everyXFloors?: number;
+      readonly startEvent?: DungeonEncounter["startEvent"];
+      readonly winEvent?: DungeonEncounter["winEvent"];
+      readonly path: string;
+      readonly dungeon: boolean;
+    }
+    const authored: AuthoredFixedEncounter[] = [];
+    for (const world of worlds) {
+      for (const poi of world.pointsOfInterest) {
+        for (const populator of poi.randomPopulators) {
+          for (const fixed of populator.fixedEncounters) {
+            authored.push({
+              ...(fixed.uniqueKey === undefined ? {} : { uniqueKey: fixed.uniqueKey }),
+              ...(fixed.everyXFloors === undefined ? {} : { everyXFloors: fixed.everyXFloors }),
+              path: `${world.name}.${poi.name}`,
+              dungeon: false,
+            });
+          }
+        }
+      }
+    }
+    const knownMonsters = new Set(data.allMonsters().map(({ shortType }) => shortType));
+    const pending: { readonly typeName: string; readonly sourceFile: string; readonly floor: number }[] = [];
+    for (const world of worlds) {
+      for (const poi of world.pointsOfInterest) {
+        const change = poi.zoneChange;
+        if (
+          change?.kind !== "dungeon" ||
+          change.dungeon === undefined ||
+          change.dungeonFile === undefined
+        ) {
+          continue;
+        }
+        pending.push({
+          typeName: change.dungeon,
+          sourceFile: change.dungeonFile,
+          floor: change.dungeonLevel ?? 1,
+        });
+      }
+    }
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const route = pending.shift()!;
+      const routeKey = `${route.typeName}:${route.sourceFile}`;
+      if (visited.has(routeKey)) continue;
+      visited.add(routeKey);
+      const definition = loadDungeonData(
+        resources,
+        route.typeName,
+        route.sourceFile,
+        route.floor,
+        knownMonsters,
+      );
+      for (const population of definition.floorPopulations) {
+        for (const fixed of population.monsterPopulator?.fixedEncounters ?? []) {
+          authored.push({
+            ...(fixed.uniqueKey === undefined ? {} : { uniqueKey: fixed.uniqueKey }),
+            ...(fixed.everyXFloors === undefined ? {} : { everyXFloors: fixed.everyXFloors }),
+            ...(fixed.startEvent === undefined ? {} : { startEvent: fixed.startEvent }),
+            ...(fixed.winEvent === undefined ? {} : { winEvent: fixed.winEvent }),
+            path: `${definition.sourceFile}.floor${population.sourceFloor}.fixed[${fixed.sourceIndex}]`,
+            dungeon: true,
+          });
+        }
+        for (const zone of population.zoneChanges) {
+          if (zone.kind !== "dungeonExit") continue;
+          pending.push({
+            typeName: zone.dungeonType,
+            sourceFile: zone.dungeonFile,
+            floor: zone.dungeonLevel ?? 1,
+          });
+        }
+      }
+    }
+    const cadenceKeys = authored
+      .filter((entry) => entry.uniqueKey !== undefined && entry.everyXFloors !== undefined)
+      .map((entry) => entry.uniqueKey!);
+    for (const entry of authored) {
+      const key = entry.uniqueKey;
+      if (!entry.dungeon || key === undefined || !completed.has(key)) continue;
+      if (entry.everyXFloors !== undefined && entry.everyXFloors !== 0) continue;
+      if (authored.filter((other) => other.uniqueKey === key).length !== 1) continue;
+      if (cadenceKeys.some((prefix) =>
+        key.length > prefix.length &&
+        key.startsWith(prefix) &&
+        /^-?[0-9]+$/.test(key.slice(prefix.length)))) {
+        continue;
+      }
+      for (const event of [entry.startEvent, entry.winEvent]) {
+        const chat = dungeonEncounterChatKey(event, entry.path);
+        if (chat !== undefined) dialogs.add(chat);
+      }
+    }
+  }
+  return Object.freeze([...dialogs].sort());
+}
+
+/**
+ * v24-to-v25 migration: a shape-preserving namespace copy plus the provable `dialogsSeen` repair
+ * from `officialV25ProvenEncounterDialogs`. It never replays commands, draws, or settlement.
+ */
+export function migrateOfficialGameV24ToV25(options: {
+  readonly data: GameData;
+  readonly quests: QuestCatalog;
+  readonly worlds: readonly WorldData[];
+  readonly state: unknown;
+  readonly context?: OfficialGameStateParseContext;
+}): OfficialGameStateV25 {
+  const context = options.context ?? {};
+  const prior = cloneOfficialGameStateV24(options.data, options.quests, options.state, context);
+  const repaired = officialV25ProvenEncounterDialogs({
+    data: options.data,
+    worlds: options.worlds,
+    ...(context.dungeonResources === undefined ? {} : { resources: context.dungeonResources }),
+    state: prior,
+  });
+  const dialogsSeen = [...new Set([...prior.quests.dialogsSeen, ...repaired])].sort();
+  return cloneOfficialGameStateV25(options.data, options.quests, {
+    ...prior,
+    quests: { ...prior.quests, dialogsSeen },
+  }, context);
+}
+
+export function createOfficialGameV25LogicPackDescriptor(
+  logicPackId: LogicPackDescriptorV1["logicPackId"],
+  support: OfficialGameV12SupportReport,
+): LogicPackDescriptorV1 {
+  const v24 = createOfficialGameV24LogicPackDescriptor(logicPackId, support);
+  return Object.freeze(CurrentLogicPackDescriptorV1Schema.parse({
+    ...v24,
+    simulationVersion: OFFICIAL_GAME_V25_SIMULATION_VERSION,
+    capabilities: { ...v24.capabilities, commandTypes: [...v24.capabilities.commandTypes] },
+  }));
+}
+
+export class OfficialGameV25Reducer implements GameCommandReducer<
+  OfficialGameStateV25,
+  OfficialGameProjectionBodyV25
+> {
+  constructor(
+    private readonly v24: OfficialGameV24Reducer,
+    private readonly v24Pack: LogicPackDescriptorV1,
+  ) {
+    if (v24Pack.simulationVersion !== OFFICIAL_GAME_V24_SIMULATION_VERSION) {
+      throw new Error("OfficialGameV25Reducer requires the bound official-game-v24 delegate pack");
+    }
+  }
+
+  private requireV25Pack(pack: LogicPackDescriptorV1): void {
+    if (pack.simulationVersion !== OFFICIAL_GAME_V25_SIMULATION_VERSION) {
+      throw new GameServiceError(
+        "PACK_UNAVAILABLE",
+        "OfficialGameV25Reducer requires the official-game-v25 simulation pack",
+      );
+    }
+    if (pack.logicPackId !== this.v24Pack.logicPackId) {
+      throw new GameServiceError(
+        "PACK_UNAVAILABLE",
+        "official v25 pack does not share its bound v24 rules identity",
+      );
+    }
+  }
+
+  validatePersistedRecord(
+    record: AuthoritativeRecordValidationInput<OfficialGameStateV25, OfficialGameProjectionBodyV25>,
+  ): void {
+    try {
+      const expected = this.projectPersistedState(record.state);
+      const actual = projectionBody(record.projection);
+      if (canonicalJsonValue(expected) !== canonicalJsonValue(actual)) {
+        throw new Error("official v25 persisted projection disagrees with its restored state");
+      }
+      parseOfficialGameProjectionV25(actual);
+      if (record.projection.simulationVersion !== OFFICIAL_GAME_V25_SIMULATION_VERSION) {
+        throw new Error("official v25 projection has the wrong simulation version");
+      }
+    } catch (error) {
+      if (error instanceof GameServiceError) throw error;
+      throw new GameServiceError(
+        "STATE_CORRUPT",
+        error instanceof Error ? error.message : "official v25 persisted record is invalid",
+      );
+    }
+  }
+
+  projectPersistedState(state: OfficialGameStateV25): OfficialGameProjectionBodyV25 {
+    return projectOfficialGameStateV25(this.v24.projectPersistedState(state));
+  }
+
+  apply(
+    context: CommandReducerContext<OfficialGameStateV25>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV25, OfficialGameProjectionBodyV25> {
+    this.requireV25Pack(context.pack);
+    const result = this.v24.applyForV25({ ...context, pack: this.v24Pack }, command);
+    return {
+      ...result,
+      state: result.state,
+      projection: projectOfficialGameStateV25(result.projection),
     };
   }
 }
@@ -10128,12 +10744,69 @@ function validateLoadedRewardBatch(
         }
         break;
       case "gem":
-        validateOfficialEggKeepReward(data, reward);
-        if (reward.slot > 2) {
-          throw new GameServiceError("CAPABILITY_UNSUPPORTED", "route reward Gem slot is unsupported");
-        }
+        // Route rewards come from TreasureData generation, never from an Egg reel: validate them
+        // against the generator's own domain, not the Egg prize rule (slot 0-2, level <= 150).
+        validateGeneratedTreasureGem(reward);
         break;
     }
+  }
+}
+
+/**
+ * The chat key of a dungeon fixed encounter's `ChatGameFlowEvent`, exactly as the browser derives
+ * it (`installDungeonFeature.withChatEvents`). Any other flow-event class has no chat to record.
+ */
+function dungeonEncounterChatKey(
+  event: DungeonEncounter["startEvent"],
+  encounterId: string,
+): string | undefined {
+  if (event === undefined || event.className !== "ChatGameFlowEvent") return undefined;
+  const keys = Object.keys(event.data);
+  const chatKey = event.data["chatKey"];
+  if (keys.length !== 1 || keys[0] !== "chatKey" || typeof chatKey !== "string" || chatKey.length === 0) {
+    throw new GameServiceError(
+      "CAPABILITY_UNSUPPORTED",
+      `dungeon encounter ${encounterId} ChatGameFlowEvent must carry exactly one chatKey`,
+    );
+  }
+  return chatKey;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function validateGeneratedTreasureGem(reward: Extract<PlayerReward, { readonly kind: "gem" }>): void {
+  const weights = Number.isSafeInteger(reward.level) && reward.level >= 1
+    ? dungeonGemSlotWeights(reward.level)
+    : undefined;
+  if (
+    weights === undefined ||
+    (reward.quality !== 0 && reward.quality !== 1) ||
+    !Number.isSafeInteger(reward.slot) || reward.slot < 0 || reward.slot >= weights.length ||
+    !(weights[reward.slot]! > 0) ||
+    reward.enabledStats.length !== reward.quality + 1 ||
+    reward.enabledStats.some((stat, index) =>
+      !REWARD_GEM_STATS.includes(stat) || reward.enabledStats.indexOf(stat) !== index)
+  ) {
+    throw new GameServiceError(
+      "CAPABILITY_UNSUPPORTED",
+      "route reward Gem is outside the source TreasureData Gem domain",
+    );
   }
 }
 
@@ -10924,7 +11597,8 @@ function projectionBody<
     | OfficialGameProjectionV21
     | OfficialGameProjectionV22
     | OfficialGameProjectionV23
-    | OfficialGameProjectionV24,
+    | OfficialGameProjectionV24
+    | OfficialGameProjectionV25,
 >(
   projection: P,
 ): Omit<P, "slotId" | "revision" | "updatedAt" | "logicPackId" | "simulationVersion" | "trustTier"> {

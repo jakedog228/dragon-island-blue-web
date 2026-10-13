@@ -39,8 +39,12 @@ export const PvpClientSetupV1Schema = z.object({
 });
 export const PvpEntryV1Schema = z.discriminatedUnion("source", [
   z.object({ source: z.literal("official"), slotId: z.enum(SAVE_SLOT_IDS) }).strict(),
-  z.object({ source: z.literal("offline"), party: z.array(PvpRosterMemberV1Schema).min(1).max(32) }).strict(),
+  z.object({ source: z.literal("offline"), party: z.array(PvpRosterMemberV1Schema).min(1).max(32), spirits: z.lazy(() => PvpSpiritSetupV1Schema).optional() }).strict(),
 ]);
+export const PvpSpiritSetupV1Schema = z.object({
+  energy: z.number().finite().min(0).max(100),
+  savedXp: z.record(key, z.number().int().min(1).max(1_000_000)).refine(value => Object.keys(value).length <= 64),
+}).strict();
 export const PvpInviteRequestV1Schema = z.object({
   requestId: z.uuid(), setup: PvpClientSetupV1Schema, entry: PvpEntryV1Schema,
 }).strict();
@@ -56,6 +60,7 @@ export const PvpAdapterIdentityV1Schema = z.object({ rulesId: key, digest }).str
 export const PvpActionV1Schema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ability"), actorId: key, slot: z.string().regex(/^usable[0-9]+$/), targets: z.array(key).max(32) }).strict(),
   z.object({ type: z.literal("delay"), actorId: key }).strict(),
+  z.object({ type: z.literal("spirit"), actorId: key, shortType: key }).strict(),
   z.object({ type: z.literal("forfeit") }).strict(),
   z.object({ type: z.literal("adapter"), actorId: key, rulesId: key, command: key, input: PvpAdapterIntentV1Schema }).strict(),
 ]);
@@ -65,6 +70,7 @@ export const PvpCommandV1Schema = z.object({
 }).strict();
 export const PvpBattleSnapshotV1Schema = z.object({
   simulationVersion: z.literal("pvp-v1"),
+  spirits: z.tuple([PvpSpiritSetupV1Schema, PvpSpiritSetupV1Schema]).optional(),
   adapters: z.array(PvpAdapterIdentityV1Schema).min(1).max(64).optional(),
   teams: z.tuple([
     z.array(PvpRosterMemberV1Schema.extend({ capturable: z.literal(false) })).min(1).max(32),

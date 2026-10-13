@@ -65,7 +65,7 @@ try {
 
   await page.getByRole("button", { name: "Offline settings" }).click();
   const storageDialog = page.getByRole("dialog", { name: "Offline settings" });
-  await storageDialog.getByText("Offline save slots").waitFor();
+  await storageDialog.getByRole("navigation", { name: "Offline save pages" }).waitFor();
   page.once("dialog", async (prompt) => {
     assert.equal(prompt.type(), "prompt", "native-save import did not ask for a slot");
     await prompt.accept("1");

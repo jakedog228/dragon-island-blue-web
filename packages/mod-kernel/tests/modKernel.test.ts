@@ -37,6 +37,29 @@ async function imported(
 }
 
 describe("full-trust code mod packages", () => {
+  it("defaults old manifests to save-dependent and validates explicit save declarations", async () => {
+    expect((await imported("dev.example.legacy")).manifest.saveCompatibility).toBe("dependent");
+    for (const value of ["neutral", "dependent", null, true, "safe"]) {
+      const bytes = archive("dev.example.classified", "void 0", {}, {
+        "manifest.json": strToU8(JSON.stringify({ schemaVersion: 4, apiVersion: 4,
+          id: "dev.example.classified", version: "1.0.0", displayName: "Classified",
+          mode: "offline", dependencies: {}, entry: "scripts/main.js", saveCompatibility: value })),
+      });
+      if (value === "neutral" || value === "dependent") {
+        expect((await importCodeModArchive(bytes, "classified.dibmod")).manifest.saveCompatibility).toBe(value);
+      } else await expect(importCodeModArchive(bytes, "classified.dibmod")).rejects.toThrow(/saveCompatibility/);
+    }
+  });
+  it("keeps neutral packages in activation identity and enforces dependencies and conflicts", async () => {
+    const base = await imported("dev.example.base");
+    const neutral = { ...await imported("dev.example.neutral"),
+      manifest: { ...(await imported("dev.example.neutral")).manifest, saveCompatibility: "neutral" as const } };
+    expect((await resolveCodeModProfile([base, neutral])).digest).not.toBe((await resolveCodeModProfile([base])).digest);
+    await expect(resolveCodeModProfile([{ ...neutral, manifest: { ...neutral.manifest,
+      dependencies: { "dev.example.missing": "*" } } }])).rejects.toThrow(/missing dependency/);
+    await expect(resolveCodeModProfile([base, { ...neutral, manifest: { ...neutral.manifest,
+      conflicts: { [base.manifest.id]: "*" } } }])).rejects.toThrow(/conflict/);
+  });
   it("imports arbitrary bundle files without executing code", async () => {
     delete (globalThis as Record<string, unknown>)["exampleModLoaded"];
     const pkg = await importCodeModArchive(archive(

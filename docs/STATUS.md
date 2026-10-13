@@ -7,28 +7,34 @@ Automatic turns preserve the selected ability slot for the correct effects and s
 Official v24 restores boss names and artwork locally on reconnect, including dungeon survivors,
 while preserving v23 mechanics and historical schemas. See [regression checks](boss-presentation-regressions.md).
 
+Official v25 records Arena license and dungeon fixed-encounter chats in `dialogsSeen`, gates the
+Relic zone change on `CaiusDefeated`, counts every enemy death for quest event 0 and accepts an
+empty Drop Quests; its migration backfills provable license/dungeon chats. Every version now
+accepts generator-domain Gem rewards (slot 3, level above 150) and positional Soul Stone ids, and
+reducer faults are non-retryable.
+
 ## Current system map
 
-Multiplayer PvP (browser verified): a built-in Official mod in the manager
-has a searchable card, description and screenshot gallery, and adds Arena invite/join/resume
-beside Tournament and a two-human exhibition board. The CLI installs the durable
-match service, reads Official parties from committed slots, and accepts isolated Offline parties.
-Reviewed cosmetic mod differences reconcile; unknown gameplay adapters give specific errors.
-Workspace tests/typecheck and the content boundary pass. Muted two-client browser checks
-cover Offline, Official and mixed matches, phone/tablet layouts, committed-response retry,
-compatibility errors, cosmetics, reserves, natural victory and reconnect/forfeit. Arena chats and
-popups retain input ownership before PvP opens. See `docs/pvp.md`.
+Multiplayer PvP: Arena invite/join mounts the ordinary `BattleNode` with native
+ability cards, targeting/swipes, effects, queues, reserves and both players' spirits. Campaign state
+stays untouched. Only exact reviewed cosmetic mods are admitted; gameplay mods and adapter commands
+are rejected even with matching selections. The lobby closes when battle starts. Native retreat /
+Escape requests confirmed surrender; native results return to Arena. Transport retries are automatic,
+and disconnects retain the existing five-minute turn deadline. The demo now selects Wand Pointer
+Trail only. The authorized cosmetic-only demo was recorded and inspected (192 seconds, 31 commands,
+native results, matching transcripts and unchanged campaigns); the standalone Offline/Offline scenario also passes, including Escape, surrender cancellation,
+confirmation and return to Arena. See `docs/pvp.md`.
 
-PvP presentation now reuses Tournament/Arena backgrounds, MenuButton2, shared popup frames,
-outlined Arial labels and native tinted HP bars, including lobby/waiting/reconnect/results.
-Invite entry remains keyboard/paste accessible. The listing preview contains neutral artwork;
-selected-package images stay browser-local.
+PvP adapter infrastructure remains in the engine for development, but gameplay-adapter admission
+and UI are disabled. Echo Strike and Turn Counter are dormant fixtures, not PvP demo material.
+See `docs/pvp-adapter-api.md` for the historical API.
 
-PvP adapter API: operator-installed, versioned rules now execute custom turn actions
-with per-match replayed state, explicit combination/dependency/conflict checks, and registered
-client buttons/canvas controls. Echo Strike + Turn Counter pass composed two-client phone/tablet
-checks, retry and reconnect; added-monster data profiles have server proof. Existing unreviewed
-gameplay mods remain unsupported. See `docs/pvp-adapter-api.md`.
+Save-neutral mods: v4 manifests may declare `saveCompatibility: "neutral"`.
+The manager labels each release and Offline save comparisons ignore neutral package changes,
+while retaining base-archive warnings, dependent-mod order/byte checks and all runtime
+dependency/conflict rules. Missing declarations remain save-dependent. Devtools and Wand Pointer
+Trail 1.1.2 and Less Rare Monsters 2.0.1 opt in. Pre-mod archive history separates harmless neutral
+data overlays from archive changes; see `docs/code-mod-api.md` for the declaration's trust contract.
 
 Community mods: the launcher's single Mod Manager button
 (under the archive field) separates Installed (device: Official, Community and Imported files),
@@ -94,7 +100,7 @@ no client-authored state snapshots. Tokens are self-service: `POST /api/game/acc
 per client address per five minutes with a username and a server-owned public-scoreboard
 preference (editable in-game under Options → Scores), and `pnpm game:cli invite` still issues
 them directly. The raw token is never stored either way. The shipped stack (`apps/game-server/src/cli.ts` installs the
-v24 descriptor over its immutable historical delegates) advertises 47 command types covering selected world, dungeon,
+v25 descriptor over its immutable historical delegates) advertises 45 command types covering selected world, dungeon,
 player, economy, Store, Arena, Tournament, quest, and Egg-hatch operations; anything else throws
 `CAPABILITY_UNSUPPORTED`. That is the count when operator data supplies every optional system —
 `dungeon.*`, `world.usePortal`, `tournament.*`, and `collection.claim` drop out of the advertised

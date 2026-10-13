@@ -1,10 +1,11 @@
 {
   "schemaVersion": 4,
   "id": "dev.dragonislandblue.wand-pointer-trail",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "displayName": "Wand Pointer Trail",
   "apiVersion": 4,
   "mode": "offline",
+  "saveCompatibility": "neutral",
   "dependencies": {},
   "entry": "scripts/main.js"
 }

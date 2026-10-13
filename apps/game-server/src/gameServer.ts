@@ -48,6 +48,7 @@ export const SCOREBOARD_CACHE_SECONDS = 30;
 interface SessionClaims {
   readonly playerId: string;
   readonly logicPackId: string;
+  readonly simulationVersion?: string;
   readonly expiresAt: number;
 }
 
@@ -360,7 +361,10 @@ class GameHttpRuntime {
         throw new HttpFailure(403, "AUTH_REQUIRED", "this login token is not invited");
       }
       const expiresAt = this.now() + TOKEN_LIFETIME_MS;
-      const claims: SessionClaims = { playerId, logicPackId: input.logicPackId, expiresAt };
+      const claims: SessionClaims = {
+        playerId, logicPackId: input.logicPackId,
+        simulationVersion: service.pack.simulationVersion, expiresAt,
+      };
       const account = await this.accounts?.read(playerId);
       const responseBody: CreateGameSessionResponseV1 = {
         protocolVersion: GAME_PROTOCOL_VERSION,
@@ -398,6 +402,9 @@ class GameHttpRuntime {
     const service = this.services.get(claims.logicPackId);
     if (service === undefined) {
       throw new GameServiceError("PACK_UNAVAILABLE", "the session logic pack is no longer installed");
+    }
+    if (claims.simulationVersion !== service.pack.simulationVersion) {
+      throw new GameServiceError("PACK_UNAVAILABLE", "the session simulation has changed; reload the client");
     }
     if (request.method === "GET" && url.pathname === "/api/game/slots") {
       sendJson(response, 200, {
@@ -494,6 +501,14 @@ class GameHttpRuntime {
     }
     const correlationId = `corr-${randomUUID()}`;
     if (error instanceof GameServiceError) {
+      // A typed INTERNAL (an uncommitted reducer fault) is still a server defect: the operator needs
+      // the underlying cause, while the client gets only the generic message and correlation id.
+      if (error.code === "INTERNAL") {
+        this.logger.error("authoritative game request failed", {
+          correlationId,
+          ...errorFields(error),
+        });
+      }
       sendJson(response, statusForCode(error.code), {
         error: {
           code: error.code,

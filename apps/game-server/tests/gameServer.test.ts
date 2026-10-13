@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
@@ -139,6 +140,23 @@ function envelope(
 }
 
 describe("authoritative game HTTP boundary", () => {
+  it.each([undefined, "official-game-v10"])("rejects a session from simulation %s before a command reaches the reducer", async (simulationVersion) => {
+    const { endpoint, token } = await harness();
+    const claims = JSON.parse(Buffer.from(token.split(".")[0]!, "base64url").toString("utf8"));
+    if (simulationVersion === undefined) delete claims.simulationVersion;
+    else claims.simulationVersion = simulationVersion;
+    const encoded = Buffer.from(JSON.stringify(claims)).toString("base64url");
+    const signature = createHmac("sha256", "x".repeat(32)).update(`session\0${encoded}`).digest("hex");
+    const response = await fetch(`${endpoint}/api/game/slots/slot-1/commands`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${encoded}.${signature}`, "Content-Type": "application/json" },
+      body: JSON.stringify(envelope("version_guard_0001", 0, { type: "slot.create", starterElement: "Water" })),
+    });
+    expect(await response.json()).toMatchObject({ error: { code: "PACK_UNAVAILABLE", retryable: false } });
+    const slots = await fetch(`${endpoint}/api/game/slots`, { headers: { Authorization: `Bearer ${token}` } });
+    expect(await slots.json()).toMatchObject({ slots: [] });
+  });
+
   it("accepts same-origin proxy traffic and rejects unlisted cross-origin traffic", async () => {
     const { endpoint } = await harness();
     const requestSession = (origin: string) => fetch(`${endpoint}/api/game/session`, {

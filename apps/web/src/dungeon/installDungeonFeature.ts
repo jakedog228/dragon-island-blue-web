@@ -118,6 +118,7 @@ import type { InstalledSlotProjection } from "../authority/gameAuthorityClient.j
 import {
   CommandRecoveredBeforeNewIntentError,
   CommandStateResyncedError,
+  isCommandReconciliation,
 } from "../authority/commandCoordinator.js";
 import { resolveOfficialDefeatReturn } from "../authority/officialDefeatRecovery.js";
 import type { AccountGateway } from "../authority/accountGateway.js";
@@ -545,7 +546,9 @@ export class DungeonFeatureController<ShellMode extends string> {
     if (this.localTerminalContinuation.hasCommitted()) {
       throw new Error("Dungeon feature cannot enter a new route while a terminal continuation is pending");
     }
-    this.run = DungeonRuntimeController.restore(this.runtimeContext(), snapshot);
+    this.run = this.host.authority === undefined
+      ? DungeonRuntimeController.restore(this.runtimeContext(), snapshot)
+      : restoreOfficialDungeonRun(this.runtimeContext(), snapshot);
     this.insideDungeon = true;
     this.pendingBattleRewardKeys.clear();
     for (const [treasureId, rewardKey] of Object.entries(options.pendingBattleRewardKeys ?? {})) {
@@ -1024,7 +1027,7 @@ export class DungeonFeatureController<ShellMode extends string> {
           type: "dungeon.activateZone",
           zoneId,
         });
-        const preview = DungeonRuntimeController.restore(this.runtimeContext(), run.snapshot());
+        const preview = restoreOfficialDungeonRun(this.runtimeContext(), run.snapshot());
         const transition = preview.activateZoneForSession(preview.session, zoneId);
         this.host.authority.adoptProjection();
         return transition;
@@ -1516,9 +1519,7 @@ export class DungeonFeatureController<ShellMode extends string> {
       ...(this.host.authority === undefined
         ? {}
         : {
-            submitAuthoritative: async (command) => {
-              await this.host.authority!.submit(command);
-            },
+            submitAuthoritative: async (command) => await this.host.authority!.submit(command),
           }),
       onStateChanged: this.host.checkpoint,
       onClose: () => {
@@ -2020,6 +2021,7 @@ export class DungeonFeatureController<ShellMode extends string> {
       shade.destroy();
       battle.notifyEnterTransitionDidFinish();
       void runBattle.catch((error: unknown) => {
+        if (isCommandReconciliation(error)) return;
         console.error("Dungeon-owned BattleNode failed", error);
         queueMicrotask(() => { throw error; });
       });

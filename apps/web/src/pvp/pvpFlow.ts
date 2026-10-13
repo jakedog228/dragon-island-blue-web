@@ -1,3 +1,6 @@
+import type { FixedStage } from "@dib/renderer";
+import type { AudioPlayer } from "../audio.js";
+import type { KeyboardShortcutRouter } from "../keyboardShortcuts.js";
 import type { Container, Ticker } from "pixi.js";
 import { PvpActionV1Schema } from "@dib/game-protocol";
 import type { PvpClientSetupV1, PvpEntryV1 } from "@dib/game-protocol";
@@ -8,11 +11,15 @@ import { pvpRulesMismatch } from "./pvpBattleModel.js";
 import { preparePvpAppearance } from "./pvpAppearance.js";
 import { DISPLAY_MODE } from "../runtimeSettings.js";
 import { PvpMatchController, type PvpControllerState } from "./pvpMatchController.js";
+import { showMonsterHatchPopup, buildMonsterHatchMessageContent } from "../ui/monsterHatchPopup.js";
+import { PopupHost, type Popup } from "../ui/popup.js";
+import { localizedString } from "../localization.js";
 import "./pvp.css";
 
 export interface PvpFlowHandle { readonly debugState: Record<string, unknown>; requestBack(): boolean; dispose(): void }
 export interface PvpFlowOptions {
   parent: Container; game: LoadedGame; ticker: Ticker;
+  stage: FixedStage; audio: AudioPlayer; keyboard: KeyboardShortcutRouter;
   connect: () => Promise<{ client: PvpClient; setup: PvpClientSetupV1 }>;
   entry: () => PvpEntryV1; onClose: () => void;
 }
@@ -22,7 +29,9 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string): 
 
 export function showPvpFlow(options: PvpFlowOptions): PvpFlowHandle {
   let closed = false, controller: PvpMatchController | undefined, board: PvpBattleView | undefined;
-  let state: PvpControllerState | undefined, localError: unknown, menuOpen = true, code = "", confirmingForfeit = false;
+  let state: PvpControllerState | undefined, localError: unknown, menuOpen = true, code = "", battleStarted = false, finishing = false;
+  let nativePopup: Popup | undefined, popupPending = false;
+  const popupOwner = {};
   let timer: ReturnType<typeof setTimeout> | undefined;
   let renderedKey: string | undefined;
   let background: Container | undefined;
@@ -33,19 +42,55 @@ export function showPvpFlow(options: PvpFlowOptions): PvpFlowHandle {
   const handle: PvpFlowHandle = {
     get debugState() { return { open: !closed, lobby: menuOpen, match: state?.match ?? null, busy: state?.busy ?? (!controller && !localError),
       error: localError instanceof Error ? localError.message : state?.error?.message ?? null, board: board?.debugState ?? null }; },
-    requestBack() { if (board && !menuOpen) { menuOpen = true; render(); } else close(); return true; },
+    requestBack() { if (battleStarted) { if (!finishing && !nativePopup && !popupPending) board?.requestBack(); } else close(); return true; },
     dispose() {
-      if (closed) return; closed = true; clearTimeout(timer); controller?.dispose(); board?.dispose(); dialog.close(); dialog.remove();
+      if (closed) return; closed = true; clearTimeout(timer); controller?.dispose(); board?.dispose(); nativePopup?.dismiss(); dialog.close(); dialog.remove();
+      PopupHost.for(options.parent).dismissOwnedBy(popupOwner);
       background?.destroy({ children: true });
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
     },
   };
-  function close(): void { handle.dispose(); options.onClose(); }
+  function close(): void { if (battleStarted && !finishing) return; handle.dispose(); options.onClose(); }
   dialog.addEventListener("cancel", (event) => { event.preventDefault(); handle.requestBack(); });
   function button(text: string, action: () => void, disabled = false): HTMLButtonElement {
     const node = element("button", text); node.type = "button"; node.disabled = disabled; node.addEventListener("click", action); return node;
   }
-  function fail(error: unknown): void { if (closed) return; localError = error; menuOpen = true; render(); }
+  async function showNativeMessage(title: string, message: string, done: () => void): Promise<void> {
+    if (closed || nativePopup || popupPending) return;
+    popupPending = true;
+    try {
+      const popup = await showMonsterHatchPopup({ parent: options.parent, assets: options.game.assets,
+        scale9: options.game.scale9, ticker: options.ticker, owner: popupOwner,
+        sfx: { onButtonPress: () => options.audio.playSfx("click"), onButtonBlocked: () => options.audio.playSfx("notAllowed") },
+      }, { title, content: buildMonsterHatchMessageContent(message),
+        buttons: [{ label: localizedString(options.game.strings, "OkButtonKey"), onPress: () => {} }],
+        onDismiss: () => { nativePopup = undefined; if (!closed) done(); },
+      });
+      if (closed) popup.dismiss(); else nativePopup = popup;
+    } finally { popupPending = false; }
+  }
+  function finish(): void {
+    const match = state?.match;
+    if (closed || finishing || match?.status !== "ended") return;
+    finishing = true; menuOpen = false; dialog.close();
+    nativePopup?.dismiss();
+    board?.dispose(); board = undefined;
+    const title = match.winner === "draw" ? "Draw" : match.winner === match.you ? "Victory" : "Defeat";
+    const message = match.endReason === "forfeit" ? (match.winner === match.you ? "Your opponent surrendered." : "You surrendered.")
+      : match.endReason === "timeout" ? (match.winner === match.you ? "Your opponent did not finish their turn in time." : "You did not finish your turn in time.")
+      : match.winner === "draw" ? "The match ended in a draw." : match.winner === match.you ? "You won the match." : "You lost the match.";
+    void showNativeMessage(title, message, close);
+  }
+  function fail(error: unknown): void {
+    if (closed || finishing) return;
+    board?.dispose(); board = undefined; localError = error;
+    if (battleStarted) {
+      menuOpen = false; dialog.close();
+      void showNativeMessage("Connection interrupted", error instanceof Error ? error.message : String(error), () => {
+        localError = undefined; void controller?.refresh();
+      });
+    } else { menuOpen = true; render(); }
+  }
   async function connect(): Promise<void> {
     localError = undefined; render();
     try {
@@ -61,21 +106,30 @@ export function showPvpFlow(options: PvpFlowOptions): PvpFlowHandle {
         if (closed) return;
         const old = state?.match;
         state = next;
+        // A completed historical match must not reopen the match menu on the next Arena visit.
+        if (!battleStarted && next.match?.status === "ended" && !old?.battle) { controller?.newMatch(); return; }
+        if (next.match?.battle) { battleStarted = true; menuOpen = false; dialog.close(); }
+        if (finishing || localError) { render(); return; }
         const mismatch = next.match && pvpRulesMismatch(connection.setup.logicPackId, next.match);
-        if (mismatch) {
-          localError = new PvpClientError(mismatch); menuOpen = true;
+        if (mismatch) { fail(new PvpClientError(mismatch)); return; }
+        if (next.error && next.error instanceof PvpClientError && next.error.details.code !== "UNAVAILABLE" && !next.canRetry) {
+          // A refused command must release the presentation's pending intent before rehydration.
           board?.dispose(); board = undefined;
-        } else if (next.match?.battle) {
+          if (battleStarted && !["STALE_DECISION", "MATCH_ENDED"].includes(next.error.details.code)) {
+            fail(next.error); return;
+          }
+        }
+        if (next.match?.battle && !next.error) {
           if (!board) {
-            board = new PvpBattleView(options.game, options.ticker, (action) => { void controller?.submit(PvpActionV1Schema.parse(action)); },
-              () => { menuOpen = true; render(); }, fail);
+            board = new PvpBattleView(options.game, options.stage, options.audio, options.keyboard,
+              action => { void controller?.submit(PvpActionV1Schema.parse(action)); }, finish, fail);
             options.parent.addChild(board);
           }
-          if (old?.status === "waiting" && next.match.status === "active") menuOpen = false;
-          if (next.match.status === "ended" && old?.status !== "ended") menuOpen = true;
-          try { board.update(next.match, next.busy || next.canRetry); } catch (error) { localError = error; menuOpen = true; }
+          try { board.update(next.match, next.busy || next.canRetry); } catch (error) { fail(error); }
+        } else if (next.match?.battle && board) {
+          // Retain the scene during a transport outage; no gameplay executes until commitment.
+          try { board.update(next.match, true); } catch (error) { fail(error); }
         }
-        if (next.error) menuOpen = true;
         render();
       });
       await controller.refresh(); poll();
@@ -85,17 +139,17 @@ export function showPvpFlow(options: PvpFlowOptions): PvpFlowHandle {
     clearTimeout(timer);
     if (closed) return;
     timer = setTimeout(() => {
-      if (!state?.error && !localError && !document.hidden && (state?.match?.status === "waiting" || state?.match?.status === "active")) {
-        void controller?.refresh().finally(poll);
+      if (!localError && !document.hidden && (state?.match?.status === "waiting" || state?.match?.status === "active")) {
+        void (state?.canRetry ? controller?.retry() : controller?.refresh())?.finally(poll);
       } else poll();
     }, 1500);
   }
   function render(): void {
     if (closed) return;
-    if (!menuOpen) { dialog.close(); renderedKey = undefined; return; }
+    if (battleStarted || !menuOpen) { dialog.close(); renderedKey = undefined; return; }
     const match = state?.match, busy = state?.busy ?? !controller, error = localError ?? state?.error;
     const key = JSON.stringify({ connected: !!controller, matchId: match?.matchId, revision: match?.revision,
-      busy, retry: state?.canRetry, confirmingForfeit, error: error instanceof Error ? error.message : error });
+      busy, retry: state?.canRetry, error: error instanceof Error ? error.message : error });
     // Polling an unchanged revision must not replace focused buttons or a selected invite code.
     if (dialog.open && renderedKey === key) return;
     renderedKey = key;
@@ -140,15 +194,6 @@ export function showPvpFlow(options: PvpFlowOptions): PvpFlowHandle {
         }));
         inviteActions.append(button("Cancel invite", () => { void controller?.cancel(); }, busy || state?.canRetry));
         dialog.append(element("p", `Expires ${new Date(match.expiresAt).toLocaleTimeString()}. You can return here after closing.`), inviteActions);
-      } else if (match.status === "active") {
-        dialog.append(element("h3", match.turn === match.you ? "Your turn" : "Opponent’s turn"));
-        dialog.append(element("p", `Turn deadline: ${new Date(match.expiresAt).toLocaleTimeString()}. You can reopen PvP to reconnect after leaving this screen.`));
-        dialog.append(button("Continue battle", () => { menuOpen = false; render(); }, !!localError));
-        if (confirmingForfeit) {
-          dialog.append(element("p", "Forfeit this match? Your opponent will win."),
-            button("Yes, forfeit", () => { confirmingForfeit = false; void controller?.submit({ type: "forfeit" }); }, busy || state?.canRetry),
-            button("Keep playing", () => { confirmingForfeit = false; render(); }));
-        } else dialog.append(button("Forfeit…", () => { confirmingForfeit = true; render(); }, busy || state?.canRetry));
       } else {
         const result = match.status === "ended" ? match.winner === "draw" ? "Draw" : match.winner === match.you ? "Victory" : "Defeat" : match.status === "expired" ? "Invite expired" : "Invite cancelled";
         const resultTitle = element("h3", result); resultTitle.className = "pvp-dialog__result";

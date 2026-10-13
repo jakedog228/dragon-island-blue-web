@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import {
   guildTownConditionsPass,
   townBuildingIsRevealed,
+  townBuildingRevealChanges,
 } from "../src/world/guildQuestConditions.js";
 
 const quest: QuestDefinition = {
@@ -207,5 +208,62 @@ describe("townBuildingIsRevealed", () => {
   it("reveals an unconditional building and hides a conditional one without a quest runtime", () => {
     expect(townBuildingIsRevealed(undefined, undefined)).toBe(true);
     expect(townBuildingIsRevealed({ chats: "LeslieSaved" }, undefined)).toBe(false);
+  });
+});
+
+describe("townBuildingRevealChanges", () => {
+
+
+  const townBuildings = (world: string, town: string): readonly TownBuildingDefinition[] => {
+    const knownMonsterTypes = new Set(
+      loadGameData().allMonsters().map((monster) => monster.shortType),
+    );
+    const poi = loadWorldData(shippedSource, world, knownMonsterTypes).pointsOfInterest
+      .find(({ name }) => name === town);
+    if (poi?.town === undefined) throw new Error(`missing shipped town ${world}/${town}`);
+    return poi.town.buildings;
+  };
+  const verdicts = (
+    buildings: readonly TownBuildingDefinition[],
+    quests: GuildQuestRuntime,
+  ): boolean[] => buildings.map((building) =>
+    !building.fake && townBuildingIsRevealed(building.conditions, quests));
+
+  it("rebuilds only the Corova Guild after the Leslie fight's LeslieSaved win chat", () => {
+    const buildings = townBuildings("World_1-1", "First_City");
+    const quests = runtime();
+    const built = verdicts(buildings, quests).map((revealed) => ({ revealed }));
+    const guild = buildings.findIndex(({ className }) => className === "TavernMenuItem");
+    expect(built[guild]?.revealed).toBe(false);
+
+    expect(townBuildingRevealChanges(built, verdicts(buildings, quests))).toEqual([]);
+    quests.requestChatPresentation("LeslieSaved");
+    expect(townBuildingRevealChanges(built, verdicts(buildings, quests))).toEqual([guild]);
+  });
+
+  it("hides then restores a Liberate Guild so the completed quest can be claimed", () => {
+    const buildings = townBuildings("World_2-1", "Ancient_City").map((building) =>
+      building.conditions?.inProgressQuests === "!LiberateTownsQuest"
+        ? { ...building, conditions: { inProgressQuests: "!Liberate", quests: "!Liberate" } }
+        : building);
+    const guild = buildings.findIndex(({ conditions }) => conditions !== undefined);
+    expect(guild).toBeGreaterThanOrEqual(0);
+    const quests = runtime();
+    let built = verdicts(buildings, quests).map((revealed) => ({ revealed }));
+    expect(built[guild]?.revealed).toBe(true);
+
+    // Accepted at a Tavern: the next battle return removes the Guild service.
+    expect(quests.startQuest("Liberate")).toBe(true);
+    expect(townBuildingRevealChanges(built, verdicts(buildings, quests))).toEqual([guild]);
+    built = verdicts(buildings, quests).map((revealed) => ({ revealed }));
+
+    // The last liberation victory completes the objective; that battle's return must restore the
+    // Guild, or the quest can never be claimed in this session.
+    quests.fireEvent({ id: 0, target: { shortType: "Any", inEnemyDeadMembers: true } });
+    expect(townBuildingRevealChanges(built, verdicts(buildings, quests))).toEqual([guild]);
+  });
+
+  it("refuses mismatched verdict lists", () => {
+    expect(() => townBuildingRevealChanges([{ revealed: true }], [])).toThrow(/1 buildings/);
   });
 });

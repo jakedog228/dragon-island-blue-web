@@ -1,6 +1,7 @@
 import { SAVE_SLOT_IDS } from "@dib/save-protocol";
 import { probeOnlineServer, type OnlineServerStatus } from "../authority/serverAvailability.js";
 import { showModManager, type ModManagerSelection } from "./modLibrary.js";
+import { PVP_MOD, pvpModEnabled } from "../pvp/pvpMod.js";
 import {
   stageModSelectionForReload, takePendingModSelection, restorePendingModSelection, PendingModSelectionError,
   type PendingModSelection,
@@ -444,6 +445,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
     let archiveDigestFor: File | undefined;
     let archiveDigest: string | undefined;
     let fingerprint: ContentFingerprint | undefined;
+    let baseFingerprint: ContentFingerprint | undefined;
     let landingBackdrop: PreparedSourceLandingBackdrop | undefined;
     let localSaveProbe:
       | { readonly phase: "idle" }
@@ -491,6 +493,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       archiveDigestFor = undefined;
       archiveDigest = undefined;
       fingerprint = undefined;
+      baseFingerprint = undefined;
       scenarioGate?.setContent(undefined);
     };
     const ensureImported = (): Promise<ImportedContentPackage> => {
@@ -498,6 +501,9 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       if (!file) return Promise.reject(new Error("Select an asset archive first."));
       const modFiles = selectedModFiles;
       if (importPromise && importedFor === file && importedModsFor === modFiles) return importPromise;
+      const profileForImport = modProfile;
+      const packagesForImport = modPackages;
+      const optionsForImport = { priorityOverrides: { ...modPriorityOverrides }, allowDeclaredConflicts };
       discardImport();
       importedFor = file;
       importedModsFor = modFiles;
@@ -513,20 +519,19 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
         .then(async (baseContent) => {
           let backdrop: PreparedSourceLandingBackdrop | undefined;
           try {
-            if (modFiles.length > 0 && modProfile === undefined) {
+            if (modFiles.length > 0 && profileForImport === undefined) {
               throw new Error(modResolutionError ?? "Selected mods could not be resolved.");
             }
             let content: ImportedContentPackage;
+            // Capture the archive's semantic identity before even a mod entry can mutate it.
+            const originalFingerprint = await fingerprintContentPackage(baseContent);
             if (modFiles.length === 0) {
               content = baseContent;
             } else {
               // Latch before invoking user code, including a package that throws partway through
               // activation after already changing the shared page realm.
               modCodeWasActivated = true;
-              content = await applyFullTrustModsToContent(baseContent, modPackages, {
-                priorityOverrides: modPriorityOverrides,
-                allowDeclaredConflicts,
-              });
+              content = await applyFullTrustModsToContent(baseContent, packagesForImport, optionsForImport);
             }
             backdrop = await prepareSourceLandingBackdrop(content);
             if (importedFor !== file || importedModsFor !== modFiles) {
@@ -536,6 +541,8 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
             }
             backdrop.mount(panel);
             importedContent = content;
+            baseFingerprint = originalFingerprint;
+            if (modFiles.length === 0) fingerprint = originalFingerprint;
             landingBackdrop = backdrop;
             panel.classList.add("content-gate--themed");
             scenarioGate?.setContent(content);
@@ -1000,7 +1007,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
     const ensureRegistrationProbe = (): void => {
       if (registrationProbe !== undefined) return;
       registrationStatus.classList.remove("content-gate__registration-status--error");
-      registrationStatus.textContent = "Checking account availabilityâ€¦";
+      registrationStatus.textContent = "Checking account availability…";
       registrationRetry.hidden = true;
       registrationProbe = fetchRegistrationInfo("").then(
         (info) => {
@@ -1046,7 +1053,10 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
         login.key === key;
       const authority = authenticatedAuthority();
       const loggedIn = authority !== undefined;
-      const hasMods = selectedModFiles.length > 0;
+      const hasFullTrustMods = selectedModFiles.length > 0;
+      const pvpEnabled = pvpModEnabled();
+      const enabledModCount = selectedModFiles.length + Number(pvpEnabled);
+      const hasMods = enabledModCount > 0;
       const localSaveReady =
         mode === "local" &&
         localSaveProbe.phase === "ready" &&
@@ -1061,23 +1071,24 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       modInput.disabled = busy;
       modManagerButton.disabled = busy;
       modLabel.textContent = hasMods
-        ? `${selectedModFiles.length} ${selectedModFiles.length === 1 ? "mod" : "mods"} enabled`
+        ? `${enabledModCount} ${enabledModCount === 1 ? "mod" : "mods"} enabled`
         : "Optional Offline mods";
       // Names in activation order; the Mod Manager owns the full list, versions and order.
       const enabledNames = (modProfile?.packages ?? []).map((pkg) => pkg.manifest.displayName);
+      if (pvpEnabled) enabledNames.push(PVP_MOD.name);
       modStatus.textContent = !hasMods
         ? ""
-        : mode === "official"
+        : hasFullTrustMods && mode === "official"
           ? "Full-trust mods are local-only. Disable them in the Mod Manager or choose Offline."
           : modResolutionError !== undefined
             ? "These mods cannot load together. Open the Mod Manager's Load order to fix it."
             : compactModNames(enabledNames);
       modStatus.classList.toggle(
         "content-gate__mods-status--error",
-        hasMods && (mode === "official" || modResolutionError !== undefined),
+        hasFullTrustMods && (mode === "official" || modResolutionError !== undefined),
       );
       modStatus.hidden = modStatus.textContent === "";
-      modWarning.hidden = !hasMods;
+      modWarning.hidden = !hasFullTrustMods;
       saveModeFieldset.disabled = !hasFile || busy;
       officialModeInput.disabled = busy || !onlineAvailability.available;
       officialModeRow.classList.toggle(
@@ -1127,7 +1138,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
           localSaveStatus.textContent =
             `Browser saves could not be checked: ${localSaveProbe.message}`;
         } else {
-          localSaveStatus.textContent = "Checking browser savesâ€¦";
+          localSaveStatus.textContent = "Checking browser saves…";
         }
       }
 
@@ -1332,8 +1343,11 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
         (modProfile?.packages ?? []).map(pkg => ({
           digest: pkg.digest, id: pkg.manifest.id, version: pkg.manifest.version,
           displayName: pkg.manifest.displayName, byteLength: undefined,
+          saveCompatibility: pkg.manifest.saveCompatibility,
         })),
         releaseRememberedArchive,
+        baseFingerprint === undefined ? undefined
+          : `${baseFingerprint.algorithm}:${baseFingerprint.scope}:${baseFingerprint.digest}`,
       );
       try { return create(); }
       catch (error) {
@@ -1412,6 +1426,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
           : undefined,
         applyReloads: () => modCodeWasActivated,
         select: applyModManagerSelection,
+        onApplied: () => update(),
         ...(selectedModFiles.length > 0 && modResolutionError !== undefined ? { initialTab: "order" as const } : {}),
       });
     });
@@ -1573,6 +1588,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
           version: pkg.manifest.version,
           displayName: pkg.manifest.displayName,
           byteLength: bytesByDigest.get(pkg.digest)?.size,
+          saveCompatibility: pkg.manifest.saveCompatibility,
         })),
       });
       // A successful Offline launch makes this profile the deliberate selection to restore next

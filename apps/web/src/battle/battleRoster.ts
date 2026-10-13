@@ -23,7 +23,7 @@ export class BattleRoster {
   private readonly rosterEntries: BattleRosterEntry[];
   private readonly byId: Map<string, BattleRosterEntry>;
 
-  constructor(encounter: EncounterConfig) {
+  constructor(encounter: EncounterConfig, playerTeam: 0 | 1 = 0) {
     const entries: BattleRosterEntry[] = [];
     const teams: ReadonlyArray<readonly [0 | 1, readonly BattleTeamMemberSetup[]]> = [
       [0, encounter.playerTeam],
@@ -32,7 +32,7 @@ export class BattleRoster {
     for (const [team, members] of teams) {
       members.forEach((setup, constructionIndex) => {
         entries.push({
-          id: battleLivingId(team, constructionIndex, setup.shortType),
+          id: battleLivingId(team === 0 ? playerTeam : playerTeam === 0 ? 1 : 0, constructionIndex, setup.shortType),
           team,
           constructionIndex,
           setup: { ...setup },
