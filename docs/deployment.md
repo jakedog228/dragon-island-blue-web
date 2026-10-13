@@ -393,6 +393,15 @@ inline secret is readable through `docker inspect`, `ps`, and orchestrator APIs.
 
 ### Redeploy
 
+`deploy/azure-deploy.ps1 -PublishMods` publishes the curated local mod catalog separately from
+application releases (`-DryRun` builds and validates without connecting). See
+[mod publication](mod-library.md#deployment-and-backups) for selection, screenshots, verification
+and rollback. It uses the current production app image and writes a versioned
+`<AppRoot>/official-mods/compose.yaml` override outside app releases; ordinary helper deployments
+include that override during preflight, activation and rollback, and both modes hold
+`<AppRoot>/.deploy.lock`. Manual Compose commands below must also include
+`-f <AppRoot>/official-mods/compose.yaml` after a catalog has been published.
+
 The in-place Compose sequence is:
 
 ```sh
@@ -534,7 +543,8 @@ That runbook also covers quota/free-space limits, restore, `mods:hide` takedowns
 session isolation. The existing Azure release helper remains the deployment path. This addition
 does not authorize or document an already-completed production deployment.
 
-Official mods are optional and off by default: set `DIB_OFFICIAL_MODS_DIR` on the `game` service
+Official mods are optional and off by default. The maintained `-PublishMods` mode provisions
+their directory and read-only mount; for other installations, set `DIB_OFFICIAL_MODS_DIR` on the `game` service
 to a read-only mount of reviewed `.dibmod` files (with optional `<name>.listing.json` sidecars).
 The image does not bundle any mods. The server refuses to start if a package or sidecar in that
 directory is invalid, so check the directory before redeploying. See "Official mods" in

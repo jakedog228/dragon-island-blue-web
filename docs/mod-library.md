@@ -301,6 +301,42 @@ installed/local mod management remains usable. The development server relaxes th
 
 ## Deployment and backups
 
+To publish the local curated catalog (including its existing screenshots) to the maintained VM:
+
+```powershell
+& .\deploy\azure-deploy.ps1 -PublishMods -DryRun
+& .\deploy\azure-deploy.ps1 -PublishMods
+```
+
+This mode rebuilds the examples and snapshots only `examples/mods/dist/official/`. It validates
+every archive, sidecar and screenshot with the server loader, rejects unexpected files, and
+transfers a checksummed archive independently of the application image. It publishes exactly the
+examples with a source `listing.json`; adding one is a publication decision. Screenshots are
+optional and must already exist locally; this command does not drive a browser to generate them.
+Adjacent example saves and unlisted packages are never transferred.
+
+The VM keeps immutable catalogs at `/opt/dib/official-mods/releases/<archive-sha256>/` and a
+Compose override at `/opt/dib/official-mods/compose.yaml`. The override mounts the active catalog
+read-only at `/srv/official-mods` and sets `DIB_OFFICIAL_MODS_DIR`. Normal application deployments
+through the updated `azure-deploy.ps1` preserve that override, including rollback. Both modes
+share a deployment lock. Mod-only publication uses the already-running application image,
+preflights its production configuration, then recreates only the game service; active API
+connections may reconnect briefly. It does not rebuild the app or restart the shared proxy.
+Unlike an application release, this mode intentionally publishes local operator artifacts and
+does not require a clean worktree or deploy local application changes. `-SkipChecks` does not
+skip its catalog validation.
+
+Activation checks game readiness, listing metadata, every archive digest and every sanitized
+screenshot digest before accepting the catalog. A failed activation restores the previous
+override and game service. A second check uses public HTTPS from the operator machine; a failure
+there reports the already-active catalog for investigation. Previous catalogs remain available
+for rollback. Back up the override and active catalog directory as operator artifacts. For
+manual Compose operations after publishing, also pass
+`-f /opt/dib/official-mods/compose.yaml`; omitting it removes the catalog mount. To roll back just
+the catalog, save a copy of the override, change its bind source to an existing prior catalog,
+run `config:check`, then `up -d --no-build --no-deps --wait game` with both Compose files and verify
+the catalog. No community or game-state restore is involved.
+
 Read `docs/deployment.md` before operating production. The existing VM/Caddy deployment uses
 `DIB_COMMUNITY_HOST` (placeholder default `community.example.com`) and a separate `community-state` volume.
 Provision its DNS/TLS and set that hostname in `deploy/.env` before release. It must differ from
@@ -335,6 +371,11 @@ catalog underneath live requests. Only snapshots containing `snapshot-complete.j
 the game backup may have observed an incomplete snapshot if the two jobs overlapped.
 
 ## Verification
+
+`pnpm deploy:test` exercises the publication snapshot boundary and HTTP verification, including
+pagination and corrupt/missing downloads. On Linux it also runs `python3 deploy/publish-mods.test.py`, which tests
+preflight failure, first-publication rollback, replacement rollback and successful activation
+using real temporary files and a fake Docker command; it cannot touch running containers.
 
 Unit coverage: `apps/game-server/tests/{community,modCatalog,officialMods,devCatalog}.test.ts`
 (including a check that every shipped example `listing.json` loads with its summary) and

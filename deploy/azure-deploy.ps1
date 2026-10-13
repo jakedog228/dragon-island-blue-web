@@ -37,6 +37,9 @@ param(
 
     [switch]$SkipChecks,
 
+    # Publish the curated, operator-owned catalog without rebuilding the application.
+    [switch]$PublishMods,
+
     [switch]$DryRun
 )
 
@@ -86,6 +89,12 @@ if ($HealthUrl.Scheme -ne 'https') {
 $scriptDirectory = Split-Path -Parent $PSCommandPath
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $scriptDirectory '..')).Path
 $temporaryDirectory = $null
+
+if ($PublishMods) {
+    & (Join-Path $scriptDirectory 'publish-mods.ps1') -RemoteHost $RemoteHost -RemoteUser $RemoteUser `
+        -IdentityFile $IdentityFile -AppRoot $AppRoot -HealthUrl $HealthUrl -DryRun:$DryRun
+    return
+}
 
 Push-Location $repositoryRoot
 try {
@@ -152,6 +161,20 @@ app_root="$3"
 expected_hash="$4"
 driver="${BASH_SOURCE[0]}"
 
+# Serialize catalog activation with application releases. The catalog override lives outside
+# release trees and must be carried through preflight, activation, and rollback alike.
+exec 9>"$app_root/.deploy.lock"
+flock -n 9 || { echo "another deployment is running" >&2; exit 1; }
+catalog_args=()
+if [ -f "$app_root/official-mods/compose.yaml" ]; then
+	catalog_args=(-f "$app_root/official-mods/compose.yaml")
+fi
+compose() {
+	local tree="$1"
+	shift
+	docker compose -f "$tree/deploy/compose.yaml" --env-file "$tree/deploy/.env" "${catalog_args[@]}" "$@"
+}
+
 release="$app_root/releases/$revision"
 current="$app_root/current"
 audit_directory="$app_root/context-audit-$revision"
@@ -214,16 +237,16 @@ mkdir "$audit_directory"
 rmdir "$audit_directory"
 
 cd "$release"
-docker compose -f deploy/compose.yaml --env-file deploy/.env config --quiet
+compose "$release" config --quiet
 # Preserve running image identities before the build replaces the mutable Compose tags. A failed
 # activation must restore the already-proven images, without rebuilding during an outage.
-previous_game_container="$(docker compose -f "$current/deploy/compose.yaml" --env-file "$current/deploy/.env" ps -q game)"
-previous_proxy_container="$(docker compose -f "$current/deploy/compose.yaml" --env-file "$current/deploy/.env" ps -q proxy)"
+previous_game_container="$(compose "$current" ps -q game)"
+previous_proxy_container="$(compose "$current" ps -q proxy)"
 previous_game_image="$(docker inspect --format '{{.Image}}' "$previous_game_container")"
 previous_proxy_image="$(docker inspect --format '{{.Image}}' "$previous_proxy_container")"
-docker compose -f deploy/compose.yaml --env-file deploy/.env build
+compose "$release" build
 # Validate the real mounted production configuration while the old containers still serve traffic.
-docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm --no-deps game config:check
+compose "$release" run --rm --no-deps game config:check
 
 previous_target="$(readlink "$current")"
 next_link="$app_root/.current-$revision"
@@ -234,7 +257,7 @@ fi
 ln -s "releases/$revision" "$next_link"
 mv -Tf "$next_link" "$current"
 
-if ! docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --no-build; then
+if ! compose "$release" up -d --no-build; then
 	echo "activation failed; restoring $previous_target" >&2
 	rollback_link="$app_root/.rollback-$revision"
 	ln -s "$previous_target" "$rollback_link"
@@ -242,12 +265,12 @@ if ! docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --no-bui
 	cd "$current"
 	docker tag "$previous_game_image" dib-game:latest
 	docker tag "$previous_proxy_image" dib-proxy:latest
-	docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --no-build
+	compose "$current" up -d --no-build
 	exit 1
 fi
 
 echo "activated release $revision"
-docker compose -f deploy/compose.yaml --env-file deploy/.env ps
+compose "$release" ps
 '@
 
     $remoteDriver = $remoteDriver.Replace("`r`n", "`n")
