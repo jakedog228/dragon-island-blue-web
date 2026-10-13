@@ -6,7 +6,7 @@ import { isCommandReconciliation, type CommandCoordinatorHooks } from "./authori
 // swapping Pixi implementations depending on whether a profile happens to be selected.
 import "pixi.js/unsafe-eval";
 import { Graphics, type Container } from "pixi.js";
-import { OFFICIAL_GAME_V25_SIMULATION_VERSION, type PresentationEventV1, type GameCommandV1 } from "@dib/game-protocol";
+import { OFFICIAL_GAME_V25_SIMULATION_VERSION, OFFICIAL_GAME_V26_SIMULATION_VERSION, type PresentationEventV1, type GameCommandV1 } from "@dib/game-protocol";
 import {
   FixedStage,
   bitmapFontFile,
@@ -3284,7 +3284,8 @@ async function boot(options: BootOptions = {}): Promise<void> {
         ? {}
         : {
             authority: {
-              sourceStoryRules: officialSlot.coordinator.projection.simulationVersion === OFFICIAL_GAME_V25_SIMULATION_VERSION,
+              sourceStoryRules: officialSlot.coordinator.projection.simulationVersion === OFFICIAL_GAME_V25_SIMULATION_VERSION ||
+                officialSlot.coordinator.projection.simulationVersion === OFFICIAL_GAME_V26_SIMULATION_VERSION,
               navigate: async (targetPoiId: string, onIntentAccepted: () => void) => {
                 const result = await submitOfficialCommand(
                   { type: "world.navigate", targetPoiId },

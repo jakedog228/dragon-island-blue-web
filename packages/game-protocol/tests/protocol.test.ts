@@ -1566,3 +1566,14 @@ describe("official v22 source Save Me return wire", () => {
     expect(OfficialGameCommandResultV21Schema.safeParse(result).success).toBe(false);
   });
 });
+
+
+describe("source-sized batting order wire admission", () => {
+  it("admits eighteen active members and retains the party envelope ceiling", () => {
+    const ids = Array.from({ length: 18 }, (_, i) => `monster-${i}`);
+    expect(CurrentGameCommandV1Schema.parse({ type: "party.commitBattingPriority", activeInstanceIds: ids }))
+      .toEqual({ type: "party.commitBattingPriority", activeInstanceIds: ids });
+    expect(CurrentGameCommandV1Schema.safeParse({ type: "party.commitBattingPriority",
+      activeInstanceIds: Array.from({ length: 257 }, (_, i) => `monster-${i}`) }).success).toBe(false);
+  });
+});

@@ -83,6 +83,7 @@ import {
   OFFICIAL_GAME_V23_SIMULATION_VERSION,
   OFFICIAL_GAME_V24_SIMULATION_VERSION,
   OFFICIAL_GAME_V25_SIMULATION_VERSION,
+  OFFICIAL_GAME_V26_SIMULATION_VERSION,
   OFFICIAL_EGG_POOL_MAX_ENTRIES,
   CollectionClaimsV1Schema,
   CurrentLogicPackDescriptorV1Schema,
@@ -103,6 +104,7 @@ import {
   OfficialGameProjectionV23Schema,
   OfficialGameProjectionV24Schema,
   OfficialGameProjectionV25Schema,
+  OfficialGameProjectionV26Schema,
   SlotProjectionV1Schema,
   CurrentGameCommandV1Schema,
   type GameCommandV1,
@@ -125,6 +127,7 @@ import {
   type OfficialGameProjectionBodyV23,
   type OfficialGameProjectionBodyV24,
   type OfficialGameProjectionBodyV25,
+  type OfficialGameProjectionBodyV26,
   type OfficialGameProjectionV13,
   type OfficialGameProjectionV14,
   type OfficialGameProjectionV15,
@@ -138,6 +141,7 @@ import {
   type OfficialGameProjectionV23,
   type OfficialGameProjectionV24,
   type OfficialGameProjectionV25,
+  type OfficialGameProjectionV26,
   type OfficialGameProjectionV12,
   type OfficialDefeatDecisionV1,
   type OfficialDungeonBattleReturnV1,
@@ -10473,6 +10477,155 @@ export class OfficialGameV25Reducer implements GameCommandReducer<
   }
 }
 
+/** v26 retains v25 state and wire shapes; only opening-wallet settlement changes. */
+export type OfficialGameStateV26 = OfficialGameStateV25;
+
+export function parseOfficialGameStateV26(
+  data: GameData,
+  quests: QuestCatalog,
+  value: unknown,
+  context: OfficialGameStateParseContext = {},
+): OfficialGameStateV26 {
+  return parseOfficialGameStateV25(data, quests, value, context);
+}
+
+export function cloneOfficialGameStateV26(
+  data: GameData,
+  quests: QuestCatalog,
+  state: unknown,
+  context: OfficialGameStateParseContext = {},
+): OfficialGameStateV26 {
+  return parseOfficialGameStateV26(data, quests, structuredClone(state), context);
+}
+
+export function parseOfficialGameProjectionV26(
+  value: unknown,
+): OfficialGameProjectionBodyV26 {
+  assertJsonSafeTree(value, "official v26 projection");
+  assertPlainObject(value, "official v26 projection");
+  for (const key of ["slotId", "revision", "updatedAt", "logicPackId", "simulationVersion", "trustTier"]) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      throw new Error(`official v26 projection body contains envelope field ${key}`);
+    }
+  }
+  const parsed = OfficialGameProjectionV26Schema.parse({
+    slotId: "slot-1",
+    revision: 1,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    logicPackId: `logic-v1:${"0".repeat(64)}`,
+    simulationVersion: OFFICIAL_GAME_V26_SIMULATION_VERSION,
+    trustTier: "official",
+    ...(value as Record<string, unknown>),
+  });
+  return structuredClone(
+    projectionBody(parsed as unknown as OfficialGameProjectionV26),
+  ) as unknown as OfficialGameProjectionBodyV26;
+}
+
+export function projectOfficialGameStateV26(
+  body: OfficialGameProjectionBodyV25,
+): OfficialGameProjectionBodyV26 {
+  return parseOfficialGameProjectionV26(body);
+}
+
+/** Settle only a provable, uncommitted automatic opening debit. No RNG is drawn on restore. */
+function settleOfficialOpeningSilver(data: GameData, state: OfficialGameStateV25): OfficialGameStateV26 {
+  const battle = state.battle;
+  if (battle === undefined) return state;
+  const restored = restoreBattleReplay(data, battle.replay);
+  if (state.profile.silver === restored.session.silver) return state;
+  const spent = restored.events.reduce((total, event) =>
+    total + (event.type === "silverSpent" ? event.amount : 0), 0);
+  if (
+    battle.replay.commands.length !== 0 || spent <= 0 ||
+    state.profile.silver !== battle.replay.options.silver ||
+    state.profile.silver - spent !== restored.session.silver
+  ) {
+    throw new GameServiceError("STATE_CORRUPT", "battle wallet mismatch is not an unsettled opening debit");
+  }
+  return { ...state, profile: { ...state.profile, silver: restored.session.silver } };
+}
+
+/** Preserve the v25 namespace; repair only the exact replay-proven opening wallet omission. */
+export function migrateOfficialGameV25ToV26(options: {
+  readonly data: GameData;
+  readonly quests: QuestCatalog;
+  readonly state: unknown;
+  readonly context?: OfficialGameStateParseContext;
+}): OfficialGameStateV26 {
+  const prior = cloneOfficialGameStateV25(options.data, options.quests, options.state, options.context);
+  return cloneOfficialGameStateV26(options.data, options.quests,
+    settleOfficialOpeningSilver(options.data, prior), options.context);
+}
+
+export function createOfficialGameV26LogicPackDescriptor(
+  logicPackId: LogicPackDescriptorV1["logicPackId"],
+  support: OfficialGameV12SupportReport,
+): LogicPackDescriptorV1 {
+  return Object.freeze(CurrentLogicPackDescriptorV1Schema.parse({
+    ...createOfficialGameV25LogicPackDescriptor(logicPackId, support),
+    simulationVersion: OFFICIAL_GAME_V26_SIMULATION_VERSION,
+  }));
+}
+
+/** v26 settles the engine's shared-wallet opening costs before publishing the new battle. */
+export class OfficialGameV26Reducer implements GameCommandReducer<OfficialGameStateV26, OfficialGameProjectionBodyV26> {
+  constructor(
+    private readonly data: GameData,
+    private readonly v25: OfficialGameV25Reducer,
+    private readonly v25Pack: LogicPackDescriptorV1,
+  ) {
+    if (v25Pack.simulationVersion !== OFFICIAL_GAME_V25_SIMULATION_VERSION) {
+      throw new Error("OfficialGameV26Reducer requires the bound official-game-v25 delegate pack");
+    }
+  }
+
+  projectPersistedState(state: OfficialGameStateV26): OfficialGameProjectionBodyV26 {
+    return projectOfficialGameStateV26(this.v25.projectPersistedState(state));
+  }
+
+  validatePersistedRecord(
+    record: AuthoritativeRecordValidationInput<OfficialGameStateV26, OfficialGameProjectionBodyV26>,
+  ): void {
+    try {
+      if (record.projection.simulationVersion !== OFFICIAL_GAME_V26_SIMULATION_VERSION ||
+          canonicalJsonValue(this.projectPersistedState(record.state)) !==
+          canonicalJsonValue(projectionBody(record.projection))) {
+        throw new Error("official v26 persisted projection disagrees with its restored state or version");
+      }
+      parseOfficialGameProjectionV26(projectionBody(record.projection));
+    } catch (error) {
+      if (error instanceof GameServiceError) throw error;
+      throw new GameServiceError("STATE_CORRUPT",
+        error instanceof Error ? error.message : "official v26 persisted record is invalid");
+    }
+  }
+
+  apply(
+    context: CommandReducerContext<OfficialGameStateV26>,
+    command: GameCommandV1,
+  ): CommandReducerResult<OfficialGameStateV26, OfficialGameProjectionBodyV26> {
+    if (context.pack.simulationVersion !== OFFICIAL_GAME_V26_SIMULATION_VERSION ||
+        context.pack.logicPackId !== this.v25Pack.logicPackId) {
+      throw new GameServiceError("PACK_UNAVAILABLE", "official v26 requires its bound v25 rules identity");
+    }
+    const result = this.v25.apply({ ...context, pack: this.v25Pack }, command);
+    // Every entry path (world, dungeon, Arena, Tournament and restarted Save Me) allocates a
+    // battle identity. Ordinary turns already debit their new silverSpent events in applyBattle.
+    const newBattle = result.state.battle !== undefined &&
+      result.state.battle.battleId !== context.state?.battle?.battleId;
+    const state = newBattle ? settleOfficialOpeningSilver(this.data, result.state) : result.state;
+    return {
+      ...result,
+      state,
+      projection: parseOfficialGameProjectionV26({
+        ...result.projection,
+        player: { ...result.projection.player, silver: state.profile.silver },
+      }),
+    };
+  }
+}
+
 function replaceOfficialV12State(
   prior: OfficialGameStateV12,
   pendingEgg: OfficialEggContinuation | undefined,
@@ -11609,7 +11762,8 @@ function projectionBody<
     | OfficialGameProjectionV22
     | OfficialGameProjectionV23
     | OfficialGameProjectionV24
-    | OfficialGameProjectionV25,
+    | OfficialGameProjectionV25
+    | OfficialGameProjectionV26,
 >(
   projection: P,
 ): Omit<P, "slotId" | "revision" | "updatedAt" | "logicPackId" | "simulationVersion" | "trustTier"> {

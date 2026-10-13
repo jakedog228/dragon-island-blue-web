@@ -3,10 +3,11 @@
 Runbook for standing up `apps/game-server` (the token-gated authoritative service) and `apps/web`
 (the browser client) behind TLS on a single host.
 
-The current release uses `official-game-v25`. Deploy matching web and server revisions.
-The CLI migration chain (newest-first, v24 included) preserves the newest prior state, including
-active battles, and adds only the provable Arena/dungeon chats to `dialogsSeen`. Older schemas and
-receipts remain immutable; no player upload or resource transfer is needed.
+The current release uses `official-game-v26`. Deploy matching web and server revisions.
+The CLI migration chain (newest-first) preserves the newest prior state, including active battles.
+v25 adds only the provable Arena/dungeon chats to `dialogsSeen`; v26 settles automatic
+battle-opening silver costs and migrates only replay-proven unsettled opening wallets. Older
+schemas and receipts remain immutable; no player upload or resource transfer is needed.
 
 ---
 

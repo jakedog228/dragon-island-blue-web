@@ -5,7 +5,7 @@ export * from "./pvp.js";
 export const GAME_PROTOCOL_VERSION = "game-protocol-v1" as const;
 export const PRESENTATION_EVENT_VERSION = "presentation-events-v1" as const;
 /** Immutable identity of the currently installed Official authority. */
-export const OFFICIAL_GAME_SIMULATION_VERSION = "official-game-v25" as const;
+export const OFFICIAL_GAME_SIMULATION_VERSION = "official-game-v26" as const;
 /** Historical Official authority retained only for explicit v11 parsing/migration. */
 export const OFFICIAL_GAME_V11_SIMULATION_VERSION = "official-game-v11" as const;
 /**
@@ -39,10 +39,12 @@ export const OFFICIAL_GAME_V23_SIMULATION_VERSION = "official-game-v23" as const
 /** Historical authority: archive-neutral fixed encounter identity for reconnect. */
 export const OFFICIAL_GAME_V24_SIMULATION_VERSION = "official-game-v24" as const;
 /**
- * Current authority: v24 wire, plus source story rules (Arena/dungeon encounter chats recorded in
+ * Historical authority: v24 wire, plus source story rules (Arena/dungeon encounter chats recorded in
  * `dialogsSeen`, zone-change conditions, per-death quest event 0, empty Drop Quests).
  */
-export const OFFICIAL_GAME_V25_SIMULATION_VERSION = OFFICIAL_GAME_SIMULATION_VERSION;
+export const OFFICIAL_GAME_V25_SIMULATION_VERSION = "official-game-v25" as const;
+/** Current authority: automatic opening silver settlement, retaining the v25 wire shape. */
+export const OFFICIAL_GAME_V26_SIMULATION_VERSION = OFFICIAL_GAME_SIMULATION_VERSION;
 
 /**
  * The wire vocabulary: every command type an envelope is *allowed to name*. Membership here is not
@@ -578,7 +580,7 @@ const dungeonClaimCatchReward = z.object({
 
 const partyCommitOrder = z.object({
   type: z.literal("party.commitBattingPriority"),
-  activeInstanceIds: z.array(boundedId).min(1).max(16),
+  activeInstanceIds: z.array(boundedId).min(1).max(256),
 }).strict();
 const partyCombine = z.object({
   type: z.literal("party.combine"),
@@ -1647,7 +1649,8 @@ const slotProjectionShape = {
     }).strict(),
     party: z.array(monsterProjection).max(256),
     battingOrderSize: positiveInteger,
-    battingOrderIds: z.array(boundedId).max(16),
+    // Capacity grows with license, hero level and Abyss floors; use the existing party wire ceiling.
+    battingOrderIds: z.array(boundedId).max(256),
     ownedSoulStones: z.array(z.object({
       stoneId: boundedId,
       element,
@@ -2205,6 +2208,18 @@ export type OfficialGameProjectionBodyV25 = Omit<OfficialGameProjectionV25,
   "slotId" | "revision" | "updatedAt" | "logicPackId" | "simulationVersion" | "trustTier"
 > & { readonly __officialGameV25: true };
 
+/** v26 settles silver spent in the automatic battle opening; wire shape is unchanged. */
+const officialGameProjectionV26Shape = {
+  ...officialGameProjectionV25Shape,
+  simulationVersion: z.literal(OFFICIAL_GAME_V26_SIMULATION_VERSION),
+} as const;
+export const OfficialGameProjectionV26Schema = z.object(officialGameProjectionV26Shape)
+  .strict().superRefine(refineOfficialGameProjectionV24Shape);
+export type OfficialGameProjectionV26 = z.infer<typeof OfficialGameProjectionV26Schema>;
+export type OfficialGameProjectionBodyV26 = Omit<OfficialGameProjectionV26,
+  "slotId" | "revision" | "updatedAt" | "logicPackId" | "simulationVersion" | "trustTier"
+> & { readonly __officialGameV26: true };
+
 const eventBase = {
   seq: positiveInteger,
 };
@@ -2310,7 +2325,7 @@ export const PresentationEventV1Schema = z.discriminatedUnion("type", [
   z.object({ ...eventBase, type: z.literal("player.monsterRemoved"), instanceId: boundedId, reason: z.enum(["combine", "destroy", "soulStone"]) }).strict(),
   z.object({ ...eventBase, type: z.literal("player.xpAwarded"), instanceId: boundedId, amount: nonnegativeInteger, levelBefore: positiveInteger, levelAfter: positiveInteger }).strict(),
   z.object({ ...eventBase, type: z.literal("player.evolved"), instanceId: boundedId, fromTypeId: boundedId, toTypeId: boundedId, level: positiveInteger }).strict(),
-  z.object({ ...eventBase, type: z.literal("party.orderCommitted"), activeInstanceIds: z.array(boundedId).min(1).max(16) }).strict(),
+  z.object({ ...eventBase, type: z.literal("party.orderCommitted"), activeInstanceIds: z.array(boundedId).min(1).max(256) }).strict(),
   z.object({ ...eventBase, type: z.literal("party.injuryHealed"), instanceId: boundedId, goldCost: nonnegativeInteger }).strict(),
   z.object({ ...eventBase, type: z.literal("party.soulStoneAdded"), stoneId: boundedId, element, level: positiveInteger, sourceTypeId: boundedId.optional() }).strict(),
   z.object({ ...eventBase, type: z.literal("party.soulStoneEquipped"), stoneId: boundedId, instanceId: boundedId }).strict(),
@@ -2486,6 +2501,11 @@ export const OfficialGameCommandResultV25Schema = z.object({
   projection: OfficialGameProjectionV25Schema,
 }).strict().superRefine(validateCommandResultCursor);
 export type OfficialGameCommandResultV25 = z.infer<typeof OfficialGameCommandResultV25Schema>;
+export const OfficialGameCommandResultV26Schema = z.object({
+  ...gameCommandResultShape,
+  projection: OfficialGameProjectionV26Schema,
+}).strict().superRefine(validateCommandResultCursor);
+export type OfficialGameCommandResultV26 = z.infer<typeof OfficialGameCommandResultV26Schema>;
 
 export const GameErrorCodeV1Schema = z.enum([
   "AUTH_REQUIRED",

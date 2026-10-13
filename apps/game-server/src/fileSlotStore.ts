@@ -26,6 +26,27 @@ import { durableWriteFile } from "./durableWrite.js";
 type ResultForBody<P extends ProjectionBody> = CommandResultForBody<P>;
 const RESULT_DIGESTS = new WeakMap<object, string>();
 const RECEIPT_WRITE_CONCURRENCY = 8;
+// A cold long-running campaign has thousands of sidecars. Share the read budget across slots
+// and migrations: Promise.all over every receipt exhausted Windows file handles on real saves.
+const RECEIPT_READ_CONCURRENCY = 8;
+let activeReceiptReads = 0;
+const waitingReceiptReads: (() => void)[] = [];
+
+async function readReceiptFile(path: string): Promise<string> {
+  await new Promise<void>((resolve) => {
+    if (activeReceiptReads < RECEIPT_READ_CONCURRENCY) {
+      activeReceiptReads++;
+      resolve();
+    } else waitingReceiptReads.push(resolve);
+  });
+  try {
+    return await readFile(path, "utf8");
+  } finally {
+    const next = waitingReceiptReads.shift();
+    if (next === undefined) activeReceiptReads--;
+    else next();
+  }
+}
 
 interface StoredSlotFileV1 {
   readonly schemaVersion: 1;
@@ -208,6 +229,7 @@ export class FileAuthoritativeSlotStore<
   private readonly simulationVersion: string;
   private readonly pending = new Map<string, Promise<void>>();
   private readonly currentCache = new Map<string, CachedRecord<S, P>>();
+  private readonly migrationCache = new Map<string, CachedRecord<S, P>>();
   private readonly layouts = new WeakMap<object, StoredLayout>();
 
   constructor(options: FileAuthoritativeSlotStoreOptions<S, P>) {
@@ -367,14 +389,22 @@ export class FileAuthoritativeSlotStore<
     migration: NonNullable<FileAuthoritativeSlotStoreOptions<S, P>["legacyMigrations"]>[number],
   ): Promise<AuthoritativeSlotRecord<S, P> | undefined> {
     try {
+      const sourceFingerprint = await optionalFingerprint(path);
+      if (sourceFingerprint === undefined) {
+        this.migrationCache.delete(path);
+        return undefined;
+      }
+      const cached = this.migrationCache.get(path);
+      if (cached !== undefined && sameFingerprint(cached.fingerprint, sourceFingerprint)) return cached.record;
       const raw = JSON.parse(await readFile(path, "utf8")) as unknown;
-      const migrated = this.migrateLegacyFile(
+      const migrated = await this.migrateLegacyFile(
         await expandStoredFile(path, raw, slotId),
         playerId,
         slotId,
         migration,
       );
       this.layouts.set(migrated, "migration");
+      this.migrationCache.set(path, { fingerprint: sourceFingerprint, record: migrated });
       return migrated;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
@@ -425,13 +455,13 @@ export class FileAuthoritativeSlotStore<
           (expanded as { simulationVersion?: unknown }).simulationVersion ===
             candidate.sourceSimulationVersion)?.migration;
         if (migration !== undefined) {
-          const migrated = this.migrateLegacyFile(expanded, playerId, slotId, migration);
+          const migrated = await this.migrateLegacyFile(expanded, playerId, slotId, migration);
           this.layouts.set(migrated, "migration");
           return migrated;
         }
         return undefined;
       }
-      const record = parseFile(
+      const record = await parseFile(
         expanded,
         playerId,
         slotId,
@@ -460,12 +490,12 @@ export class FileAuthoritativeSlotStore<
     }
   }
 
-  private migrateLegacyFile(
+  private async migrateLegacyFile(
     value: unknown,
     playerId: string,
     slotId: SaveSlotId,
     migration: NonNullable<FileAuthoritativeSlotStoreOptions<S, P>["legacyMigrations"]>[number],
-  ): AuthoritativeSlotRecord<S, P> {
+  ): Promise<AuthoritativeSlotRecord<S, P>> {
     if (value === null || typeof value !== "object") {
       throw corrupt(slotId, "legacy migration input is unavailable");
     }
@@ -501,7 +531,9 @@ export class FileAuthoritativeSlotStore<
     let lastLocationCommand: GameCommandV1 | undefined;
     let lastLocationRevision = -1;
     const receiptIds = new Set<string>();
+    let receiptIndex = 0;
     for (const entry of file.receipts) {
+      if (++receiptIndex % 32 === 0) await new Promise<void>(resolve => setImmediate(resolve));
       if (entry === null || typeof entry !== "object") {
         throw corrupt(slotId, "invalid legacy migration receipt");
       }
@@ -643,7 +675,7 @@ async function expandStoredFile(
     ids.add(reference.commandId);
     let sidecar: unknown;
     try {
-      sidecar = JSON.parse(await readFile(receiptPathFor(path, reference.commandId), "utf8"));
+      sidecar = JSON.parse(await readReceiptFile(receiptPathFor(path, reference.commandId)));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         throw corrupt(slotId, `receipt ${reference.commandId} sidecar is missing`);
@@ -674,7 +706,7 @@ async function expandStoredFile(
   } satisfies StoredSlotFileV1;
 }
 
-function parseFile<S, P extends ProjectionBody>(
+async function parseFile<S, P extends ProjectionBody>(
   value: unknown,
   playerId: string,
   slotId: SaveSlotId,
@@ -682,7 +714,7 @@ function parseFile<S, P extends ProjectionBody>(
   parseProjection: (value: unknown) => ProjectionForBody<P>,
   parseCommandResult: (value: unknown) => ResultForBody<P>,
   validateRecord: ((record: AuthoritativeRecordValidationInput<S, P>) => void) | undefined,
-): AuthoritativeSlotRecord<S, P> {
+): Promise<AuthoritativeSlotRecord<S, P>> {
   if (value === null || typeof value !== "object") throw corrupt(slotId, "root is not an object");
   assertStoredFileKeys(value, slotId);
   const file = value as Partial<StoredSlotFileV1>;
@@ -713,7 +745,9 @@ function parseFile<S, P extends ProjectionBody>(
   }
   LogicPackDescriptorV1Schema.shape.logicPackId.parse(file.logicPackId);
   const receipts = new Map();
+  let receiptIndex = 0;
   for (const entry of file.receipts) {
+    if (++receiptIndex % 32 === 0) await new Promise<void>(resolve => setImmediate(resolve));
     if (
       entry === null ||
       typeof entry !== "object" ||

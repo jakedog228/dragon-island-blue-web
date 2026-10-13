@@ -21,6 +21,7 @@ import {
   OFFICIAL_GAME_V23_SIMULATION_VERSION,
   OFFICIAL_GAME_V24_SIMULATION_VERSION,
   OFFICIAL_GAME_V25_SIMULATION_VERSION,
+  OFFICIAL_GAME_V26_SIMULATION_VERSION,
   OfficialGameCommandResultV12Schema,
   OfficialGameCommandResultV13Schema,
   OfficialGameCommandResultV14Schema,
@@ -35,6 +36,7 @@ import {
   OfficialGameCommandResultV23Schema,
   OfficialGameCommandResultV24Schema,
   OfficialGameCommandResultV25Schema,
+  OfficialGameCommandResultV26Schema,
   OfficialGameProjectionV12Schema,
   OfficialGameProjectionV13Schema,
   OfficialGameProjectionV14Schema,
@@ -49,6 +51,7 @@ import {
   OfficialGameProjectionV23Schema,
   OfficialGameProjectionV24Schema,
   OfficialGameProjectionV25Schema,
+  OfficialGameProjectionV26Schema,
   PRESENTATION_EVENT_VERSION,
   RegistrationInfoV1Schema,
   ScoreboardResponseV1Schema,
@@ -74,6 +77,7 @@ import {
   type OfficialGameCommandResultV23,
   type OfficialGameCommandResultV24,
   type OfficialGameCommandResultV25,
+  type OfficialGameCommandResultV26,
   type OfficialGameProjectionV13,
   type OfficialGameProjectionV14,
   type OfficialGameProjectionV15,
@@ -87,6 +91,7 @@ import {
   type OfficialGameProjectionV23,
   type OfficialGameProjectionV24,
   type OfficialGameProjectionV25,
+  type OfficialGameProjectionV26,
   type ScoreboardResponseV1,
   type SlotProjectionV1,
 } from "@dib/game-protocol";
@@ -112,7 +117,8 @@ export type InstalledSlotProjection =
   | OfficialGameProjectionV22
   | OfficialGameProjectionV23
   | OfficialGameProjectionV24
-  | OfficialGameProjectionV25;
+  | OfficialGameProjectionV25
+  | OfficialGameProjectionV26;
 export type InstalledCommandResult =
   | GameCommandResultV1
   | OfficialGameCommandResultV13
@@ -127,7 +133,8 @@ export type InstalledCommandResult =
   | OfficialGameCommandResultV22
   | OfficialGameCommandResultV23
   | OfficialGameCommandResultV24
-  | OfficialGameCommandResultV25;
+  | OfficialGameCommandResultV25
+  | OfficialGameCommandResultV26;
 
 /** Browser/server mechanics contract. A different simulation must never be entered with this
  * client: command availability and projection semantics can otherwise fail only after gameplay
@@ -339,6 +346,9 @@ export class RemoteGameAuthority implements GameAuthority {
     if (this.pack.simulationVersion === OFFICIAL_GAME_V25_SIMULATION_VERSION) {
       return OfficialGameProjectionV25Schema.parse(value);
     }
+    if (this.pack.simulationVersion === OFFICIAL_GAME_V26_SIMULATION_VERSION) {
+      return OfficialGameProjectionV26Schema.parse(value);
+    }
     if (this.pack.simulationVersion === OFFICIAL_GAME_V21_SIMULATION_VERSION) {
       return OfficialGameProjectionV21Schema.parse(value);
     }
@@ -383,6 +393,9 @@ export class RemoteGameAuthority implements GameAuthority {
     }
     if (this.pack.simulationVersion === OFFICIAL_GAME_V25_SIMULATION_VERSION) {
       return OfficialGameCommandResultV25Schema.parse(value);
+    }
+    if (this.pack.simulationVersion === OFFICIAL_GAME_V26_SIMULATION_VERSION) {
+      return OfficialGameCommandResultV26Schema.parse(value);
     }
     if (this.pack.simulationVersion === OFFICIAL_GAME_V21_SIMULATION_VERSION) {
       return OfficialGameCommandResultV21Schema.parse(value);

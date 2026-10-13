@@ -1,0 +1,1805 @@
+{
+  "schemaVersion": 1,
+  "profile": {
+    "schemaVersion": 8,
+    "hero": {
+      "level": 18,
+      "totalHighestLevels": 1394
+    },
+    "silver": 33690,
+    "gold": 76,
+    "inventory": {
+      "schemaVersion": 1,
+      "nextItemSequence": 30,
+      "looseItems": [
+        {
+          "kind": "gem",
+          "id": "item-3",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 7,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Defense"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-5",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 7,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Attack"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-4",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 7,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-6",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 20,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Attack"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-8",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 25,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Defense"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-10",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 27,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Defense"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-11",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 35,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Defense"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-12",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 25,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Defense"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-13",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 25,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-14",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 30,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-15",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 42,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-9",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 35,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-18",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 40,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Resist"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-19",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 35,
+          "quality": 1,
+          "slot": 0,
+          "enabledStats": [
+            "Attack",
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-20",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 42,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-21",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 50,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-22",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 42,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-23",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 45,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-24",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 42,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "Resist"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-7",
+          "definitionPath": "Gems.RandomVeteran",
+          "instanceName": "RandomVeteran",
+          "level": 22,
+          "quality": 0,
+          "slot": 1,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-26",
+          "definitionPath": "Gems.RandomElite",
+          "instanceName": "RandomElite",
+          "level": 48,
+          "quality": 0,
+          "slot": 2,
+          "enabledStats": [
+            "Attack"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-27",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 55,
+          "quality": 0,
+          "slot": 0,
+          "enabledStats": [
+            "MaxHP"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-28",
+          "definitionPath": "Gems.RandomElite",
+          "instanceName": "RandomElite",
+          "level": 50,
+          "quality": 0,
+          "slot": 2,
+          "enabledStats": [
+            "Magic"
+          ]
+        },
+        {
+          "kind": "gem",
+          "id": "item-29",
+          "definitionPath": "Gems.RandomVeteran",
+          "instanceName": "RandomVeteran",
+          "level": 50,
+          "quality": 0,
+          "slot": 1,
+          "enabledStats": [
+            "Magic"
+          ]
+        }
+      ],
+      "equippedGems": {
+        "0": {
+          "kind": "gem",
+          "id": "item-16",
+          "definitionPath": "Gems.RandomNovice",
+          "instanceName": "RandomNovice",
+          "level": 47,
+          "quality": 1,
+          "slot": 0,
+          "enabledStats": [
+            "Defense",
+            "MaxHP"
+          ]
+        },
+        "1": {
+          "kind": "gem",
+          "id": "item-25",
+          "definitionPath": "Gems.RandomVeteran",
+          "instanceName": "RandomVeteran",
+          "level": 58,
+          "quality": 1,
+          "slot": 1,
+          "enabledStats": [
+            "MaxHP",
+            "Attack"
+          ]
+        }
+      }
+    },
+    "licenseType": "Expert",
+    "skillPoints": {
+      "MaxHP": 6,
+      "Attack": 6,
+      "Magic": 0,
+      "Speed": 6,
+      "Defense": 0,
+      "Resist": 0
+    },
+    "highestCapturedLevels": {
+      "BlueBabyDragon": 6,
+      "Bitewing": 8,
+      "Fairy": 1,
+      "Wolf": 11,
+      "Sludge": 6,
+      "Stinger": 11,
+      "Bones": 51,
+      "BlueDragonling": 30,
+      "Treehead": 20,
+      "BabyNessie": 8,
+      "GiantAnt": 12,
+      "GiantBat": 1,
+      "Carnoraptor": 1,
+      "Penguin": 6,
+      "GiantTurtle": 4,
+      "GiantWasp": 6,
+      "Assassin": 8,
+      "BatSquirrel": 9,
+      "MerWarrior": 11,
+      "Goblin": 11,
+      "BloodPriest": 17,
+      "DireWolf": 24,
+      "SerpentKnight": 25,
+      "Minotaur": 21,
+      "Imp": 27,
+      "GiantCrab": 18,
+      "SerpentMage": 46,
+      "CrabKing": 48,
+      "BloodWarrior": 17,
+      "BlueSeahorse": 21,
+      "DevilWorm": 18,
+      "Pincer": 23,
+      "Manticore": 34,
+      "MinotaurBrute": 51,
+      "Kappa": 29,
+      "SunWarrior": 32,
+      "BlueDragon": 55,
+      "WhiteSeahorse": 21,
+      "KemetKing": 24,
+      "Sasuke": 31,
+      "Vampire": 28,
+      "Watcher": 30,
+      "Spark": 25,
+      "GoldLion": 50,
+      "FairyQueen": 61,
+      "Rider": 44,
+      "Champion": 63,
+      "DarkPriest": 1,
+      "BatKing": 53,
+      "WaspQueen": 53,
+      "Gnoll": 51,
+      "BloodKnight": 1,
+      "Beastman": 33,
+      "Djinn": 57,
+      "MerPrince": 38,
+      "MerKing": 38,
+      "Cherub": 2,
+      "SteelSnake": 55,
+      "Drake": 50,
+      "Pyro": 59,
+      "WaterDragon": 65,
+      "DreamEater": 1,
+      "ThunderMage": 49,
+      "SpikeCrab": 54,
+      "Mask": 1,
+      "BeastmanKing": 52
+    },
+    "learnedCombineRecipes": [
+      "Carnoraptor",
+      "Cyclops",
+      "Dementor",
+      "Demios",
+      "GriffinRider",
+      "Juggernaut",
+      "LichKing",
+      "SkullCrow",
+      "Titan"
+    ],
+    "tutorialFlags": [
+      "FirstCharacterDisplay",
+      "FirstGemFlash",
+      "FirstMonsterpedia",
+      "FirstTavernFlash",
+      "RevistPOI",
+      "SaveMe",
+      "TownWarpTutorial",
+      "Tutorial0",
+      "Tutorial1",
+      "Tutorial2",
+      "Tutorial4",
+      "flashTownExit"
+    ],
+    "catchQuestsDone": [],
+    "dungeonWaypoints": {},
+    "infiniteDungeonHighestLevel": 0,
+    "tournament": {
+      "schemaVersion": 1,
+      "index": 0,
+      "round": 0,
+      "status": 0
+    },
+    "spiritEnergy": 100,
+    "spiritSavedXp": {
+      "Resistance": 4096,
+      "Energy": 1651
+    },
+    "spiritsUsedThisTrip": [
+      "Resistance",
+      "Energy"
+    ]
+  },
+  "party": {
+    "schemaVersion": 1,
+    "battingOrderSize": 16,
+    "monsters": [
+      {
+        "instanceId": "monster-1",
+        "shortType": "WaterDragon",
+        "level": 65,
+        "cumulativeXp": 14775695,
+        "currentHp": 1388
+      },
+      {
+        "instanceId": "monster-46",
+        "shortType": "Champion",
+        "level": 63,
+        "cumulativeXp": 12708903,
+        "currentHp": 0
+      },
+      {
+        "instanceId": "monster-43",
+        "shortType": "FairyQueen",
+        "level": 61,
+        "cumulativeXp": 11430555,
+        "currentHp": 0
+      },
+      {
+        "instanceId": "monster-62",
+        "shortType": "Pyro",
+        "level": 59,
+        "cumulativeXp": 10010021,
+        "currentHp": 0
+      },
+      {
+        "instanceId": "monster-55",
+        "shortType": "Djinn",
+        "level": 57,
+        "cumulativeXp": 9184890,
+        "currentHp": 0
+      },
+      {
+        "instanceId": "monster-71",
+        "shortType": "SteelSnake",
+        "level": 55,
+        "cumulativeXp": 8012310,
+        "currentHp": 686
+      },
+      {
+        "instanceId": "monster-72",
+        "shortType": "SpikeCrab",
+        "level": 54,
+        "cumulativeXp": 7212740,
+        "currentHp": 1557
+      },
+      {
+        "instanceId": "monster-64",
+        "shortType": "BatKing",
+        "level": 53,
+        "cumulativeXp": 7129305,
+        "currentHp": 799
+      },
+      {
+        "instanceId": "monster-51",
+        "shortType": "WaspQueen",
+        "level": 53,
+        "cumulativeXp": 6714438,
+        "currentHp": 761
+      },
+      {
+        "instanceId": "monster-65",
+        "shortType": "MinotaurBrute",
+        "level": 51,
+        "cumulativeXp": 6230626,
+        "currentHp": 789
+      },
+      {
+        "instanceId": "monster-52",
+        "shortType": "Gnoll",
+        "level": 51,
+        "cumulativeXp": 6070605,
+        "currentHp": 742
+      },
+      {
+        "instanceId": "monster-26",
+        "shortType": "Bones",
+        "level": 51,
+        "cumulativeXp": 6089912,
+        "currentHp": 595
+      },
+      {
+        "instanceId": "monster-50",
+        "shortType": "Champion",
+        "level": 50,
+        "cumulativeXp": 5799270,
+        "currentHp": 815
+      },
+      {
+        "instanceId": "monster-69",
+        "shortType": "GoldLion",
+        "level": 50,
+        "cumulativeXp": 5600289,
+        "currentHp": 797
+      },
+      {
+        "instanceId": "monster-67",
+        "shortType": "Drake",
+        "level": 50,
+        "cumulativeXp": 5863322,
+        "currentHp": 735
+      },
+      {
+        "instanceId": "monster-70",
+        "shortType": "ThunderMage",
+        "level": 49,
+        "cumulativeXp": 5484833,
+        "currentHp": 779
+      },
+      {
+        "instanceId": "monster-66",
+        "shortType": "CrabKing",
+        "level": 48,
+        "cumulativeXp": 4866987,
+        "currentHp": 904
+      },
+      {
+        "instanceId": "monster-44",
+        "shortType": "MinotaurBrute",
+        "level": 47,
+        "cumulativeXp": 4690266,
+        "currentHp": 738
+      },
+      {
+        "instanceId": "monster-27",
+        "shortType": "SerpentMage",
+        "level": 46,
+        "cumulativeXp": 4202457,
+        "currentHp": 720
+      },
+      {
+        "instanceId": "monster-63",
+        "shortType": "BatKing",
+        "level": 45,
+        "cumulativeXp": 3950298,
+        "currentHp": 698
+      },
+      {
+        "instanceId": "monster-61",
+        "shortType": "Drake",
+        "level": 43,
+        "cumulativeXp": 3607272,
+        "currentHp": 651
+      },
+      {
+        "instanceId": "monster-45",
+        "shortType": "GoldLion",
+        "level": 42,
+        "cumulativeXp": 3258896,
+        "currentHp": 691
+      },
+      {
+        "instanceId": "monster-60",
+        "shortType": "CrabKing",
+        "level": 41,
+        "cumulativeXp": 3021802,
+        "currentHp": 792
+      },
+      {
+        "instanceId": "monster-48",
+        "shortType": "Rider",
+        "level": 41,
+        "cumulativeXp": 3034238,
+        "currentHp": 660
+      },
+      {
+        "instanceId": "monster-49",
+        "shortType": "BatKing",
+        "level": 40,
+        "cumulativeXp": 2798244,
+        "currentHp": 635
+      },
+      {
+        "instanceId": "monster-59",
+        "shortType": "SteelSnake",
+        "level": 39,
+        "cumulativeXp": 2532178,
+        "currentHp": 643
+      },
+      {
+        "instanceId": "monster-42",
+        "shortType": "GoldLion",
+        "level": 38,
+        "cumulativeXp": 2489948,
+        "currentHp": 637
+      },
+      {
+        "instanceId": "monster-57",
+        "shortType": "MerKing",
+        "level": 38,
+        "cumulativeXp": 2366953,
+        "currentHp": 632
+      },
+      {
+        "instanceId": "monster-54",
+        "shortType": "Beastman",
+        "level": 33,
+        "cumulativeXp": 1572990,
+        "currentHp": 524
+      },
+      {
+        "instanceId": "monster-36",
+        "shortType": "SunWarrior",
+        "level": 32,
+        "cumulativeXp": 1540819,
+        "currentHp": 507
+      },
+      {
+        "instanceId": "monster-38",
+        "shortType": "Sasuke",
+        "level": 31,
+        "cumulativeXp": 1310853,
+        "currentHp": 483
+      },
+      {
+        "instanceId": "monster-40",
+        "shortType": "Watcher",
+        "level": 30,
+        "cumulativeXp": 1283820,
+        "currentHp": 518
+      },
+      {
+        "instanceId": "monster-35",
+        "shortType": "Kappa",
+        "level": 29,
+        "cumulativeXp": 1117080,
+        "currentHp": 429
+      },
+      {
+        "instanceId": "monster-39",
+        "shortType": "Vampire",
+        "level": 28,
+        "cumulativeXp": 971360,
+        "currentHp": 455
+      },
+      {
+        "instanceId": "monster-29",
+        "shortType": "Imp",
+        "level": 27,
+        "cumulativeXp": 873258,
+        "currentHp": 425
+      },
+      {
+        "instanceId": "monster-41",
+        "shortType": "Spark",
+        "level": 25,
+        "cumulativeXp": 739669,
+        "currentHp": 395
+      },
+      {
+        "instanceId": "monster-25",
+        "shortType": "DireWolf",
+        "level": 24,
+        "cumulativeXp": 651175,
+        "currentHp": 418
+      },
+      {
+        "instanceId": "monster-37",
+        "shortType": "KemetKing",
+        "level": 24,
+        "cumulativeXp": 644214,
+        "currentHp": 414
+      },
+      {
+        "instanceId": "monster-33",
+        "shortType": "Pincer",
+        "level": 23,
+        "cumulativeXp": 570413,
+        "currentHp": 340
+      },
+      {
+        "instanceId": "monster-28",
+        "shortType": "MinotaurBrute",
+        "level": 22,
+        "cumulativeXp": 499795,
+        "currentHp": 415
+      },
+      {
+        "instanceId": "monster-31",
+        "shortType": "WhiteSeahorse",
+        "level": 21,
+        "cumulativeXp": 420138,
+        "currentHp": 404
+      },
+      {
+        "instanceId": "monster-9",
+        "shortType": "Treehead",
+        "level": 20,
+        "cumulativeXp": 341366,
+        "currentHp": 319
+      },
+      {
+        "instanceId": "monster-34",
+        "shortType": "Manticore",
+        "level": 19,
+        "cumulativeXp": 252791,
+        "currentHp": 304
+      },
+      {
+        "instanceId": "monster-30",
+        "shortType": "CrabKing",
+        "level": 18,
+        "cumulativeXp": 201490,
+        "currentHp": 424
+      },
+      {
+        "instanceId": "monster-32",
+        "shortType": "DevilWorm",
+        "level": 18,
+        "cumulativeXp": 201490,
+        "currentHp": 321
+      },
+      {
+        "instanceId": "monster-24",
+        "shortType": "BloodWarrior",
+        "level": 17,
+        "cumulativeXp": 158242,
+        "currentHp": 366
+      },
+      {
+        "instanceId": "monster-8",
+        "shortType": "Bones",
+        "level": 17,
+        "cumulativeXp": 201141,
+        "currentHp": 285
+      },
+      {
+        "instanceId": "monster-11",
+        "shortType": "GiantAnt",
+        "level": 12,
+        "cumulativeXp": 34835,
+        "currentHp": 239
+      },
+      {
+        "instanceId": "monster-22",
+        "shortType": "MerWarrior",
+        "level": 11,
+        "cumulativeXp": 32875,
+        "currentHp": 231
+      },
+      {
+        "instanceId": "monster-23",
+        "shortType": "Goblin",
+        "level": 11,
+        "cumulativeXp": 24426,
+        "currentHp": 228
+      },
+      {
+        "instanceId": "monster-7",
+        "shortType": "Stinger",
+        "level": 11,
+        "cumulativeXp": 24997,
+        "currentHp": 195
+      },
+      {
+        "instanceId": "monster-21",
+        "shortType": "BatSquirrel",
+        "level": 9,
+        "cumulativeXp": 11204,
+        "currentHp": 164
+      },
+      {
+        "instanceId": "monster-20",
+        "shortType": "BabyNessie",
+        "level": 8,
+        "cumulativeXp": 7300,
+        "currentHp": 197
+      },
+      {
+        "instanceId": "monster-18",
+        "shortType": "Penguin",
+        "level": 6,
+        "cumulativeXp": 1987,
+        "currentHp": 185
+      },
+      {
+        "instanceId": "monster-6",
+        "shortType": "Sludge",
+        "level": 6,
+        "cumulativeXp": 2275,
+        "currentHp": 163
+      },
+      {
+        "instanceId": "monster-17",
+        "shortType": "GiantWasp",
+        "level": 6,
+        "cumulativeXp": 1741,
+        "currentHp": 163
+      },
+      {
+        "instanceId": "monster-10",
+        "shortType": "BabyNessie",
+        "level": 5,
+        "cumulativeXp": 945,
+        "currentHp": 170
+      },
+      {
+        "instanceId": "monster-13",
+        "shortType": "Carnoraptor",
+        "level": 1,
+        "cumulativeXp": 0,
+        "currentHp": 142
+      },
+      {
+        "instanceId": "monster-4",
+        "shortType": "Fairy",
+        "level": 1,
+        "cumulativeXp": 0,
+        "currentHp": 138
+      },
+      {
+        "instanceId": "monster-12",
+        "shortType": "GiantBat",
+        "level": 1,
+        "cumulativeXp": 0,
+        "currentHp": 139
+      },
+      {
+        "instanceId": "monster-14",
+        "shortType": "Penguin",
+        "level": 3,
+        "cumulativeXp": 220,
+        "currentHp": 158
+      },
+      {
+        "instanceId": "monster-15",
+        "shortType": "GiantTurtle",
+        "level": 4,
+        "cumulativeXp": 512,
+        "currentHp": 204
+      },
+      {
+        "instanceId": "monster-16",
+        "shortType": "Bitewing",
+        "level": 5,
+        "cumulativeXp": 945,
+        "currentHp": 167
+      },
+      {
+        "instanceId": "monster-19",
+        "shortType": "Assassin",
+        "level": 8,
+        "cumulativeXp": 5667,
+        "currentHp": 190
+      },
+      {
+        "instanceId": "monster-47",
+        "shortType": "DarkPriest",
+        "level": 1,
+        "cumulativeXp": 0,
+        "currentHp": 140
+      },
+      {
+        "instanceId": "monster-53",
+        "shortType": "BloodKnight",
+        "level": 1,
+        "cumulativeXp": 0,
+        "currentHp": 173
+      },
+      {
+        "instanceId": "monster-56",
+        "shortType": "Manticore",
+        "level": 34,
+        "cumulativeXp": 1694410,
+        "currentHp": 440
+      },
+      {
+        "instanceId": "monster-58",
+        "shortType": "Cherub",
+        "level": 2,
+        "cumulativeXp": 100,
+        "currentHp": 183
+      },
+      {
+        "instanceId": "monster-68",
+        "shortType": "DreamEater",
+        "level": 1,
+        "cumulativeXp": 0,
+        "currentHp": 142
+      },
+      {
+        "instanceId": "monster-73",
+        "shortType": "Mask",
+        "level": 1,
+        "cumulativeXp": 0,
+        "currentHp": 140
+      },
+      {
+        "instanceId": "monster-74",
+        "shortType": "BeastmanKing",
+        "level": 52,
+        "cumulativeXp": 6287514,
+        "currentHp": 797
+      }
+    ],
+    "ownedSoulStones": [
+      {
+        "element": "Life",
+        "level": 2,
+        "sourceType": "Fairy"
+      }
+    ]
+  },
+  "quests": {
+    "schemaVersion": 1,
+    "activeQuestNames": [
+      "GoToHolyCity",
+      "KaiBattle",
+      "LeomarisBattle3"
+    ],
+    "finishedQuestNames": [
+      "MacworldCatch",
+      "Defeat20Monsters",
+      "BeatRigel",
+      "Evolution",
+      "GoToCapital",
+      "MakeASoulstone",
+      "CatchBabyNessie",
+      "AntSwarmBattle",
+      "BeatCyrus",
+      "ClearNorthCave",
+      "MacworldCombine",
+      "MacworldSpirit",
+      "ChristaBattle",
+      "CyrusBattle2",
+      "GoToDundean",
+      "FionaBattle",
+      "MazarineBattle",
+      "CyrusBattle3",
+      "LuluBattle",
+      "AdinaBattle",
+      "LeomarisBattle",
+      "CarminBattle",
+      "ClearTheLand",
+      "al-RashidBattle",
+      "RobinBattle",
+      "HeloiseBattle",
+      "ElvinBattle",
+      "IrisBattle",
+      "ChiyoBattle",
+      "CyrusBattle4",
+      "RyuBattle",
+      "RenBattle",
+      "ClearNoMansCastle",
+      "GoToLongdale",
+      "AlvisBattle",
+      "CyrusBattle5",
+      "GoToLorensia",
+      "ClematisBattle",
+      "LeomarisBattle2",
+      "WendyBattle2",
+      "KikuBattle",
+      "JubalBattle2",
+      "ShadowBattle",
+      "al-RashidBattle2",
+      "NjordBattle2",
+      "RabiBattle",
+      "RobinBattle2",
+      "RenBattle2",
+      "IrisBattle2",
+      "BoydBattle2",
+      "CarminBattle2",
+      "CyrusBattle6",
+      "GuyBattle",
+      "RabiBattle2",
+      "OmarBattle",
+      "ChiyoBattle2",
+      "ConstanceBattle",
+      "UrusulaBattle2",
+      "HeloiseBattle2",
+      "JehuBattle2",
+      "LapisBattle"
+    ],
+    "progressByQuestName": {},
+    "dialogsSeen": [
+      "Adina",
+      "AdinaDefeated",
+      "AdinaIntro1",
+      "Alvis",
+      "AlvisDefeated",
+      "Boyd",
+      "Boyd2",
+      "BoydDefeated",
+      "BoydDefeated2",
+      "Carmin",
+      "Carmin2",
+      "CarminDefeated",
+      "CarminDefeated2",
+      "Chiyo",
+      "Chiyo2",
+      "ChiyoDefeated",
+      "ChiyoDefeated2",
+      "ChiyoIntro1",
+      "Christa",
+      "ChristaDefeated",
+      "Clematis",
+      "ClematisDefeated",
+      "ClematisIntro1",
+      "Conan",
+      "Conan2",
+      "ConanDefeated",
+      "ConanDefeated2",
+      "ConanIntro1",
+      "Constance",
+      "ConstanceDefeated",
+      "ConstanceIntro1",
+      "Cyrus",
+      "Cyrus2",
+      "Cyrus3",
+      "Cyrus4",
+      "Cyrus5",
+      "Cyrus6",
+      "CyrusDefeated",
+      "CyrusDefeated2",
+      "CyrusDefeated3",
+      "CyrusDefeated4",
+      "CyrusDefeated5",
+      "CyrusDefeated6",
+      "DragonDefeated15",
+      "DragonDefeated3",
+      "DragonDefeated5",
+      "DragonDefeated7",
+      "DrakeDefeated",
+      "Elvin",
+      "ElvinDefeated",
+      "EnergyDefeated",
+      "Enya",
+      "Enya2",
+      "Enya4",
+      "Enya5",
+      "Enya6",
+      "Enya7",
+      "EnyaDefeated",
+      "EnyaDefeated2",
+      "EnyaDefeated4",
+      "EnyaDefeated5",
+      "EnyaDefeated6",
+      "EnyaDefeated7",
+      "EnyaIntro1",
+      "EnyaIntro2",
+      "EnyaIntro3",
+      "EnyaIntro4",
+      "Fiona",
+      "FionaDefeated",
+      "Giselle",
+      "GiselleDefeated",
+      "GiselleIntro1",
+      "GiselleIntro2",
+      "GiselleIntro3",
+      "Guy",
+      "GuyDefeated",
+      "Harald",
+      "HaraldDefeated",
+      "Heloise",
+      "Heloise2",
+      "HeloiseDefeated",
+      "HeloiseDefeated2",
+      "HeloiseIntro1",
+      "Iris",
+      "Iris2",
+      "IrisDefeated",
+      "IrisDefeated2",
+      "IrisIntro1",
+      "Ivo",
+      "IvoDefeated",
+      "Jehu",
+      "JehuDefeated",
+      "Jubal2",
+      "JubalDefeated2",
+      "JubalIntro1",
+      "JubalIntro2",
+      "KaiIntro1",
+      "Kiku",
+      "KikuDefeated",
+      "Lapis",
+      "LapisDefeated",
+      "Leomaris",
+      "Leomaris2",
+      "LeomarisDefeated",
+      "LeomarisDefeated2",
+      "LeomarisIntro1",
+      "Leslie",
+      "LeslieFindDragon",
+      "LeslieFindDragon10",
+      "LeslieFindDragon15",
+      "LeslieFindDragon2",
+      "LeslieFindDragon3",
+      "LeslieFindDragon5",
+      "LeslieFindDragon7",
+      "LeslieFindDragon8",
+      "LeslieFindSpirit",
+      "LeslieIntro1",
+      "LeslieIntro10",
+      "LeslieIntro11",
+      "LeslieIntro12",
+      "LeslieIntro13",
+      "LeslieIntro14",
+      "LeslieIntro15",
+      "LeslieIntro16",
+      "LeslieIntro17",
+      "LeslieIntro18",
+      "LeslieIntro19",
+      "LeslieIntro2",
+      "LeslieIntro2.5",
+      "LeslieIntro21",
+      "LeslieIntro22",
+      "LeslieIntro3",
+      "LeslieIntro4",
+      "LeslieIntro5",
+      "LeslieIntro5.5",
+      "LeslieIntro6",
+      "LeslieIntro7",
+      "LeslieIntro8",
+      "LeslieIntro9",
+      "LeslieSaved",
+      "Lulu",
+      "LuluDefeated",
+      "May",
+      "MayDefeated",
+      "Mazarine",
+      "MazarineDefeated",
+      "Nemo2",
+      "NemoDefeated2",
+      "NemoIntro1",
+      "Njord",
+      "Njord2",
+      "NjordDefeated",
+      "NjordDefeated2",
+      "Omar",
+      "OmarDefeated",
+      "OmarIntro1",
+      "Rabi",
+      "Rabi2",
+      "RabiDefeated",
+      "RabiDefeated2",
+      "RabiIntro1",
+      "Ren",
+      "Ren2",
+      "Ren3",
+      "RenDefeated",
+      "RenDefeated2",
+      "RenDefeated3",
+      "RenIntro1",
+      "RenIntro2",
+      "ResistanceDefeated",
+      "Rigel",
+      "RigelDefeated",
+      "Robin",
+      "Robin2",
+      "RobinDefeated",
+      "RobinDefeated2",
+      "Ryu",
+      "RyuDefeated",
+      "Shadow",
+      "ShadowDefeated",
+      "Urusula",
+      "Urusula2",
+      "UrusulaDefeated",
+      "UrusulaDefeated2",
+      "Wendy",
+      "Wendy2",
+      "Wendy3",
+      "WendyDefeated",
+      "WendyDefeated2",
+      "al-Rashid",
+      "al-Rashid2",
+      "al-RashidDefeated",
+      "al-RashidDefeated2",
+      "al-RashidIntro1"
+    ],
+    "completedFixedEncounterKeys": [
+      "BeatConan3",
+      "BeatEnya5",
+      "BeatEnya6",
+      "ConanBattle",
+      "NjordBattle",
+      "UrusulaBattle"
+    ],
+    "receivedBattleRewardKeys": [
+      "BeatBoyd2",
+      "BeatCarmin2",
+      "BeatClematis",
+      "BeatConstance",
+      "BeatJubal2",
+      "BeatKiku",
+      "BeatMazarine",
+      "BeatRen2",
+      "BeatRobin2",
+      "Beatal-Rashid2",
+      "RigelBattle"
+    ]
+  },
+  "location": {
+    "kind": "battle",
+    "worldId": "World_4-2",
+    "poiId": "4-2_Field_5",
+    "battleId": "battle-1181"
+  },
+  "world": {
+    "schemaVersion": 1,
+    "worldId": "World_4-2",
+    "currentPoiId": "4-2_Field_5",
+    "lastTownId": "Longdale_City",
+    "dayNumber": 182,
+    "occurrenceByPoi": {
+      "4-2_Field_1": true,
+      "4-2_Field_5": false,
+      "4-3_Field_10": true,
+      "4-3_Field_15": false
+    },
+    "completedPoiIds": [
+      "3-3_Zone_Change_4",
+      "4-2_Field_1",
+      "4-2_Field_5",
+      "4-2_Zone_Change_1",
+      "4-3_Field_10",
+      "4-3_Field_15",
+      "4-3_Zone_Change_4",
+      "4-3_Zone_Change_6",
+      "Longdale_City"
+    ],
+    "poiWins": {
+      "1-1_Beach_1": 24,
+      "1-1_Field_1": 3,
+      "1-1_Field_2": 1,
+      "1-1_Field_3": 3,
+      "1-1_Field_4": 2,
+      "1-1_Forest_1": 6,
+      "1-1_Forest_2": 3,
+      "1-1_Forest_3": 1,
+      "1-2_Beach_1": 1,
+      "1-2_Beach_2": 1,
+      "1-2_Field_1": 1,
+      "1-2_Field_3": 2,
+      "1-2_Field_4": 3,
+      "1-2_Field_5": 2,
+      "1-2_Field_6": 130,
+      "1-2_Field_7": 2,
+      "1-2_Field_8": 1,
+      "1-3_Field_1": 2,
+      "1-3_Field_2": 2,
+      "1-4_Forest_1": 3,
+      "1-4_Forest_2": 1,
+      "1-4_Forest_4": 317,
+      "1-4_Forest_5": 1,
+      "1-4_Forest_6": 1,
+      "1-4_Forest_7": 1,
+      "2-1_Field_1": 2,
+      "2-1_Field_2": 3,
+      "2-1_Field_5": 1,
+      "2-1_Forest_2": 1,
+      "2-2_Forest_4": 1,
+      "2-3_Field_11": 60,
+      "2-3_Field_12": 1,
+      "2-3_Field_13": 1,
+      "2-3_Field_14": 5,
+      "2-3_Field_15": 2,
+      "2-3_Field_16": 6,
+      "2-3_Field_18": 7,
+      "2-3_Field_2": 1,
+      "2-3_Field_4": 1,
+      "2-3_Field_6": 2,
+      "2-3_Field_7": 1,
+      "2-3_Field_8": 2,
+      "2-3_Forest_1": 1,
+      "2-4_Field_1": 4,
+      "3-1_Field_2": 1,
+      "3-1_Field_5": 3,
+      "3-1_Field_7": 1,
+      "3-1_Forest_1": 2,
+      "3-2_Field_4": 2,
+      "3-3_Field_1": 2,
+      "3-3_Field_2": 2,
+      "3-3_Field_4": 2,
+      "3-3_Forest_1": 3,
+      "3-3_Forest_2": 4,
+      "3-3_Forest_3": 2,
+      "3-3_Mountain_1": 3,
+      "3-3_Mountain_2": 2,
+      "3-3_Mountain_3": 4,
+      "3-4_Field_1": 27,
+      "3-4_Field_2": 3,
+      "3-4_Field_5": 1,
+      "3-4_Forest_1": 1,
+      "3-4_Forest_4": 2,
+      "4-2_Field_1": 2,
+      "4-2_Field_5": 6,
+      "4-3_Field_10": 4,
+      "4-3_Field_11": 6,
+      "4-3_Field_15": 4,
+      "4-3_Field_2": 13,
+      "4-3_Field_3": 1,
+      "4-3_Field_4": 26,
+      "4-3_Field_5": 2,
+      "4-3_Field_6": 4,
+      "4-3_Field_7": 2,
+      "4-3_Field_9": 7,
+      "4-4_Field_1": 3,
+      "4-4_Field_10": 1,
+      "4-4_Field_11": 12,
+      "4-4_Field_4": 5,
+      "4-4_Field_5": 65,
+      "4-4_Field_7": 1,
+      "4-4_Field_8": 1,
+      "Breeder_Hut_1": 1,
+      "Breeder_Hut_11": 1,
+      "Breeder_Hut_12": 1,
+      "Breeder_Hut_13": 1,
+      "Breeder_Hut_15": 1,
+      "Breeder_Hut_16": 1,
+      "Breeder_Hut_17": 1,
+      "Breeder_Hut_18": 1,
+      "Breeder_Hut_19": 1,
+      "Breeder_Hut_3": 1,
+      "Breeder_Hut_4": 1,
+      "Breeder_Hut_5": 1,
+      "Breeder_Hut_6": 1,
+      "Port_City": 2
+    },
+    "everCompletedPoiIds": [
+      "1-1_Beach_1",
+      "1-1_Field_1",
+      "1-1_Field_2",
+      "1-1_Field_3",
+      "1-1_Field_4",
+      "1-1_Forest_1",
+      "1-1_Forest_2",
+      "1-1_Forest_3",
+      "1-1_Turtorial_Hut_1",
+      "1-1_Turtorial_Hut_2",
+      "1-1_Turtorial_Hut_3",
+      "1-1_Zone_Change_1",
+      "1-1_Zone_Change_2",
+      "1-2_Beach_1",
+      "1-2_Beach_2",
+      "1-2_Field_1",
+      "1-2_Field_2",
+      "1-2_Field_3",
+      "1-2_Field_4",
+      "1-2_Field_5",
+      "1-2_Field_6",
+      "1-2_Field_7",
+      "1-2_Field_8",
+      "1-2_Zone_Change_1",
+      "1-2_Zone_Change_2",
+      "1-2_Zone_Change_3",
+      "1-2_Zone_Change_4",
+      "1-3_Field_1",
+      "1-3_Field_2",
+      "1-3_Zone_Change_1",
+      "1-3_Zone_Change_2",
+      "1-3_Zone_Change_3",
+      "1-3_Zone_Change_4",
+      "1-4_Forest_1",
+      "1-4_Forest_2",
+      "1-4_Forest_4",
+      "1-4_Forest_5",
+      "1-4_Forest_6",
+      "1-4_Forest_7",
+      "1-4_Zone_Change_1",
+      "1-4_Zone_Change_2",
+      "2-1_Field_1",
+      "2-1_Field_2",
+      "2-1_Field_3",
+      "2-1_Field_4",
+      "2-1_Field_5",
+      "2-1_Field_6",
+      "2-1_Forest_1",
+      "2-1_Forest_2",
+      "2-1_Forest_3",
+      "2-1_Forest_4",
+      "2-1_Zone_Change_4",
+      "2-1_Zone_Change_6",
+      "2-2_Field_1",
+      "2-2_Field_2",
+      "2-2_Field_3",
+      "2-2_Forest_2",
+      "2-2_Forest_3",
+      "2-2_Forest_4",
+      "2-2_Forest_5",
+      "2-2_Zone_Change_1",
+      "2-2_Zone_Change_2",
+      "2-3_Field_10",
+      "2-3_Field_11",
+      "2-3_Field_12",
+      "2-3_Field_13",
+      "2-3_Field_14",
+      "2-3_Field_15",
+      "2-3_Field_16",
+      "2-3_Field_17",
+      "2-3_Field_18",
+      "2-3_Field_2",
+      "2-3_Field_3",
+      "2-3_Field_4",
+      "2-3_Field_5",
+      "2-3_Field_6",
+      "2-3_Field_7",
+      "2-3_Field_8",
+      "2-3_Field_9",
+      "2-3_Forest_1",
+      "2-3_Zone_Change_1",
+      "2-3_Zone_Change_2",
+      "2-3_Zone_Change_3",
+      "2-3_Zone_Change_4",
+      "2-4_Field_1",
+      "2-4_Zone_Change_1",
+      "2-4_Zone_Change_2",
+      "3-1_Field_1",
+      "3-1_Field_2",
+      "3-1_Field_5",
+      "3-1_Field_7",
+      "3-1_Forest_1",
+      "3-1_Zone_Change_1",
+      "3-1_Zone_Change_2",
+      "3-2_Field_2",
+      "3-2_Field_3",
+      "3-2_Field_4",
+      "3-2_Zone_Change_1",
+      "3-2_Zone_Change_2",
+      "3-2_Zone_Change_3",
+      "3-3_Field_1",
+      "3-3_Field_2",
+      "3-3_Field_4",
+      "3-3_Forest_1",
+      "3-3_Forest_2",
+      "3-3_Forest_3",
+      "3-3_Mountain_1",
+      "3-3_Mountain_2",
+      "3-3_Mountain_3",
+      "3-3_Zone_Change_1",
+      "3-3_Zone_Change_2",
+      "3-3_Zone_Change_3",
+      "3-3_Zone_Change_4",
+      "3-3_Zone_Change_5",
+      "3-3_Zone_Change_6",
+      "3-3_Zone_Change_7",
+      "3-4_Field_1",
+      "3-4_Field_2",
+      "3-4_Field_5",
+      "3-4_Forest_1",
+      "3-4_Forest_3",
+      "3-4_Forest_4",
+      "3-4_Zone_Change_1",
+      "3-4_Zone_Change_2",
+      "4-2_Field_1",
+      "4-2_Field_2",
+      "4-2_Field_5",
+      "4-2_Zone_Change_1",
+      "4-3_Field_10",
+      "4-3_Field_11",
+      "4-3_Field_15",
+      "4-3_Field_2",
+      "4-3_Field_3",
+      "4-3_Field_4",
+      "4-3_Field_5",
+      "4-3_Field_6",
+      "4-3_Field_7",
+      "4-3_Field_9",
+      "4-3_Zone_Change_1",
+      "4-3_Zone_Change_2",
+      "4-3_Zone_Change_3",
+      "4-3_Zone_Change_4",
+      "4-3_Zone_Change_5",
+      "4-3_Zone_Change_6",
+      "4-4_Field_1",
+      "4-4_Field_10",
+      "4-4_Field_11",
+      "4-4_Field_4",
+      "4-4_Field_5",
+      "4-4_Field_7",
+      "4-4_Field_8",
+      "4-4_Field_9",
+      "4-4_Forest_2",
+      "4-4_Zone_Change_1",
+      "4-4_Zone_Change_2",
+      "4-4_Zone_Change_3",
+      "Ancient_City",
+      "Breeder_Hut_1",
+      "Breeder_Hut_11",
+      "Breeder_Hut_12",
+      "Breeder_Hut_13",
+      "Breeder_Hut_15",
+      "Breeder_Hut_16",
+      "Breeder_Hut_17",
+      "Breeder_Hut_18",
+      "Breeder_Hut_19",
+      "Breeder_Hut_3",
+      "Breeder_Hut_4",
+      "Breeder_Hut_5",
+      "Breeder_Hut_6",
+      "Capital_City",
+      "Dungeon_1",
+      "Dungeon_11",
+      "Dungeon_12",
+      "Dungeon_13",
+      "Dungeon_3",
+      "Dungeon_4",
+      "Dungeon_7",
+      "Dungeon_9",
+      "First_City",
+      "Longdale_City",
+      "Port_City",
+      "Rainy_City",
+      "Valley_City"
+    ],
+    "visitedTownIds": [
+      "Ancient_City",
+      "Capital_City",
+      "First_City",
+      "Longdale_City",
+      "Rainy_City",
+      "Valley_City"
+    ]
+  },
+  "battle": {
+    "schemaVersion": 1,
+    "battleId": "battle-1181",
+    "origin": {
+      "kind": "world",
+      "worldId": "World_4-2",
+      "poiId": "4-2_Field_5"
+    },
+    "encounter": {
+      "kind": "world",
+      "generated": {
+        "kind": "ordinary",
+        "poiName": "4-2_Field_5",
+        "forced": true,
+        "tableKey": "1",
+        "poiWinsBeforeEncounter": 6,
+        "challengeLevel": 50,
+        "monsters": [
+          {
+            "type": "Abomination",
+            "level": 45
+          },
+          {
+            "type": "Abomination",
+            "level": 50
+          },
+          {
+            "type": "TerrorClaw",
+            "level": 45
+          }
+        ]
+      },
+      "allowRetreat": true,
+      "rewards": []
+    },
+    "replay": {
+      "schemaVersion": 1,
+      "randomDraws": [
+        0.0503499283123886,
+        0.22512231762086266,
+        0.7094618162708807,
+        0.47408176388829926,
+        0.1481647913628621,
+        0.5748553286186228,
+        0.03570158768724996,
+        0.6611121825913947,
+        0.1751294228810899,
+        0.10389411236257706,
+        0.1658342206966894,
+        0.0218124843340628,
+        0.33732479972517204,
+        0.2298653557816216
+      ],
+      "teams": [
+        [
+          {
+            "shortType": "WaterDragon",
+            "level": 65,
+            "currentHp": 1388,
+            "sourceInstanceId": "monster-1",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          },
+          {
+            "shortType": "SteelSnake",
+            "level": 55,
+            "currentHp": 686,
+            "sourceInstanceId": "monster-71",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          },
+          {
+            "shortType": "SpikeCrab",
+            "level": 54,
+            "currentHp": 1557,
+            "sourceInstanceId": "monster-72",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          },
+          {
+            "shortType": "BatKing",
+            "level": 53,
+            "currentHp": 799,
+            "sourceInstanceId": "monster-64",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          },
+          {
+            "shortType": "WaspQueen",
+            "level": 53,
+            "currentHp": 761,
+            "sourceInstanceId": "monster-51",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          },
+          {
+            "shortType": "MinotaurBrute",
+            "level": 51,
+            "currentHp": 789,
+            "sourceInstanceId": "monster-65",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          },
+          {
+            "shortType": "Gnoll",
+            "level": 51,
+            "currentHp": 742,
+            "sourceInstanceId": "monster-52",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          },
+          {
+            "shortType": "Bones",
+            "level": 51,
+            "currentHp": 595,
+            "sourceInstanceId": "monster-26",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          },
+          {
+            "shortType": "Champion",
+            "level": 50,
+            "currentHp": 815,
+            "sourceInstanceId": "monster-50",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          },
+          {
+            "shortType": "GoldLion",
+            "level": 50,
+            "currentHp": 797,
+            "sourceInstanceId": "monster-69",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          },
+          {
+            "shortType": "Drake",
+            "level": 50,
+            "currentHp": 735,
+            "sourceInstanceId": "monster-67",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          },
+          {
+            "shortType": "ThunderMage",
+            "level": 49,
+            "currentHp": 779,
+            "sourceInstanceId": "monster-70",
+            "playerBuffs": {
+              "MaxHP": 111,
+              "Attack": 64,
+              "Speed": 6,
+              "Defense": 70.5
+            }
+          }
+        ],
+        [
+          {
+            "shortType": "Abomination",
+            "level": 45
+          },
+          {
+            "shortType": "Abomination",
+            "level": 50
+          },
+          {
+            "shortType": "TerrorClaw",
+            "level": 45
+          }
+        ]
+      ],
+      "options": {
+        "fightingGroupSize": 3,
+        "silver": 33690
+      },
+      "commands": []
+    }
+  },
+  "nextMonsterSequence": 75,
+  "nextBattleSequence": 1182,
+  "collectionClaims": {
+    "schemaVersion": 1,
+    "claimedGoalIds": []
+  },
+  "nextContinuationSequence": 132
+}

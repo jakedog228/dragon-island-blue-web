@@ -12,6 +12,9 @@ Relic zone change on `CaiusDefeated`, counts every enemy death for quest event 0
 empty Drop Quests; its migration backfills provable license/dungeon chats. Every version now
 accepts generator-domain Gem rewards (slot 3, level above 150) and positional Soul Stone ids, and
 reducer faults are non-retryable.
+Official v26 settles automatic battle-opening silver costs and migrates only replay-proven
+unsettled opening wallets, preserving the v25 namespace. Cold logins of long-running saves share
+one bounded slot-file read budget.
 
 ## Current system map
 
@@ -106,7 +109,7 @@ no client-authored state snapshots. Tokens are self-service: `POST /api/game/acc
 per client address per five minutes with a username and a server-owned public-scoreboard
 preference (editable in-game under Options → Scores), and `pnpm game:cli invite` still issues
 them directly. The raw token is never stored either way. The shipped stack (`apps/game-server/src/cli.ts` installs the
-v25 descriptor over its immutable historical delegates) advertises 45 command types covering selected world, dungeon,
+v26 descriptor over its immutable historical delegates) advertises 45 command types covering selected world, dungeon,
 player, economy, Store, Arena, Tournament, quest, and Egg-hatch operations; anything else throws
 `CAPABILITY_UNSUPPORTED`. That is the count when operator data supplies every optional system —
 `dungeon.*`, `world.usePortal`, `tournament.*`, and `collection.claim` drop out of the advertised

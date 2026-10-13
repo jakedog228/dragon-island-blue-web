@@ -14,6 +14,7 @@ import {
   DungeonRuntimeController,
   GuildQuestRuntime,
   baseStat,
+  restoreBattleReplay,
   jobXpForLevel,
   type PlayerMonsterInstance,
 } from "@dib/engine";
@@ -44,6 +45,9 @@ import {
   OfficialGameV23Reducer,
   OfficialGameV24Reducer,
   OfficialGameV25Reducer,
+  OfficialGameV26Reducer,
+  createOfficialGameV26LogicPackDescriptor,
+  migrateOfficialGameV25ToV26,
   createOfficialGameV12LogicPackDescriptor,
   createOfficialGameV12Support,
   createOfficialGameV15LogicPackDescriptor,
@@ -103,9 +107,10 @@ const pack22 = createOfficialGameV22LogicPackDescriptor(logicPackId, v12Support)
 const pack23 = createOfficialGameV23LogicPackDescriptor(logicPackId, v12Support);
 const pack24 = createOfficialGameV24LogicPackDescriptor(logicPackId, v12Support);
 const pack25 = createOfficialGameV25LogicPackDescriptor(logicPackId, v12Support);
+let randomSource = () => 0;
 const legacy = new OfficialGameReducer({
   data, world, worlds: allWorlds, resources: source, quests, startTownId: "First_City", support,
-  random: () => 0,
+  random: () => randomSource(),
 });
 // Built exactly as apps/game-server/src/cli.ts builds the production chain.
 const v24 = new OfficialGameV24Reducer(new OfficialGameV23Reducer(new OfficialGameV22Reducer(
@@ -114,10 +119,13 @@ const v24 = new OfficialGameV24Reducer(new OfficialGameV23Reducer(new OfficialGa
       new OfficialGameV15Reducer(new OfficialGameV12Reducer(legacy, v12Support), pack12),
       pack15), pack16), pack17), pack18), pack19), pack20), pack21), pack22), pack23);
 const v25 = new OfficialGameV25Reducer(v24, pack24);
+const pack26 = createOfficialGameV26LogicPackDescriptor(logicPackId, v12Support);
+const v26 = new OfficialGameV26Reducer(data, v25, pack25);
 
-type Versioned = { readonly reducer: OfficialGameV24Reducer | OfficialGameV25Reducer; readonly pack: LogicPackDescriptorV1 };
+type Versioned = { readonly reducer: OfficialGameV24Reducer | OfficialGameV25Reducer | OfficialGameV26Reducer; readonly pack: LogicPackDescriptorV1 };
 const V24: Versioned = { reducer: v24, pack: pack24 };
 const V25: Versioned = { reducer: v25, pack: pack25 };
+const V26: Versioned = { reducer: v26, pack: pack26 };
 
 function apply(version: Versioned, state: OfficialGameStateV24, command: GameCommandEnvelopeV1["command"]) {
   return version.reducer.apply({
@@ -524,5 +532,91 @@ describe("v24 -> v25 migration", () => {
     expect(migrateOfficialGameV24ToV25({
       data, quests, worlds: allWorlds, state: town, context: { dungeonResources: source },
     })).toEqual(town);
+  });
+});
+
+
+describe("official-game-v26 opening wallet settlement", () => {
+  const earned = () => JSON.parse(readFileSync(new URL("./fixtures/earned-v25-opening-silver.json", import.meta.url), "utf8")) as OfficialGameStateV24;
+  const migrate = (state: OfficialGameStateV24) => migrateOfficialGameV25ToV26({ data, quests, state, context: { dungeonResources: source } });
+  const attack: GameCommandEnvelopeV1["command"] = { type: "battle.chooseAbility", battleId: "battle-1181", actorId: "t0m1:SteelSnake", slot: "usable1", targetIds: ["t1m0:Abomination"] };
+  it("commits the earned Master license and its eighteen batting-order slots", () => {
+    const state = JSON.parse(readFileSync(new URL("./fixtures/earned-v25-master-order.json", import.meta.url), "utf8")) as OfficialGameStateV24;
+    const result = apply(V26, state, { type: "battle.chooseAbility", battleId: "battle-1527", actorId: "t0m3:Guardian", slot: "usable2", targetIds: ["t1m8:WolfGod"] });
+    expect(result.projection.player.battingOrderSize).toBe(18);
+    expect(result.projection.player.battingOrderIds).toHaveLength(18);
+    expect(result.projection).toEqual(v26.projectPersistedState(result.state));
+    expect(result.events).toContainEqual(expect.objectContaining({ type: "battle.ended", outcome: "victory" }));
+  });
+
+  it("recovers the earned Abomination opening without changing historical v25", () => {
+    const state = earned(), original = structuredClone(state);
+    const restored = restoreBattleReplay(data, state.battle!.replay);
+    expect(restored.events).toContainEqual({ type: "silverSpent", source: "t1m1:Abomination", amount: 500, remaining: 33190 });
+    expect(() => apply(V25, state, attack)).toThrow("battle wallet 33190 != profile wallet 33690");
+    const migrated = migrate(state);
+    expect(migrated).toEqual({ ...state, profile: { ...state.profile, silver: 33190 } });
+    expect(migrate(migrated)).toEqual(migrated);
+    expect(state).toEqual(original);
+    const committed = apply(V26, migrated, attack);
+    expect(committed.state.battle!.replay.commands).toHaveLength(1);
+    expect(committed.projection).toEqual(v26.projectPersistedState(committed.state));
+    expect(committed.state.profile.silver).toBe(restoreBattleReplay(data, committed.state.battle!.replay).session.silver);
+    expect(migrate(committed.state)).toEqual(committed.state);
+  });
+  it("commits the recovered turn once under duplicate delivery and service restart", async () => {
+    const state = migrate(earned());
+    const store = new InMemoryAuthoritativeSlotStore<OfficialGameStateV24, ReturnType<OfficialGameV26Reducer["projectPersistedState"]>>();
+    const updatedAt = "2026-10-07T00:00:00.000Z";
+    await store.transact("p", "slot-1", async () => ({ record: {
+      playerId: "p", slotId: "slot-1", logicPackId, simulationVersion: pack26.simulationVersion,
+      revision: 1, eventCursor: 0, updatedAt, state, receipts: new Map(),
+      projection: { slotId: "slot-1", revision: 1, updatedAt, logicPackId,
+        simulationVersion: pack26.simulationVersion, trustTier: "official", ...v26.projectPersistedState(state) } as never,
+    }, value: undefined }));
+    const service = () => new AuthoritativeGameService({ pack: pack26, reducer: v26, store,
+      validateRecord: record => v26.validatePersistedRecord(record) });
+    const originalService = service(), before = await originalService.bootstrap("p", "slot-1");
+    if (before.decision.type === "none") throw new Error("expected battle decision");
+    const request: GameCommandEnvelopeV1 = { protocolVersion: GAME_PROTOCOL_VERSION,
+      commandId: "opening_silver_duplicate_0001", expectedRevision: 1,
+      expectedDecisionId: before.decision.decisionId, command: attack };
+    const results = await Promise.all([originalService.execute("p", "slot-1", request), originalService.execute("p", "slot-1", request)]);
+    expect(results.map(result => result.idempotentReplay).sort()).toEqual([false, true]);
+    const committed = results.find(result => !result.idempotentReplay)!;
+    expect(committed.revision).toBe(2);
+    expect(await service().execute("p", "slot-1", request)).toEqual({ ...committed, idempotentReplay: true });
+    expect((await store.read("p", "slot-1"))!.state.battle!.replay.commands).toHaveLength(1);
+    expect(await service().bootstrap("p", "slot-1")).toEqual(committed.projection);
+  });
+
+  it.each([1, -1, -5000])("rejects unexplained wallet corruption (%i)", delta => {
+    const state = earned();
+    const corrupted = { ...state, profile: { ...state.profile, silver: state.profile.silver + delta } };
+    expect(() => migrate(corrupted)).toThrow("not an unsettled opening debit");
+  });
+  it("settles a real world opening once before the first player choice", () => {
+    const { battle, ...without } = earned();
+    const prior = { ...without, location: { kind: "world" as const, worldId: "World_4-2", poiId: "4-2_Field_5" } };
+    const start = (version: Versioned) => {
+      let rng=52;
+      randomSource=()=>{ rng=(Math.imul(rng,1664525)+1013904223)>>>0; return rng/4294967296; };
+      return apply(version, prior, { type: "world.selectCurrentPoi" });
+    };
+    try {
+      const historical = start(V25), current = start(V26);
+      const replay = restoreBattleReplay(data, current.state.battle!.replay);
+      expect(replay.events.filter(event => event.type === "silverSpent")).toHaveLength(1);
+      expect(historical.state.profile.silver).toBe(33690);
+      expect(current.state.profile.silver).toBe(33200);
+      expect(current.state).toEqual({ ...historical.state, profile: { ...historical.state.profile, silver: 33200 } });
+      expect(current.events).toEqual(historical.events);
+      expect(current.projection).toEqual(v26.projectPersistedState(current.state));
+      expect(replay.step.type).toBe("awaitingPlayer");
+      if (replay.step.type !== "awaitingPlayer") throw new Error("expected player decision");
+      const continued = apply(V26, current.state, { type: "battle.delay", battleId: current.state.battle!.battleId, actorId: replay.step.actorId });
+      expect(continued.state.profile.silver).toBe(restoreBattleReplay(data, continued.state.battle!.replay).session.silver);
+      expect(continued.projection).toEqual(v26.projectPersistedState(continued.state));
+    } finally { randomSource=()=>0; }
   });
 });

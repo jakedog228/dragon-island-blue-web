@@ -32,6 +32,7 @@ import {
   OFFICIAL_GAME_V22_SIMULATION_VERSION,
   OFFICIAL_GAME_V23_SIMULATION_VERSION,
   OFFICIAL_GAME_V24_SIMULATION_VERSION,
+  OFFICIAL_GAME_V25_SIMULATION_VERSION,
   OfficialGameCommandResultV12Schema,
   OfficialGameCommandResultV13Schema,
   OfficialGameCommandResultV14Schema,
@@ -46,6 +47,7 @@ import {
   OfficialGameCommandResultV23Schema,
   OfficialGameCommandResultV24Schema,
   OfficialGameCommandResultV25Schema,
+  OfficialGameCommandResultV26Schema,
   OfficialGameProjectionV12Schema,
   OfficialGameProjectionV13Schema,
   OfficialGameProjectionV14Schema,
@@ -60,8 +62,9 @@ import {
   OfficialGameProjectionV23Schema,
   OfficialGameProjectionV24Schema,
   OfficialGameProjectionV25Schema,
+  OfficialGameProjectionV26Schema,
   SlotProjectionV1Schema,
-  type OfficialGameProjectionBodyV25,
+  type OfficialGameProjectionBodyV26,
 } from "@dib/game-protocol";
 import {
   OfficialGameV12Reducer,
@@ -76,6 +79,7 @@ import {
   OfficialGameV23Reducer,
   OfficialGameV24Reducer,
   OfficialGameV25Reducer,
+  OfficialGameV26Reducer,
   createOfficialGameV12LogicPackDescriptor,
   createOfficialGameV15LogicPackDescriptor,
   createOfficialGameV16LogicPackDescriptor,
@@ -88,6 +92,7 @@ import {
   createOfficialGameV23LogicPackDescriptor,
   createOfficialGameV24LogicPackDescriptor,
   createOfficialGameV25LogicPackDescriptor,
+  createOfficialGameV26LogicPackDescriptor,
   createOfficialGameV12Support,
   migrateOfficialGameV11ToV12,
   migrateOfficialGameV12ToV13,
@@ -103,12 +108,13 @@ import {
   migrateOfficialGameV22ToV23,
   migrateOfficialGameV23ToV24,
   migrateOfficialGameV24ToV25,
+  migrateOfficialGameV25ToV26,
   OfficialGameReducer,
-  parseOfficialGameStateV25,
+  parseOfficialGameStateV26,
   officialEncounterResources,
   validateOfficialCollectionCatalog,
   validateOfficialGameSupport,
-  type OfficialGameStateV25,
+  type OfficialGameStateV26,
 } from "@dib/official-game";
 import {
   ConfigurationError,
@@ -232,7 +238,7 @@ async function serve(): Promise<void> {
     support,
     collectionCatalog: collectionProof,
   });
-  // The historical delegate descriptors are internal rules identities. Only the current v25
+  // The historical delegate descriptors are internal rules identities. Only the current v26
   // `pack` is advertised, persisted, or sent to a player.
   const v12Pack = createOfficialGameV12LogicPackDescriptor(identity.logicPackId, v12Support);
   const v15Pack = createOfficialGameV15LogicPackDescriptor(identity.logicPackId, v12Support);
@@ -245,7 +251,8 @@ async function serve(): Promise<void> {
   const v22Pack = createOfficialGameV22LogicPackDescriptor(identity.logicPackId, v12Support);
   const v23Pack = createOfficialGameV23LogicPackDescriptor(identity.logicPackId, v12Support);
   const v24Pack = createOfficialGameV24LogicPackDescriptor(identity.logicPackId, v12Support);
-  const pack = createOfficialGameV25LogicPackDescriptor(identity.logicPackId, v12Support);
+  const v25Pack = createOfficialGameV25LogicPackDescriptor(identity.logicPackId, v12Support);
+  const pack = createOfficialGameV26LogicPackDescriptor(identity.logicPackId, v12Support);
   const legacyReducer = new OfficialGameReducer({
     data,
     world,
@@ -269,13 +276,17 @@ async function serve(): Promise<void> {
   const v22Reducer = new OfficialGameV22Reducer(v21Reducer, v21Pack);
   const v23Reducer = new OfficialGameV23Reducer(v22Reducer, v22Pack);
   const v24Reducer = new OfficialGameV24Reducer(v23Reducer, v23Pack);
-  const reducer = new OfficialGameV25Reducer(v24Reducer, v24Pack);
+  const v25Reducer = new OfficialGameV25Reducer(v24Reducer, v24Pack);
+  const reducer = new OfficialGameV26Reducer(data, v25Reducer, v25Pack);
   const migrationContext = { dungeonResources: legacySource } as const;
   // v24 -> v25 also repairs provable `dialogsSeen` entries from durable license and fixed-encounter
   // state, so it needs the installed worlds and dungeon resources, never a client input.
-  const migrateV24StateToCurrent = (state: unknown) => migrateOfficialGameV24ToV25({
-    data, quests, worlds, state, context: migrationContext,
+  const migrateV25StateToCurrent = (state: unknown) => migrateOfficialGameV25ToV26({
+    data, quests, state, context: migrationContext,
   });
+  const migrateV24StateToCurrent = (state: unknown) => migrateV25StateToCurrent(migrateOfficialGameV24ToV25({
+    data, quests, worlds, state, context: migrationContext,
+  }));
   const migrateV23StateToCurrent = (state: unknown) => migrateV24StateToCurrent(
     migrateOfficialGameV23ToV24({ data, quests, state, context: migrationContext }),
   );
@@ -302,17 +313,17 @@ async function serve(): Promise<void> {
   );
   // Bound to its own name rather than constructed inline: the scoreboard reads persisted
   // projections directly, because the service's slot listing deliberately summarises without them.
-  const store = new FileAuthoritativeSlotStore<OfficialGameStateV25, OfficialGameProjectionBodyV25>(
+  const store = new FileAuthoritativeSlotStore<OfficialGameStateV26, OfficialGameProjectionBodyV26>(
     {
       dataDirectory,
       logicPackId: pack.logicPackId,
       simulationVersion: pack.simulationVersion,
       worldId: world.name,
-      parseState: (value) => parseOfficialGameStateV25(data, quests, value, {
+      parseState: (value) => parseOfficialGameStateV26(data, quests, value, {
         dungeonResources: mechanicalSource,
       }),
-      parseProjection: (value) => OfficialGameProjectionV25Schema.parse(value),
-      parseCommandResult: (value) => OfficialGameCommandResultV25Schema.parse(value),
+      parseProjection: (value) => OfficialGameProjectionV26Schema.parse(value),
+      parseCommandResult: (value) => OfficialGameCommandResultV26Schema.parse(value),
       validateRecord: (record) => reducer.validatePersistedRecord(record),
       // Immutable source namespaces are retained after each upgrade and the store selects the
       // first source that exists. Keep this literal easy to review chronologically, then consult it
@@ -321,7 +332,7 @@ async function serve(): Promise<void> {
         legacySimulationMigration({
           sourceSimulationVersion: OFFICIAL_GAME_V11_SIMULATION_VERSION,
           // Each source declares the shape it was actually written in. The current-namespace
-          // parsers above are v25 and reject every earlier projection, so reusing them here would
+          // parsers above are v26 and reject every earlier projection, so reusing them here would
           // strand the very accounts the migration exists to carry forward.
           parseSourceProjection: (value) => SlotProjectionV1Schema.parse(value),
           parseSourceCommandResult: (value) => GameCommandResultV1Schema.parse(value),
@@ -581,10 +592,19 @@ async function serve(): Promise<void> {
             return { state: migratedState, projection: reducer.projectPersistedState(migratedState) };
           },
         }),
+        legacySimulationMigration({
+          sourceSimulationVersion: OFFICIAL_GAME_V25_SIMULATION_VERSION,
+          parseSourceProjection: (value) => OfficialGameProjectionV25Schema.parse(value),
+          parseSourceCommandResult: (value) => OfficialGameCommandResultV25Schema.parse(value),
+          migrate: ({ state }) => {
+            const migratedState = migrateV25StateToCurrent(state);
+            return { state: migratedState, projection: reducer.projectPersistedState(migratedState) };
+          },
+        }),
       ].reverse(),
     },
   );
-  const service = new AuthoritativeGameService<OfficialGameStateV25, OfficialGameProjectionBodyV25>({
+  const service = new AuthoritativeGameService<OfficialGameStateV26, OfficialGameProjectionBodyV26>({
     pack,
     reducer,
     validateRecord: (record) => reducer.validatePersistedRecord(record),
