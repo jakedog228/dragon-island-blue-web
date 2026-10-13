@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import type { MultiplayerBattle } from "./multiplayerBattle.js";
 
 
@@ -947,6 +948,7 @@ export class BattleNode {
         ),
       }),
     );
+    setOwnedTexture(bg, bg.texture);
     bg.width = BACKGROUND_SIZE.w;
     bg.height = BACKGROUND_SIZE.h;
     bg.anchor.set(0, 1);

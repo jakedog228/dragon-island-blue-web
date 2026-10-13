@@ -80,13 +80,23 @@ function capture(
     antialias: false,
     scaleMode: "nearest",
   });
-  renderer.render({
-    container: scene,
-    target: texture,
-    clear: true,
-    clearColor: [0, 0, 0, 0],
-  });
-  return texture;
+  const hadRenderGroup = scene.renderGroup !== null;
+  try {
+    renderer.render({
+      container: scene,
+      target: texture,
+      clear: true,
+      clearColor: [0, 0, 0, 0],
+    });
+    return texture;
+  } catch (error) {
+    texture.destroy(true);
+    throw error;
+  } finally {
+    // A capture temporarily promotes an ordinary page to a render group. Preserve
+    // pre-existing groups, but return a capture-owned one before the page is retired.
+    if (!hadRenderGroup) scene.disableRenderGroup();
+  }
 }
 
 function createCurlMesh(

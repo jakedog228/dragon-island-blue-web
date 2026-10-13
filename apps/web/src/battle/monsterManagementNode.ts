@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 
 
 
@@ -358,6 +359,7 @@ export class MonsterManagementNode extends Container {
         MANAGEMENT_BACKGROUND_TEXTURE_RECT_PX.h,
       ),
     }));
+    setOwnedTexture(this.background, this.background.texture);
     this.background.width = MANAGEMENT_BACKGROUND_SIZE_PT.w;
     this.background.height = MANAGEMENT_BACKGROUND_SIZE_PT.h;
     this.background.position.set(

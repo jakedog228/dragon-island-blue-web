@@ -24,3 +24,6 @@ export * from "./strokeGrid.js";
 export * from "./strokeRecognizer.js";
 export * from "./lifecycle.js";
 export * from "./gameSurface.js";
+
+export * from "./ownedTexture.js";
+export * from "./cachedTextureContainer.js";

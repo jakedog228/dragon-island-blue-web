@@ -1,3 +1,4 @@
+import { CachedTextureContainer, setOwnedTexture } from "@dib/renderer";
 
 
 
@@ -334,6 +335,7 @@ export class EvolutionOverlay extends Container {
         const starIndex = rowStart + i;
         const isHalf = hasHalf && starIndex === total - 1;
         const star = pointSprite(isHalf && halfTexture ? halfTexture : starTexture);
+        if (isHalf && halfTexture) setOwnedTexture(star, halfTexture);
         star.anchor.set(0.5, 0.5);
         // Box first lays out anchor-(0,0) children at running x and Cocos y=-h/2. The source
         // then changes anchors to (0.5,0.5) without repositioning. Pixi Y-down maps that raw
@@ -381,7 +383,7 @@ export class EvolutionOverlay extends Container {
 
   private buildNameLabel(displayName: string): Container {
     const root = new Container();
-    const outlined = new Container();
+    const outlined = new CachedTextureContainer();
     for (const offset of evolutionOutlineOffsets(LAYOUT.nameOutlineRadiusPt)) {
       const sample = makeTtfLabel(displayName, LAYOUT.nameFontPt, { fill: 0x000000, outline: false });
       sample.anchor.set(0.5, 0.5);

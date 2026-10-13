@@ -50,7 +50,7 @@ interface Frame {
   readonly liveScene: string | undefined;
 }
 
-function runTurn(backwards: boolean): { frames: Frame[]; settled: Promise<boolean> } {
+function runTurn(backwards: boolean, borrowedGroups = false): { frames: Frame[]; settled: Promise<boolean> } {
   const host = new Container();
   const outgoing = new Container();
   outgoing.label = "sceneRoot";
@@ -64,6 +64,8 @@ function runTurn(backwards: boolean): { frames: Frame[]; settled: Promise<boolea
   const incoming = new Container();
   incoming.addChild(newPage);
 
+  if (borrowedGroups) { outgoing.enableRenderGroup(); incoming.enableRenderGroup(); }
+  const outgoingGroup = outgoing.renderGroup, incomingGroup = incoming.renderGroup;
   const frames: Frame[] = [];
   const ticker = new FrameOrderedTicker(() => {
     frames.push({
@@ -76,7 +78,7 @@ function runTurn(backwards: boolean): { frames: Frame[]; settled: Promise<boolea
 
   const settled = runMonsterpediaPageTurn({
     // The composition captures both scenes once up front; nothing else touches the renderer.
-    renderer: { render: () => undefined } as unknown as Renderer,
+    renderer: { render: ({ container }: { container: InstanceType<typeof Container> }) => container.enableRenderGroup() } as unknown as Renderer,
     ticker: ticker as unknown as Ticker,
     host,
     outgoing,
@@ -91,12 +93,19 @@ function runTurn(backwards: boolean): { frames: Frame[]; settled: Promise<boolea
     signal: new AbortController().signal,
   });
 
+  expect(outgoing.renderGroup).toBe(outgoingGroup);
+  expect(incoming.renderGroup).toBe(incomingGroup);
+
   // 200ms at 60fps, plus slack for the Cocos interval's dt-free first tick.
   for (let frame = 0; frame < 20 && ticker.listenerCount > 0; frame += 1) ticker.tick();
   return { frames, settled };
 }
 
 describe("Monsterpedia page turn scene swap", () => {
+  it("preserves existing scene render groups while capturing the page", async () => {
+    await expect(runTurn(false, true).settled).resolves.toBe(true);
+  });
+
   it.each([
     ["forwards", false],
     ["backwards", true],

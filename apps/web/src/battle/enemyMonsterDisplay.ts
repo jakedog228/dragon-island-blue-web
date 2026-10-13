@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 
 
 
@@ -534,6 +535,7 @@ export class EnemyMonsterDisplay extends Container {
     for (let i = 0; i < total; i++) {
       const isHalf = hasHalf && i === fullCount;
       const star = pointSprite(isHalf && halfTexture ? halfTexture : starTexture);
+      if (isHalf && halfTexture) setOwnedTexture(star, halfTexture);
       star.anchor.set(0.5, 0.5);
       const naturalScaleX = star.scale.x;
       const naturalScaleY = star.scale.y;

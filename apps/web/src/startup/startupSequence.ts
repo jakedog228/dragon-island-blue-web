@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import { Container, Graphics, Rectangle, Sprite, Texture } from "pixi.js";
 import {
   CONTENT_SCALE_FACTOR,
@@ -1038,6 +1039,7 @@ async function startupBackground(game: LoadedGame, key: string, tint?: number): 
     frame: new Rectangle(rect.x, rect.y, rect.w, rect.h),
   });
   const sprite = pointSprite(texture);
+  setOwnedTexture(sprite, sprite.texture);
   sprite.label = `sourceStartupBackground:${key}`;
   sprite.position.set(
     (SCREEN.w - STARTUP_LAYOUT.background.sizePt.w) / 2,

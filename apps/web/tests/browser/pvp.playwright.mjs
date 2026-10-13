@@ -21,6 +21,11 @@ const mods = [process.env.DIB_PVP_HOST_MOD, process.env.DIB_PVP_GUEST_MOD];
 const incompatible = process.env.DIB_PVP_EXPECT_INCOMPATIBLE === "1";
 const spirits = process.env.DIB_PVP_SPIRITS === "1";
 const fullBattle = process.env.DIB_PVP_FULL_BATTLE === "1";
+// Large Official parties can legitimately exceed 100 choices while still making
+// progress. Keep a bounded input budget separate from each unchanged progress timeout.
+const turnLimit = Number(process.env.DIB_PVP_TURN_LIMIT ?? 100);
+assert.ok(Number.isInteger(turnLimit) && turnLimit >= 1 && turnLimit <= 1000,
+  "DIB_PVP_TURN_LIMIT must be an integer from 1 to 1000");
 const lostResponse = process.env.DIB_PVP_LOST_RESPONSE === "1";
 const reconnect = process.env.DIB_PVP_RECONNECT === "1";
 const pollOutage = process.env.DIB_PVP_POLL_OUTAGE === "1";
@@ -28,10 +33,11 @@ const delayedInput = process.env.DIB_PVP_DELAYED_INPUT === "1";
 const lobbyCycles = Number(process.env.DIB_PVP_LOBBY_CYCLES ?? 0);
 assert.ok(Number.isInteger(lobbyCycles) && lobbyCycles >= 0 && lobbyCycles <= 10);
 const evidence = { displayMode, reconnect, pollOutage, delayedInput, lostResponse, spirits,
-  fullBattle, lobbyCycles, turns: 0, failedPolls: 0, commandRequests: 0, expectedRejections: 0,
+  fullBattle, turnLimit, lobbyCycles, turns: 0, failedPolls: 0, commandRequests: 0, expectedRejections: 0,
   statusAcknowledgments: 0,
   sources: tokens.map(token => token ? "official" : "offline") };
 const browsers = [];
+const clockPages = new Set();
 const renewalProbes = [];
 const read = async (page) => { await page.bringToFront(); return page.evaluate(() => JSON.parse(window.render_game_to_text())); };
 // Reuse the measured WebGL capture budget, including after cold reconnect. Ordinary
@@ -47,15 +53,22 @@ async function wait(page, predicate, description) {
   const end = Date.now() + 60000;
   while (Date.now() < end) {
     const state = await read(page); if (await predicate(state)) return state;
-    const board = state.overlay?.pvp?.board;
-    if (board?.statusText?.visible) {
-      // Sleep/skip chains show the ordinary tap-to-continue battle status panel. Both players
-      // must acknowledge their own presentation before the next native controls can appear.
-      const point = await nativePvpPoint(page, { x: board.screenPt.w / 2, y: board.screenPt.h / 2 });
-      await page.mouse.click(point.x, point.y);
-      evidence.statusAcknowledgments++;
+    // Both devices keep animating while either player waits. Advancing only the awaited
+    // page freezes its opponent's manual clock; long runs of one player's turns then leave
+    // that opponent replaying old commands after the server has already declared victory.
+    for (const device of clockPages) {
+      if (device.isClosed()) continue;
+      const current = device === page ? state : await device.evaluate(() =>
+        typeof window.render_game_to_text === "function" ? JSON.parse(window.render_game_to_text()) : undefined);
+      const board = current?.overlay?.pvp?.board;
+      if (board?.statusText?.visible) {
+        const point = await nativePvpPoint(device, { x: board.screenPt.w / 2, y: board.screenPt.h / 2 });
+        await device.mouse.click(point.x, point.y);
+        evidence.statusAcknowledgments++;
+      }
+      await device.evaluate(ms => typeof window.advanceTime === "function" && window.advanceTime(ms), 25);
     }
-    await advance(page); await page.waitForTimeout(20);
+    await page.waitForTimeout(20);
   }
   throw new Error(`${description}: ${JSON.stringify(await read(page))}; ${errors.join(" | ")}`);
 }
@@ -111,6 +124,8 @@ async function launch(index, retainedContext) {
     width: Number(process.env.DIB_PVP_VIEWPORT_WIDTH ?? 1280), height: Number(process.env.DIB_PVP_VIEWPORT_HEIGHT ?? 800),
   } });
   const page = await context.newPage();
+  clockPages.add(page);
+  page.once("close", () => clockPages.delete(page));
   if (process.env.DIB_TEST_SESSION_RENEWAL === "1") {
     assert(tokens[index], "Session renewal probe requires an isolated Official account");
     renewalProbes.push(await installSessionRenewalProbe(page, { pvp: true }));
@@ -276,7 +291,7 @@ try {
     await wait(recovering, s => !s.overlay.pvp.error && s.overlay.pvp.match.revision === before.revision, "Polling recovered automatically");
   }
   const spiritTeams = new Set();
-  for (let turn = 0; turn < (fullBattle ? 100 : 3) && match.status === "active"; turn++) {
+  for (let turn = 0; turn < (fullBattle ? turnLimit : 3) && match.status === "active"; turn++) {
     console.log(`Turn ${turn + 1}, player ${match.turn + 1}`);
     const active = pages[match.turn];
     await wait(active, (s) => s.overlay?.pvp?.board?.revision === match.revision && nativePvpReady(s), "Turn controls");

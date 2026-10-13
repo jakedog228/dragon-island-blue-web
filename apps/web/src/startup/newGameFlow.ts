@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import { Container, Graphics, Rectangle, Texture, type Ticker } from "pixi.js";
 import { Box, ButtonSprite, makeTtfLabel, pointSprite, type AssetLibrary } from "@dib/renderer";
 import type { AudioPlayer } from "../audio.js";
@@ -71,6 +72,7 @@ export async function showNarratedPlot(opts: {
     source: full.source,
     frame: new Rectangle(0, 0, 1024, 768),
   }));
+  setOwnedTexture(background, background.texture);
   background.position.set(layout.background.x, layout.background.y);
   background.eventMode = "none";
   root.addChild(background);
@@ -175,6 +177,7 @@ async function showPickDragon(opts: {
     source: backgroundFull.source,
     frame: new Rectangle(0, 0, 1024, 768),
   }));
+  setOwnedTexture(background, background.texture);
   background.position.set(
     (layout.screen.w - 512) / 2,
     (layout.screen.h - 384) / 2,

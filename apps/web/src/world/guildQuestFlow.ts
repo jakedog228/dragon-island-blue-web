@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import {
   Container,
   Rectangle,
@@ -237,6 +238,7 @@ export class GuildQuestFlow {
         TAVERN_BACKGROUND_LAYOUT.textureRectPx.h,
       ),
     }));
+    setOwnedTexture(background, background.texture);
     background.label = "guildTavernBackground";
     background.width = TAVERN_BACKGROUND_LAYOUT.sizePt.w;
     background.height = TAVERN_BACKGROUND_LAYOUT.sizePt.h;

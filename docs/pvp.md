@@ -198,6 +198,8 @@ campaign slot. For unequal cosmetics,
 install the reviewed archive in the API's `DIB_OFFICIAL_MODS_DIR` and set `DIB_PVP_HOST_MOD` to
 that archive for the Offline host. Set `DIB_PVP_GUEST_MOD` and `DIB_PVP_EXPECT_INCOMPATIBLE=1` for
 the gameplay-mod admission rejection check (before invite/join). Other switches are `DIB_PVP_FULL_BATTLE=1` (natural victory),
+`DIB_PVP_TURN_LIMIT=200` (optional full-battle input budget, default 100, integer 1–1000;
+large Official parties can exceed 100 choices; progress timeouts and terminal assertions stay unchanged),
 `DIB_PVP_ROSTER=1` (six-monster Offline fixtures),
 `DIB_PVP_SPIRITS=1` (balanced Offline parties, full energy and unlocked spirits; checks both native
 spirit menus plus friendly/opponent field and queue membership), and `DIB_PVP_LOST_RESPONSE=1` (committed but

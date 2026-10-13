@@ -7,7 +7,7 @@ vi.hoisted(() => {
   });
 });
 
-import { Sprite, Texture } from "pixi.js";
+import { Container, Sprite, Texture } from "pixi.js";
 import { outlineBackgroundNode } from "../src/outlineBackground.js";
 
 describe("outlineBackgroundNode native render-texture composition", () => {
@@ -32,5 +32,35 @@ describe("outlineBackgroundNode native render-texture composition", () => {
     expect(outline.children[6]!.position.y).toBeCloseTo(0.25);
     // Only the visits are additive; the returned CCRenderTexture sprite is scene-composited normally.
     expect(outline.blendMode).toBe("normal");
+  });
+});
+
+
+describe("cached outline teardown", () => {
+  it("bounds instruction identities across repeated parent teardown and rebuild", () => {
+    const instructionIds = new Set<number>();
+    for (let lifetime = 0; lifetime < 12; lifetime++) {
+      const parent = new Container();
+      const outlines = Array.from({ length: 3 }, () => outlineBackgroundNode({
+        sample: () => new Sprite(Texture.WHITE),
+        contentSize: { w: 90, h: 61.5 },
+        sourcePointsPerLocalPoint: 1, radiusPt: 3, color: 0xffffff,
+      }));
+      for (const outline of outlines) {
+        parent.addChild(outline);
+        expect(outline.isCachedAsTexture).toBe(true);
+        expect(outline.renderGroup?.root).toBe(outline);
+        instructionIds.add(outline.renderGroup!.instructionSet.uid);
+      }
+      parent.destroy({ children: true });
+      for (const outline of outlines) {
+        expect(outline.destroyed).toBe(true);
+        expect(outline.renderGroup).toBeNull();
+      }
+    }
+    // Pixi's batch pipe retains buffers by instruction uid. Retiring each outline must
+    // make that identity reusable, bounded by the maximum simultaneously live outlines.
+    expect(instructionIds.size).toBeLessThanOrEqual(3);
+    expect(Texture.WHITE.destroyed).toBe(false);
   });
 });

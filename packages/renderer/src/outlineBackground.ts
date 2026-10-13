@@ -1,4 +1,5 @@
-import { Container, Rectangle } from "pixi.js";
+import { CachedTextureContainer } from "./cachedTextureContainer.js";
+import { type Container, Rectangle } from "pixi.js";
 import { CONTENT_SCALE_FACTOR } from "./scale9.js";
 import {
   OUTLINE_PLAIN_ALPHA,
@@ -31,7 +32,7 @@ export interface OutlineBackgroundSpec {
  * `contentSize * 0.5`; both land the outline concentric with the content).
  */
 export function outlineBackgroundNode(spec: OutlineBackgroundSpec): Container {
-  const root = new Container();
+  const root = new CachedTextureContainer();
   root.label = spec.label ?? "outlineBackground";
   root.blendMode = "normal";
   const bounds = outlineRenderTextureBounds(

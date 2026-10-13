@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import { pointSprite } from "@dib/renderer";
 import { Rectangle, Texture, type Sprite } from "pixi.js";
 import type { DisplayMode } from "../displayMode.js";
@@ -23,6 +24,7 @@ export function sourceFullscreenSprite(
     source: full.source,
     frame: new Rectangle(rect.x, rect.y, rect.w, rect.h),
   }));
+  setOwnedTexture(sprite, sprite.texture);
   sprite.label = `sourceFullscreen:${assetName}`;
   const position = sourceFullscreenPosition(mode);
   sprite.position.set(position.x, position.y);

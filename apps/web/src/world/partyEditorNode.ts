@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 // PartyEditorNode — the editable MonsterManagementNode shared by the town (style 0) and the
 // world/menu "Monsters" route (style 1). A modal, full-screen-touch-swallowing editor over a
 // self-tinted MMScreen background:
@@ -489,6 +490,7 @@ export class PartyEditorNode extends Container {
         MANAGEMENT_BACKGROUND_TEXTURE_RECT_PX.h,
       ),
     }));
+    setOwnedTexture(bg, bg.texture);
     bg.width = MANAGEMENT_BACKGROUND_SIZE_PT.w;
     bg.height = MANAGEMENT_BACKGROUND_SIZE_PT.h;
     bg.position.set((SCREEN_W - MANAGEMENT_BACKGROUND_SIZE_PT.w) / 2, (SCREEN_H - MANAGEMENT_BACKGROUND_SIZE_PT.h) / 2);

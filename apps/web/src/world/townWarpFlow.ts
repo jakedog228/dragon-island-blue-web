@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import {
   Container,
   Rectangle,
@@ -126,6 +127,7 @@ export class TownWarpFlow {
       source: fullTexture.source,
       frame: new Rectangle(rect.x, rect.y, rect.w, rect.h),
     }));
+    setOwnedTexture(background, background.texture);
     background.label = "townWarp:background";
     background.width = LAYOUT.background.sizePt.w;
     background.height = LAYOUT.background.sizePt.h;

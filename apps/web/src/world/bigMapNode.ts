@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import { Container, Graphics, Rectangle, Sprite, Texture, type Ticker } from "pixi.js";
 import { ButtonSprite, CONTENT_SCALE_FACTOR, pointSprite, type AssetLibrary } from "@dib/renderer";
 import { DISPLAY_MODE } from "../runtimeSettings.js";
@@ -85,6 +86,7 @@ export class BigMapNode extends Container {
         MAP_TEXTURE_RECT_PX.h,
       ),
     }));
+    setOwnedTexture(map, map.texture);
     map.width = BIG_MAP_SIZE_PT.w;
     map.height = BIG_MAP_SIZE_PT.h;
     mapRoot.addChild(map);

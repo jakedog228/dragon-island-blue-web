@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import {
   AnimatedSprite,
   Container,
@@ -642,6 +643,7 @@ export class WorldNode {
         frame: new Rectangle(borderRect.x, borderRect.y, borderRect.w, borderRect.h),
       });
       const border = new Sprite(borderTexture);
+      setOwnedTexture(border, borderTexture);
       border.anchor.set(0, 0);
       border.width = mapSize.w;
       border.height = mapSize.h;
@@ -660,6 +662,7 @@ export class WorldNode {
       frame: new Rectangle(crop.x, crop.y, crop.w, crop.h),
     });
     const map = new Sprite(mapTexture);
+    setOwnedTexture(map, mapTexture);
     map.anchor.set(0, 0);
     const mapSpriteSize = worldMapSpriteSizePt(DISPLAY_MODE, hasIndent);
     map.width = mapSpriteSize.w;

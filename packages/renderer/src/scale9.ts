@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "./ownedTexture.js";
 import { Container, Rectangle, Sprite, Texture } from "pixi.js";
 import type { AssetLibrary } from "./assetLibrary.js";
 import {
@@ -65,6 +66,7 @@ export class Scale9 extends Container {
       );
       const tex = new Texture({ source: baseTexture.source, frame });
       const sprite = new Sprite(tex);
+      setOwnedTexture(sprite, tex);
       sprite.anchor.set(0, 0);
       this.addChild(sprite);
       return sprite;

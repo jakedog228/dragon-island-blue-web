@@ -1,4 +1,4 @@
-import { Container, Graphics, NineSliceSprite, Rectangle, Sprite, Texture } from "pixi.js";
+import { Container, Graphics, NineSliceSprite, Sprite, Texture, type DestroyOptions } from "pixi.js";
 import { BAR_GROW_SPEED, cropTextureRect, easeBarStep, formatBarFraction, type PixelRect } from "./barMath.js";
 import { pointSprite } from "./pointSprite.js";
 import { CONTENT_SCALE_FACTOR } from "./scale9.js";
@@ -70,6 +70,7 @@ export class ProgressBar extends Container {
   private readonly background: Sprite;
   private readonly foreground: Sprite;
   private readonly foregroundTexture: Texture;
+  private readonly croppedTexture: Texture;
   private extended: {
     root: Container; background: NineSliceSprite; foreground: NineSliceSprite;
     mask: Graphics; width: number; fillWidth: number;
@@ -120,7 +121,14 @@ export class ProgressBar extends Container {
 
 
     this.foregroundTexture = opts.foregroundTexture;
-    this.foreground = pointSprite(opts.foregroundTexture);
+    // A Texture subscribes to its shared source's resize event. Own one mutable crop
+    // for this bar, rather than retaining a new source listener on every animation tick.
+    this.croppedTexture = new Texture({
+      source: opts.foregroundTexture.source,
+      frame: opts.foregroundTexture.frame,
+      dynamic: true,
+    });
+    this.foreground = pointSprite(this.croppedTexture);
     const f = opts.foregroundTexture.frame;
     this.fullForegroundRect = { x: f.x, y: f.y, w: f.width, h: f.height };
     this.addChild(this.foreground); // added first -> renders below the backing
@@ -269,11 +277,18 @@ export class ProgressBar extends Container {
       return;
     }
     const cropped = cropTextureRect(this.fullForegroundRect, this.currentPercent, this.horizontal, this.backwards);
-    const base = this.foreground.texture;
-    this.foreground.texture = new Texture({
-      source: base.source,
-      frame: new Rectangle(cropped.x, cropped.y, cropped.w, cropped.h),
-    });
+    const frame = this.croppedTexture.frame;
+    frame.x = cropped.x;
+    frame.y = cropped.y;
+    frame.width = cropped.w;
+    frame.height = cropped.h;
+    this.croppedTexture.update();
+  }
+
+  override destroy(options?: DestroyOptions): void {
+    super.destroy(options);
+    // The atlas/source belongs to AssetLibrary; only this bar's crop is disposable.
+    this.croppedTexture.destroy(false);
   }
 
   private formatLabel(): string {

@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import {
   bitmapFontFile,
   Box,
@@ -1236,6 +1237,7 @@ function sourceReflection(
     frame: new Rectangle(cut.x, cut.y, cut.width, cut.height),
   });
   const sprite = pointSprite(cropped);
+  setOwnedTexture(sprite, cropped);
 
 
   const fit = storeReflectionFit(texture.frame.width / CONTENT_SCALE_FACTOR, fitWidth);

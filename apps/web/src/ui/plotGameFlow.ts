@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import { Container, Graphics, Rectangle, Sprite, Texture, type Ticker } from "pixi.js";
 import { makeTtfLabel, pointSprite, type AssetLibrary, type Scale9SpritesData } from "@dib/renderer";
 import type { KeyboardShortcutRouter } from "../keyboardShortcuts.js";
@@ -154,6 +155,7 @@ export async function showPlotTutorial(opts: {
         PLOT_BACKGROUND_TEXTURE_RECT_PX.h,
       ),
     }));
+    setOwnedTexture(background, background.texture);
     background.label = `plotBackground:${opts.images[page]}`;
     background.position.set(layout.background.x, layout.background.y);
     background.eventMode = "none";

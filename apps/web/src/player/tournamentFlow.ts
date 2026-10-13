@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import {
   makeTtfLabel,
   OUTLINE_FADE_ALPHA,
@@ -202,10 +203,10 @@ export class TournamentFlow extends Container {
         if (clampHeight && sprite.height > maxHeight) {
           const frame = sprite.texture.frame;
           const keep = Math.max(1, Math.floor(frame.height * (maxHeight / sprite.height)));
-          sprite.texture = new Texture({
+          setOwnedTexture(sprite, new Texture({
             source: sprite.texture.source,
             frame: new Rectangle(frame.x, frame.y, frame.width, keep),
-          });
+          }));
         }
         sprite.anchor.set(0.5, 1);
         sprite.position.set(sprite.position.x, bottomY);

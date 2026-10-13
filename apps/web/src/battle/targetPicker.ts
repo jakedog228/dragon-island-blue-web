@@ -527,7 +527,13 @@ export class TargetPicker extends Container {
           clearColor: [0, 0, 0, 0],
         });
       }
+    } catch (error) {
+      texture.destroy(true);
+      throw error;
     } finally {
+      // renderer.render() promotes this temporary Sprite to a render group. Return
+      // its instruction identity to Pixi's pool before destroying the detached clone.
+      renderTarget.disableRenderGroup();
       renderTarget.destroy({ children: true });
     }
 

@@ -1,3 +1,4 @@
+import { setOwnedTexture } from "@dib/renderer";
 import {
   Container,
   Graphics,
@@ -213,8 +214,8 @@ function applyPortraitReveal(toaster: PortraitToaster, fraction: number): void {
   if (toaster.fraction === fraction) return;
   toaster.fraction = fraction;
   const rect = cropTextureRect(toaster.full, fraction, false, false);
-  toaster.sprite.texture = new Texture({
+  setOwnedTexture(toaster.sprite, new Texture({
     source: toaster.sprite.texture.source,
     frame: new Rectangle(rect.x, rect.y, rect.w, rect.h),
-  });
+  }));
 }

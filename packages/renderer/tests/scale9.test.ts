@@ -33,6 +33,7 @@ describe("Scale9 native draw traversal", () => {
     );
 
     expect(scale9.children).toHaveLength(18);
+    expect(texture.source.listenerCount("resize")).toBe(19);
     for (let i = 0; i < 9; i += 1) {
       const first = scale9.children[i]! as Sprite;
       const second = scale9.children[i + 9]! as Sprite;
@@ -51,5 +52,11 @@ describe("Scale9 native draw traversal", () => {
         height: first.texture.frame.height,
       });
     }
+    const owned = scale9.children.map(child => (child as Sprite).texture);
+    scale9.destroy({ children: true });
+    expect(owned.every(view => view.destroyed)).toBe(true);
+    expect(texture.source.listenerCount("resize")).toBe(1);
+    expect(texture.destroyed).toBe(false);
+    expect(texture.source.destroyed).toBe(false);
   });
 });
