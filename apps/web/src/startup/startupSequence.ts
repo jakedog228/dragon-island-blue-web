@@ -81,6 +81,8 @@ export interface StartupSequenceOptions {
   /** First half ran on the retired gameplay stage; keep this stage covered until it can reveal. */
   readonly startCovered?: boolean;
   readonly onPresentationChange?: () => void | Promise<void>;
+  /** Called after the mounted Pixi preloader has rendered, independent of browser RAF timing. */
+  readonly onFirstFrame?: () => void;
   /**
    * Hands the caller a disposer for the scenes this sequence owns. The startup screen lives in
    * this function's own `currentScene`/`sceneCleanups` machinery, not in `SceneCoordinator`, so a
@@ -955,6 +957,10 @@ async function buildPreloaderScene(
     loading.visible = true;
     dots.visible = true;
     opts.stage.app.ticker.remove(reveal);
+    // The bridge must survive the source preloader's initial hidden interval. Render its
+    // replacement before retiring it; a browser RAF poll can miss this scene entirely.
+    opts.stage.app.render();
+    opts.onFirstFrame?.();
   };
   opts.stage.app.ticker.add(reveal);
 

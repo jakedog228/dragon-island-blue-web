@@ -1,4 +1,5 @@
 import { officialReconnectEnemyTeam } from "./authority/battleAppearance.js";
+import { earnedDungeonBattleDialogs } from "./dungeon/earnedDungeonBattleDialogs.js";
 import { createAuthorityRecoveryPrompt } from "./authority/recoveryPrompt.js";
 import { isCommandReconciliation, type CommandCoordinatorHooks } from "./authority/commandCoordinator.js";
 // Keep Pixi's deterministic renderer implementations installed before any renderer construction.
@@ -642,6 +643,9 @@ async function boot(options: BootOptions = {}): Promise<void> {
     ...(options.resumeStartupAtSaveSelect === true ? { resumeAtSaveSelect: true } : {}),
     ...(options.startStartupCovered === true ? { startCovered: true } : {}),
     onPresentationChange: restartStartupShell,
+    ...(acquired.dismissLoadingScreen === undefined
+      ? {}
+      : { onFirstFrame: acquired.dismissLoadingScreen }),
     registerDispose: (dispose) => { disposeStartupSequence = dispose; },
     ...(official?.authority.account === undefined
       ? {}
@@ -718,6 +722,16 @@ async function boot(options: BootOptions = {}): Promise<void> {
         ...(restoredSave?.quests === undefined ? {} : { snapshot: restoredSave.quests }),
       })
     : undefined;
+  if (officialSlot === undefined && guildQuests !== undefined &&
+      restoredSave?.quests !== undefined && content.hasDungeonCapability) {
+    // Prior Offline terminals could save the victory while overwriting its dialogue flags.
+    // Restore only chats proved by unambiguous authored fixed-encounter victories. The normal
+    // checkpoint persists this repair; no rewards, RNG, or completed encounters are changed.
+    for (const name of earnedDungeonBattleDialogs(
+      content.resources, content.worldNames, new Set(knownShortTypes),
+      restoredSave.quests.completedFixedEncounterKeys,
+    )) guildQuests.requestChatPresentation(name, true);
+  }
   if (
     guildQuests !== undefined &&
     officialSlot === undefined &&

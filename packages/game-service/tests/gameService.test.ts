@@ -14,6 +14,7 @@ import {
   GameServiceError,
   InMemoryAuthoritativeSlotStore,
   ReducerFaultError,
+  readStoredReceipt,
   type GameCommandReducer,
 } from "../src/index.js";
 
@@ -253,6 +254,42 @@ describe("AuthoritativeGameService", () => {
     expect((await service.bootstrap("player-a", "slot-1")).revision).toBe(1);
   });
 
+  it.each(["schema", "slot", "generation", "command", "revision", "read-error"] as const)(
+    "validates deferred %s failures on exact replay without loading for summaries or mismatched commands",
+    async (fault) => {
+      const store = new InMemoryAuthoritativeSlotStore<TestState>();
+      const create = command("command_create_0001", 0, { type: "slot.create", starterElement: "Water" });
+      const committed = await new AuthoritativeGameService({ pack, reducer, store }).execute("player-a", "slot-1", create);
+      let loads = 0;
+      await store.transact("player-a", "slot-1", async (current) => {
+        if (current === undefined) throw new Error("test slot missing");
+        const stored = current.receipts.get(create.commandId)!;
+        return { record: { ...current, receipts: new Map([[create.commandId, {
+          canonicalEnvelope: stored.canonicalEnvelope,
+          loadResult: async () => {
+            loads++;
+            if (fault === "read-error") throw new Error("historical read failed");
+            if (fault === "schema") return { unexpected: true } as never;
+            if (fault === "slot") return { ...committed, projection: { ...committed.projection, slotId: "slot-2" as const } };
+            if (fault === "generation") return { ...committed, projection: { ...committed.projection, logicPackId: `logic-v1:${"b".repeat(64)}` } };
+            if (fault === "command") return { ...committed, commandId: "foreign_command_0001" };
+            return { ...committed, revision: 2, projection: { ...committed.projection, revision: 2 } };
+          },
+        }]]) }, value: undefined };
+      });
+      const service = new AuthoritativeGameService({ pack, reducer, store });
+      expect(await service.listSlots("player-a")).toHaveLength(1);
+      expect((await service.bootstrap("player-a", "slot-1")).revision).toBe(1);
+      await expect(service.execute("player-a", "slot-1", { ...create,
+        command: { type: "slot.create", starterElement: "Fire" },
+      })).rejects.toMatchObject({ code: "COMMAND_DUPLICATE_MISMATCH" });
+      expect(loads).toBe(0);
+      await expect(service.execute("player-a", "slot-1", create)).rejects.toMatchObject({ code: "STATE_CORRUPT" });
+      expect(loads).toBe(1);
+      expect((await store.read("player-a", "slot-1"))?.revision).toBe(1);
+    },
+  );
+
   it("validates the persisted aggregate before receipts, bootstrap, and slot summaries", async () => {
     const store = new InMemoryAuthoritativeSlotStore<TestState>();
     const create = command("command_create_0001", 0, { type: "slot.create", starterElement: "Water" });
@@ -344,9 +381,9 @@ describe("AuthoritativeGameService", () => {
       receipts.set("command_create_0001", {
         ...stored,
         result: {
-          ...stored.result,
+          ...await readStoredReceipt(stored),
           projection: {
-            ...stored.result.projection,
+            ...(await readStoredReceipt(stored)).projection,
             simulationVersion: OFFICIAL_GAME_V12_SIMULATION_VERSION,
           },
         },

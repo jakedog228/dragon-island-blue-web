@@ -10,6 +10,8 @@ import {
 } from "@dib/game-protocol";
 import {
   GameServiceError,
+  readStoredReceipt,
+  type StoredReceipt,
   type AuthoritativeRecordValidationInput,
   type AuthoritativeSlotRecord,
   type AuthoritativeSlotStore,
@@ -25,6 +27,7 @@ import { durableWriteFile } from "./durableWrite.js";
 // definitions: a local restatement silently drifts the moment a new simulation version lands.
 type ResultForBody<P extends ProjectionBody> = CommandResultForBody<P>;
 const RESULT_DIGESTS = new WeakMap<object, string>();
+const DEFERRED_DIGESTS = new WeakMap<object, string>();
 const RECEIPT_WRITE_CONCURRENCY = 8;
 // A cold long-running campaign has thousands of sidecars. Share the read budget across slots
 // and migrations: Promise.all over every receipt exhausted Windows file handles on real saves.
@@ -228,6 +231,7 @@ export class FileAuthoritativeSlotStore<
   private readonly logicPackId: string;
   private readonly simulationVersion: string;
   private readonly pending = new Map<string, Promise<void>>();
+  private readonly loading = new Map<string, Promise<AuthoritativeSlotRecord<S, P> | undefined>>();
   private readonly currentCache = new Map<string, CachedRecord<S, P>>();
   private readonly migrationCache = new Map<string, CachedRecord<S, P>>();
   private readonly layouts = new WeakMap<object, StoredLayout>();
@@ -313,7 +317,11 @@ export class FileAuthoritativeSlotStore<
         for (let index = 0; index < pendingReceipts.length; index += RECEIPT_WRITE_CONCURRENCY) {
           await Promise.all(pendingReceipts
             .slice(index, index + RECEIPT_WRITE_CONCURRENCY)
-            .map(([commandId, receipt]) => this.writeReceipt(path, commandId, receipt.result)));
+            .map(async ([commandId, receipt]) => {
+              const result = await readStoredReceipt(receipt);
+              await this.writeReceipt(path, commandId, result);
+              DEFERRED_DIGESTS.set(receipt, resultDigest(result));
+            }));
         }
         await this.atomicWrite(path, `${JSON.stringify(serializeV2(completed.record))}\n`);
         this.layouts.set(completed.record, "v2");
@@ -368,6 +376,24 @@ export class FileAuthoritativeSlotStore<
     slotId: SaveSlotId,
   ): Promise<AuthoritativeSlotRecord<S, P> | undefined> {
     validateSlotId(slotId);
+    const key = slotKey(playerId, slotId);
+    const existing = this.loading.get(key);
+    if (existing !== undefined) return await existing;
+    // Reconnects/list requests may overlap before the durable cache is warm. Share the
+    // full validation (including migrations), not a second copy of every receipt.
+    const loading = this.loadFile(playerId, slotId);
+    this.loading.set(key, loading);
+    try {
+      return await loading;
+    } finally {
+      if (this.loading.get(key) === loading) this.loading.delete(key);
+    }
+  }
+
+  private async loadFile(
+    playerId: string,
+    slotId: SaveSlotId,
+  ): Promise<AuthoritativeSlotRecord<S, P> | undefined> {
     const current = await this.readPath(this.pathFor(playerId, slotId), playerId, slotId, false);
     if (current !== undefined) return current;
     for (const source of this.migrationSources) {
@@ -442,7 +468,11 @@ export class FileAuthoritativeSlotStore<
       }
       const raw = JSON.parse(await readFile(path, "utf8")) as unknown;
       const layout: StoredLayout = isStoredSlotFileV2(raw) ? "v2" : "v1";
-      const expanded = await expandStoredFile(path, raw, slotId);
+      // Current v2 snapshots own a strict receipt index. Read individual historical
+      // results only for exact retries; migrations still inspect their frozen source history.
+      const deferred = isCurrentPath && isStoredSlotFileV2(raw);
+      const expanded = deferred ? { ...raw, schemaVersion: 1, receipts: [] }
+        : await expandStoredFile(path, raw, slotId);
       if (
         ignoreForeignLegacy &&
         expanded !== null &&
@@ -461,7 +491,7 @@ export class FileAuthoritativeSlotStore<
         }
         return undefined;
       }
-      const record = await parseFile(
+      const parsed = await parseFile(
         expanded,
         playerId,
         slotId,
@@ -470,6 +500,8 @@ export class FileAuthoritativeSlotStore<
         this.parseCommandResult,
         this.validateRecord,
       );
+      const record = deferred ? Object.freeze({ ...parsed,
+        receipts: deferredReceipts(path, raw, parsed, this.parseCommandResult) }) : parsed;
       this.layouts.set(record, layout);
       if (isCurrentPath) {
         this.currentCache.set(slotKey(playerId, slotId), {
@@ -643,9 +675,56 @@ function serializeV2<S, P extends ProjectionBody>(
     receipts: [...record.receipts].map(([commandId, receipt]) => ({
       commandId,
       canonicalEnvelope: receipt.canonicalEnvelope,
-      resultSha256: resultDigest(receipt.result),
+      resultSha256: DEFERRED_DIGESTS.get(receipt) ?? resultDigest(receipt.result),
     })),
   };
+}
+
+function deferredReceipts<S, P extends ProjectionBody>(path: string, value: unknown,
+  record: AuthoritativeSlotRecord<S, P>, parseResult: (value: unknown) => ResultForBody<P>,
+): ReadonlyMap<string, StoredReceipt<P>> {
+  if (!isStoredSlotFileV2(value)) throw corrupt(record.slotId, "invalid deferred receipt layout");
+  assertStoredFileKeys(value, record.slotId);
+  if (!Array.isArray(value.receipts)) throw corrupt(record.slotId, "invalid receipt index");
+  const receipts = new Map<string, StoredReceipt<P>>();
+  for (const entry of value.receipts) {
+    if (entry === null || typeof entry !== "object") throw corrupt(record.slotId, "invalid receipt reference");
+    assertReceiptReferenceKeys(entry, record.slotId);
+    const ref = entry as Partial<StoredReceiptReferenceV2>;
+    if (typeof ref.commandId !== "string" || typeof ref.canonicalEnvelope !== "string" ||
+      typeof ref.resultSha256 !== "string" || !/^[a-f0-9]{64}$/.test(ref.resultSha256) || receipts.has(ref.commandId))
+      throw corrupt(record.slotId, "duplicate or invalid command receipt reference");
+    const envelope = GameCommandEnvelopeV1Schema.parse(JSON.parse(ref.canonicalEnvelope));
+    if (envelope.commandId !== ref.commandId) throw corrupt(record.slotId, "receipt envelope command id disagrees");
+    const reference = ref as StoredReceiptReferenceV2;
+    let pending: Promise<ResultForBody<P>> | undefined;
+    const receipt: StoredReceipt<P> = Object.freeze({ canonicalEnvelope: reference.canonicalEnvelope,
+      loadResult: () => {
+        if (pending !== undefined) return pending;
+        pending = (async () => {
+          try {
+            const expanded = await expandStoredFile(path, { ...value, receipts: [reference] }, record.slotId) as StoredSlotFileV1;
+            const result = parseResult(expanded.receipts[0]!.result);
+            if (result.commandId !== reference.commandId || result.revision > record.revision ||
+              result.projection.slotId !== record.slotId || result.projection.revision !== result.revision ||
+              result.projection.logicPackId !== record.logicPackId ||
+              result.projection.simulationVersion !== record.simulationVersion)
+              throw corrupt(record.slotId, "receipt does not belong to this slot generation");
+            resultDigest(result);
+            return result;
+          } catch (error) {
+            pending = undefined; // Repairs may be retried; do not cache a rejected read forever.
+            if (error instanceof GameServiceError) throw error;
+            throw new GameServiceError("STATE_CORRUPT", error instanceof Error ? error.message : "invalid receipt result");
+          }
+        })();
+        return pending;
+      },
+    });
+    DEFERRED_DIGESTS.set(receipt, reference.resultSha256);
+    receipts.set(reference.commandId, receipt);
+  }
+  return receipts;
 }
 
 async function expandStoredFile(
@@ -825,7 +904,7 @@ function assertStoredFileKeys(value: object, slotId: SaveSlotId): void {
       "schemaVersion", "playerId", "slotId", "logicPackId", "simulationVersion", "revision",
       "eventCursor", "updatedAt", "state", "projection", "receipts",
     ],
-    corrupt(slotId, "unknown file envelope field"),
+    slotId, "unknown file envelope field",
   );
 }
 
@@ -833,7 +912,7 @@ function assertReceiptKeys(value: object, slotId: SaveSlotId): void {
   exactKeys(
     value,
     ["commandId", "canonicalEnvelope", "result"],
-    corrupt(slotId, "unknown command receipt field"),
+    slotId, "unknown command receipt field",
   );
 }
 
@@ -841,7 +920,7 @@ function assertReceiptReferenceKeys(value: object, slotId: SaveSlotId): void {
   exactKeys(
     value,
     ["commandId", "canonicalEnvelope", "resultSha256"],
-    corrupt(slotId, "unknown command receipt reference field"),
+    slotId, "unknown command receipt reference field",
   );
 }
 
@@ -849,15 +928,16 @@ function assertReceiptSidecarKeys(value: object, slotId: SaveSlotId): void {
   exactKeys(
     value,
     ["schemaVersion", "commandId", "result"],
-    corrupt(slotId, "unknown command receipt sidecar field"),
+    slotId, "unknown command receipt sidecar field",
   );
 }
 
-function exactKeys(value: object, allowed: readonly string[], error: Error): void {
-  if (Object.getPrototypeOf(value) !== Object.prototype) throw error;
-  const allowedKeys = new Set(allowed);
+// Valid long-lived slots have thousands of receipts. Build the corruption error only
+// when validation fails, rather than capturing three unused Error stacks per receipt.
+function exactKeys(value: object, allowed: readonly string[], slotId: SaveSlotId, detail: string): void {
+  if (Object.getPrototypeOf(value) !== Object.prototype) throw corrupt(slotId, detail);
   for (const key of Reflect.ownKeys(value)) {
-    if (typeof key !== "string" || !allowedKeys.has(key)) throw error;
+    if (typeof key !== "string" || !allowed.includes(key)) throw corrupt(slotId, detail);
   }
 }
 

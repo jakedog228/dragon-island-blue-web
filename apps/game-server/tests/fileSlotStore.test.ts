@@ -1,3 +1,4 @@
+import { readStoredReceipt } from "@dib/game-service";
 import { findPresentationLeaks } from "@dib/logic-pack";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
@@ -1129,6 +1130,60 @@ function command(
 }
 
 describe("restart-safe authoritative slot files", () => {
+
+  it("lists, bootstraps and appends after restart without reading history; old replay loads exactly once", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dib-game-store-deferred-"));
+    directories.push(directory);
+    const make = () => new AuthoritativeGameService({ pack, reducer,
+      store: new FileAuthoritativeSlotStore(storeOptions(directory)) });
+    const create = command("deferred_create_0001", 0, { type: "slot.create", starterElement: "Water" });
+    const created = await make().execute(playerId, "slot-1", create);
+    const cold = make();
+    const reads = () => vi.mocked(readFile).mock.calls.filter(call => String(call[0]).endsWith(".receipt")).length;
+    const beforeReads = reads();
+    expect((await cold.listSlots(playerId))[0]?.revision).toBe(1);
+    expect((await cold.bootstrap(playerId, "slot-1")).revision).toBe(1);
+    const moved = await cold.execute(playerId, "slot-1", command("deferred_move_0001", 1,
+      { type: "world.navigate", targetPoiId: "Forest" }, "decision-1"));
+    expect(moved.revision).toBe(2);
+    expect(reads()).toBe(beforeReads);
+    await expect(cold.execute(playerId, "slot-1", { ...create,
+      command: { type: "slot.create", starterElement: "Fire" } }))
+      .rejects.toMatchObject({ code: "COMMAND_DUPLICATE_MISMATCH" });
+    expect(reads()).toBe(beforeReads);
+    const replayService = make();
+    const replayStart = reads();
+    const replays = await Promise.all([replayService.execute(playerId, "slot-1", create),
+      replayService.execute(playerId, "slot-1", create)]);
+    expect(replays).toEqual([{ ...created, idempotentReplay: true }, { ...created, idempotentReplay: true }]);
+    expect(reads() - replayStart).toBe(1);
+    expect((await replayService.bootstrap(playerId, "slot-1")).revision).toBe(2);
+  });
+
+  it.each(["missing", "schema", "generation"] as const)("rejects a deferred %s receipt without replaying or mutating", async fault => {
+    const directory = await mkdtemp(join(tmpdir(), "dib-game-store-deferred-corrupt-"));
+    directories.push(directory);
+    const create = command("deferred_corrupt_create", 0, { type: "slot.create", starterElement: "Water" });
+    const make = () => new AuthoritativeGameService({ pack, reducer,
+      store: new FileAuthoritativeSlotStore(storeOptions(directory)) });
+    await make().execute(playerId, "slot-1", create);
+    const path = await findSlotFile(directory);
+    const { file, sidecar, sidecarPath } = await readFirstReceiptSidecar(path);
+    if (fault === "missing") await rm(sidecarPath);
+    else {
+      const result = sidecar.result as { projection: { slotId: string }; events: unknown };
+      if (fault === "schema") result.events = "not-an-event-array";
+      else result.projection.slotId = "slot-2";
+      await writeFile(sidecarPath, JSON.stringify(sidecar));
+      file.receipts[0]!.resultSha256 = sha256Json(sidecar.result);
+      await writeFile(path, JSON.stringify(file));
+    }
+    const snapshot = await readFile(path, "utf8");
+    const cold = make();
+    expect((await cold.listSlots(playerId))[0]?.revision).toBe(1);
+    await expect(cold.execute(playerId, "slot-1", create)).rejects.toMatchObject({ code: "STATE_CORRUPT" });
+    expect(await readFile(path, "utf8")).toBe(snapshot);
+  });
   it("stores immutable results in sidecars and leaves an idempotent replay entirely read-only", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dib-game-store-v2-"));
     directories.push(directory);
@@ -1198,10 +1253,66 @@ describe("restart-safe authoritative slot files", () => {
       const cold = new FileAuthoritativeSlotStore(storeOptions(directory));
       const loaded = await Promise.all([cold.read(playerId, "slot-1"), cold.read(playerId, "slot-2")]);
       expect(loaded.map(record => record?.receipts.size)).toEqual([25, 25]);
+      expect(reads).toBe(0);
+      await Promise.all(loaded.flatMap(record => [...record!.receipts.values()].map(readStoredReceipt)));
       expect(reads).toBe(50);
       expect(peak).toBeLessThanOrEqual(8);
       expect(active).toBe(0);
     } finally { vi.mocked(readFile).mockImplementation(original); }
+  });
+
+  it("shares one cold receipt reconstruction across simultaneous reads, lists and a writer", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dib-game-store-shared-cold-"));
+    directories.push(directory);
+    const warm = new FileAuthoritativeSlotStore(storeOptions(directory));
+    const service = new AuthoritativeGameService({ pack, reducer, store: warm });
+    const create = command("shared_cold_create_0001", 0, { type: "slot.create", starterElement: "Water" });
+    await service.execute(playerId, "slot-1", create);
+    const cold = new FileAuthoritativeSlotStore(storeOptions(directory));
+    const startReads = vi.mocked(readFile).mock.calls.filter(call => String(call[0]).endsWith(".receipt")).length;
+    const [first, second, listed, written] = await Promise.all([
+      cold.read(playerId, "slot-1"),
+      cold.read(playerId, "slot-1"),
+      cold.list(playerId),
+      cold.transact(playerId, "slot-1", async record => ({ record, value: record })),
+    ]);
+    const endReads = vi.mocked(readFile).mock.calls.filter(call => String(call[0]).endsWith(".receipt")).length;
+    expect(endReads - startReads).toBe(0);
+    expect(first?.receipts.size).toBe(1);
+    expect(second).toBe(first);
+    expect(listed).toEqual([first]);
+    expect(listed[0]).toBe(first);
+    expect(written).toBe(first);
+    const restartedService = new AuthoritativeGameService({ pack, reducer, store: cold });
+    await expect(restartedService.execute(playerId, "slot-1", create))
+      .resolves.toMatchObject({ revision: 1, idempotentReplay: true });
+    await restartedService.execute(playerId, "slot-1", command("shared_cold_move_0001", 1,
+      { type: "world.navigate", targetPoiId: "Forest" }, "decision-1"));
+    expect((await cold.read(playerId, "slot-1"))?.revision).toBe(2);
+  });
+
+  it("releases a failed shared cold read so repaired durable data can be retried", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dib-game-store-shared-failure-"));
+    directories.push(directory);
+    const service = new AuthoritativeGameService({ pack, reducer,
+      store: new FileAuthoritativeSlotStore(storeOptions(directory)) });
+    await service.execute(playerId, "slot-1", command("shared_failure_create_0001", 0,
+      { type: "slot.create", starterElement: "Water" }));
+    const path = await findSlotFile(directory);
+    const { sidecar, sidecarPath } = await readFirstReceiptSidecar(path);
+    const original = await readFile(sidecarPath, "utf8");
+    (sidecar.result as { revision: number }).revision = 99;
+    await writeFile(sidecarPath, JSON.stringify(sidecar), "utf8");
+    const cold = new FileAuthoritativeSlotStore(storeOptions(directory));
+    const record = await cold.read(playerId, "slot-1");
+    const receipt = record!.receipts.get("shared_failure_create_0001")!;
+    const results = await Promise.allSettled([readStoredReceipt(receipt), readStoredReceipt(receipt)]);
+    for (const result of results) {
+      expect(result.status).toBe("rejected");
+      if (result.status === "rejected") expect(String(result.reason)).toMatch(/sidecar digest disagrees/);
+    }
+    await writeFile(sidecarPath, original, "utf8");
+    expect((await readStoredReceipt(receipt)).revision).toBe(1);
   });
 
   it("fails closed when a v2 receipt sidecar no longer matches the snapshot digest", async () => {
@@ -1221,7 +1332,8 @@ describe("restart-safe authoritative slot files", () => {
     (sidecar.result as { revision: number }).revision = 99;
     await writeFile(sidecarPath, JSON.stringify(sidecar), "utf8");
     const restarted = new FileAuthoritativeSlotStore(storeOptions(directory));
-    await expect(restarted.read(playerId, "slot-1"))
+    const record = await restarted.read(playerId, "slot-1");
+    await expect(readStoredReceipt(record!.receipts.get("command_create_v2_digest")!))
       .rejects.toThrow(/sidecar digest disagrees/);
   });
 
@@ -1568,19 +1680,19 @@ describe("restart-safe authoritative slot files", () => {
           ...sourceRecord.projection,
           simulationVersion: sourceSimulationVersion,
         },
-        receipts: new Map([...sourceRecord.receipts].map(([commandId, receipt]) => [
+        receipts: new Map(await Promise.all([...sourceRecord.receipts].map(async ([commandId, receipt]) => [
           commandId,
           {
-            ...receipt,
+            canonicalEnvelope: receipt.canonicalEnvelope,
             result: {
-              ...receipt.result,
+              ...await readStoredReceipt(receipt),
               projection: {
-                ...receipt.result.projection,
+                ...(await readStoredReceipt(receipt)).projection,
                 simulationVersion: sourceSimulationVersion,
               },
             },
           },
-        ])),
+        ] as const))),
       },
       value: undefined,
     }));

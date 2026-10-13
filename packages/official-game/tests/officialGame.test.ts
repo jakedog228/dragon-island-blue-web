@@ -31,6 +31,7 @@ import {
 import {
   AuthoritativeGameService,
   InMemoryAuthoritativeSlotStore,
+  readStoredReceipt,
 } from "@dib/game-service";
 import { findPresentationLeaks, isMechanicalLogicPath } from "@dib/logic-pack";
 import {
@@ -2674,7 +2675,7 @@ describe("official authoritative gameplay reducer", () => {
     );
     expect(live.record.state.pendingDefeat?.battleId).toBe(live.record.state.battle?.battleId);
     expect(live.record.state.dungeon === undefined).toBe(label === "Arena" || label === "ordinary world");
-    const terminalEvents = [...live.record.receipts.values()].flatMap(({ result }) => result.events);
+    const terminalEvents = (await Promise.all([...live.record.receipts.values()].map(readStoredReceipt))).flatMap((result) => result.events);
     expect(terminalEvents).toContainEqual(expect.objectContaining({
       type: "battle.ended",
       outcome: "defeat",
@@ -2775,7 +2776,7 @@ describe("official authoritative gameplay reducer", () => {
     expect(pending.state.party.monsters).toHaveLength(fixture.started.state.party.monsters.length);
     expect(pending.state.profile.highestCapturedLevels)
       .toEqual(fixture.started.state.profile.highestCapturedLevels);
-    const committedEvents = [...pending.receipts.values()].flatMap(({ result }) => result.events);
+    const committedEvents = (await Promise.all([...pending.receipts.values()].map(readStoredReceipt))).flatMap((result) => result.events);
     expect(committedEvents.filter((event) =>
       event.type === "player.monsterAdded" && event.reason === "capture",
     )).toEqual([]);
@@ -3938,7 +3939,7 @@ describe("official authoritative gameplay reducer", () => {
     expect(after.state.pendingDefeat).toBeUndefined();
     expect(after.state.profile.gold).toBe(0);
     expect(after.receipts.size).toBe(before.receipts.size + 1);
-    const committedEvents = [...after.receipts.values()].flatMap(({ result }) => result.events);
+    const committedEvents = (await Promise.all([...after.receipts.values()].map(readStoredReceipt))).flatMap((result) => result.events);
     expect(committedEvents.filter((event) =>
       event.type === "player.currencyChanged" && event.currency === "gold" && event.delta === -100,
     )).toHaveLength(1);
@@ -6401,7 +6402,7 @@ describe("official authoritative gameplay reducer", () => {
 
     const record = await store.read(playerId, slotId);
     if (record === undefined) throw new Error("v20 Save Me service record disappeared");
-    const debitEvents = [...record.receipts.values()].flatMap(({ result }) => result.events)
+    const debitEvents = (await Promise.all([...record.receipts.values()].map(readStoredReceipt))).flatMap((result) => result.events)
       .filter((event) =>
         event.type === "player.currencyChanged" && event.currency === "gold" && event.delta === -100,
       );

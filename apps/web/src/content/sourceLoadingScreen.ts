@@ -139,7 +139,6 @@ export async function prepareSourceLoadingScreen(
   root.appendChild(frame);
 
   let timer: ReturnType<typeof globalThis.setInterval> | undefined;
-  let visualPoll: number | undefined;
   let resizeObserver: ResizeObserver | undefined;
   let resizeHost: HTMLElement | undefined;
   let dotCount = 0;
@@ -171,41 +170,12 @@ export async function prepareSourceLoadingScreen(
       globalThis.clearInterval(timer);
       timer = undefined;
     }
-    if (visualPoll !== undefined) {
-      globalThis.cancelAnimationFrame(visualPoll);
-      visualPoll = undefined;
-    }
     resizeObserver?.disconnect();
     resizeObserver = undefined;
     globalThis.removeEventListener("resize", applyLayout);
     resizeHost = undefined;
     root.remove();
     mounted = false;
-  };
-  const dismissWhenPixiIsVisible = (): void => {
-    const app = (globalThis as Record<string, unknown>)["__PIXI_APP__"] as
-      | { stage?: { children?: unknown[] } }
-      | undefined;
-    const stack = [...(app?.stage?.children ?? [])] as Array<{
-      label?: string;
-      visible?: boolean;
-      children?: unknown[];
-    }>;
-    while (stack.length > 0) {
-      const node = stack.pop()!;
-      if (
-        node.visible !== false &&
-        (
-          node.label === "sourceTitleScene" ||
-          node.label === "sourceStartupBackground:mainscreenBackground"
-        )
-      ) {
-        dismiss();
-        return;
-      }
-      stack.push(...(node.children ?? []) as typeof stack);
-    }
-    visualPoll = globalThis.requestAnimationFrame(dismissWhenPixiIsVisible);
   };
   return {
     mount(host) {
@@ -221,7 +191,6 @@ export async function prepareSourceLoadingScreen(
         dotCount = dotCount >= 3 ? 1 : dotCount + 1;
         dots.textContent = ".".repeat(dotCount);
       }, 500);
-      visualPoll = globalThis.requestAnimationFrame(dismissWhenPixiIsVisible);
     },
     dismiss,
   };

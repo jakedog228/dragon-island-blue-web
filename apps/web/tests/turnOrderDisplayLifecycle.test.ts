@@ -9,6 +9,8 @@ import {
 } from "../src/battle/turnOrderDisplay.js";
 import { turnOrderEntryY } from "../src/battle/displayShared.js";
 import { battlePortraitFrame, battleSpriteKey } from "../src/battle/encounter.js";
+import { BattleRoster } from "../src/battle/battleRoster.js";
+import { BattleNode } from "../src/battle/battleNode.js";
 
 vi.hoisted(() => {
   Object.defineProperty(globalThis, "navigator", {
@@ -116,6 +118,37 @@ async function harness(initial = ["fireCub", "gnoll", "snowCub"]): Promise<Harne
 }
 
 describe("TurnOrderDisplay battle-scene lifecycle", () => {
+  it("finishes an older flip while a new split identity is waiting for its impact assets", async () => {
+    const roster = new BattleRoster({ backgroundKey: "FieldCombat",
+      playerTeam: [{ shortType: "FireCub", level: 10 }, { shortType: "SnowCub", level: 10 }],
+      enemyTeam: [{ shortType: "Gnoll", level: 10 }] });
+    let order = ["t0m0:FireCub", "t1m0:Gnoll", "t0m1:SnowCub"];
+    const ticker = new DisplayTicker();
+    const display = new TurnOrderDisplay({ assets: assets(), ticker: ticker as unknown as Ticker,
+      provider: { order: () => order, delayOf: () => 0, infoOf: id => {
+        const entry = roster.entryOf(id);
+        return { name: entry.setup.shortType, hp: 10, maxHp: 10, team: entry.team };
+      } } });
+    const initialized = display.initialize();
+    await advance(ticker, frames(500) + 30); await initialized;
+    order = ["t1m0:Gnoll", "t0m1:SnowCub", "t0m0:FireCub"];
+    void display.notifyBattleTimePassed();
+    await advance(ticker, frames(800));
+    order = ["t1m0:Gnoll", "t1m1:Gnoll", "t0m1:SnowCub", "t0m0:FireCub"];
+    let finishAsset!: () => void;
+    const asset = new Promise<void>(resolve => { finishAsset = resolve; });
+    const prepare = (BattleNode.prototype as unknown as {
+      startRosterAssetWarmups(this: object, events: readonly object[]): unknown;
+    }).startRosterAssetWarmups;
+    prepare.call({ roster, preloadDynamicRosterType: () => asset }, [
+      { type: "monsterAdded", living: "t1m1:Gnoll", team: 1, shortType: "Gnoll", level: 10 },
+    ]);
+    await advance(ticker, frames(400));
+    expect(display.displayedOrder).toEqual(order);
+    finishAsset();
+    display.destroy({ children: true });
+  });
+
   it.each([
     { name: "Arkanis", shortType: "FireDragon", spriteFile: "MegaDragon.png", portrait: "FireDragon_icon.png" },
     { name: "Quetzalcoatl", shortType: "LightDragon", spriteFile: "GreenDragon.png", portrait: "LightDragon_icon.png" },

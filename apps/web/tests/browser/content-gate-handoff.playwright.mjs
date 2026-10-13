@@ -285,6 +285,9 @@ try {
       assert(slot?.occupied,
         `startup used a stale connection after settings import: ${JSON.stringify(startup)}`);
     }
+    await bridge.waitFor({ state: "detached", timeout: 120_000 });
+    await page.screenshot({ path: path.join(outputDirectory, `${variant.label}-handoff.png`),
+      fullPage: false, timeout: 120_000 });
     assert.equal(errors.length, 0, `${variant.label}: ${errors.join("\n")}`);
     results.push({
       label: variant.label,

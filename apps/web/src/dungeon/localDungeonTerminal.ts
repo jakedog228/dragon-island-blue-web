@@ -386,6 +386,12 @@ export class LocalDungeonTerminal {
     this.stageQuestEventResult(result);
   }
 
+  /** Battle chats belong to the same detached quest state as battle wins. Writing the live
+   * runtime here would lose their progression flags when terminal settlement adopts this one. */
+  requestChatPresentation(name: string, alwaysShow: boolean): boolean {
+    return this.quests?.requestChatPresentation(name, alwaysShow) ?? true;
+  }
+
   onDungeonRoomRosterUpdated(
     instanceName: string,
     floor: number,

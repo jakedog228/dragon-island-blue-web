@@ -17,7 +17,7 @@ export interface BattleRosterEntry {
  * Live team membership remains authoritative in BattleSession. This registry only owns facts that
  * never change once a living exists: stable id, source setup, team, and construction index.
  * Mid-battle constructions (`monsterAdded` and `summonChanged`) are appended via
- * `registerMidBattle` the moment their event is presented, so info popups / ability-info /
+ * `registerMidBattle` before yielding to their impact delay, so live queue callbacks / ability-info /
  * view-party lookups work for them exactly like initial-roster members. */
 export class BattleRoster {
   private readonly rosterEntries: BattleRosterEntry[];

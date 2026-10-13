@@ -3279,6 +3279,16 @@ export class BattleNode {
   }
 
   private startRosterAssetWarmups(events: readonly BattleEvent[]): ReadonlyMap<string, Promise<void>> {
+
+
+
+
+    for (const identity of restoredRosterIdentities(events)) {
+      this.roster.registerMidBattle(identity.id, identity.team, {
+        shortType: identity.shortType,
+        level: identity.level,
+      });
+    }
     const warmups = new Map<string, Promise<void>>();
     for (const event of events) {
       const shortType = event.type === "monsterAdded"

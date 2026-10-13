@@ -1,4 +1,5 @@
 import { AudioPlayer } from "../src/audio.js";
+import { BattleRoster } from "../src/battle/battleRoster.js";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { Container } from "pixi.js";
 import {
@@ -284,16 +285,36 @@ describe("BattleNode promoted-reserve display registration", () => {
 describe("BattleNode dynamic-roster asset overlap", () => {
   it("starts one hidden preload per committed species before impact", () => {
     const preloadDynamicRosterType = vi.fn((shortType: string) => Promise.resolve());
-    const warmups = startRosterAssetWarmups.call({ preloadDynamicRosterType }, [
-      { type: "monsterAdded", shortType: "Mask" },
-      { type: "monsterAdded", shortType: "Mask" },
-      { type: "summonChanged", added: "summon", shortType: "Griffin" },
+    const roster = new BattleRoster({ backgroundKey: "FieldCombat", playerTeam: [], enemyTeam: [] });
+    const warmups = startRosterAssetWarmups.call({ preloadDynamicRosterType, roster }, [
+      { type: "monsterAdded", living: "t1m0:Mask", team: 1, shortType: "Mask", level: 10 },
+      { type: "monsterAdded", living: "t1m1:Mask", team: 1, shortType: "Mask", level: 11 },
+      { type: "summonChanged", added: "t0m0:Griffin", team: 0, shortType: "Griffin", level: 12 },
       { type: "summonChanged", added: undefined, shortType: "Ignored" },
       { type: "switched", out: "a", in: "b", team: 0 },
     ]);
 
     expect(preloadDynamicRosterType.mock.calls).toEqual([["Mask"], ["Griffin"]]);
     expect([...warmups.keys()]).toEqual(["Mask", "Griffin"]);
+    expect(roster.entryOf("t1m1:Mask").setup.level).toBe(11);
+  });
+
+  it("makes a split identity readable by an older queue callback before its asset or impact settles", async () => {
+    const roster = new BattleRoster({ backgroundKey: "FieldCombat", playerTeam: [],
+      enemyTeam: [{ shortType: "KingSlime", level: 80 }] });
+    let resolveAsset!: () => void;
+    const asset = new Promise<void>(resolve => { resolveAsset = resolve; });
+    const preloadDynamicRosterType = vi.fn(() => asset);
+    const hp = new Map([["t1m0:KingSlime", 2000]]);
+    const warmups = startRosterAssetWarmups.call({ roster, hp, preloadDynamicRosterType }, [
+      { type: "monsterAdded", living: "t1m1:KingSlime", team: 1, shortType: "KingSlime", level: 80 },
+    ]);
+    // warpLive synchronously reads every identity in the engine's already-resolved queue.
+    expect(["t1m0:KingSlime", "t1m1:KingSlime"].map(id => roster.entryOf(id).setup.shortType))
+      .toEqual(["KingSlime", "KingSlime"]);
+    expect(hp.has("t1m1:KingSlime")).toBe(false);
+    resolveAsset();
+    await warmups.get("KingSlime");
   });
 });
 

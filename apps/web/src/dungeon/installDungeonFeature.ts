@@ -1881,7 +1881,10 @@ export class DungeonFeatureController<ShellMode extends string> {
             },
           }),
       ...(onQuestEvent === undefined ? {} : { onQuestEvent }),
-      ...(this.host.requestChatPresentation === undefined
+      ...(localTerminal !== undefined
+        ? { requestChatPresentation: (name: string, alwaysShow: boolean) =>
+            localTerminal.requestChatPresentation(name, alwaysShow) }
+        : this.host.requestChatPresentation === undefined
         ? {}
         : { requestChatPresentation: this.host.requestChatPresentation }),
       ...(this.host.authority === undefined

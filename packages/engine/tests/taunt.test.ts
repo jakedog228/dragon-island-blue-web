@@ -153,3 +153,25 @@ describe("BerserkAbility (targeting-passives.md §C) — Yeti's Passive.Berserk"
     expect(step.type).toBe("awaitingPlayer");
   });
 });
+
+
+describe("capture intents obey the same source taunt redirect", () => {
+  it("a redirected failed capture leaves the requested target available", () => {
+    const core = new BattleCore(gd, [[{shortType:"Archangel",level:113}],
+      [{shortType:"CrabKing",level:82,capturable:false},{shortType:"AngelicBird",level:87,currentHp:232}]], mulberry32(101));
+    core.seedAndStart();
+    const actor="t0m0:Archangel", taunter="t1m0:CrabKing", bird="t1m1:AngelicBird";
+    for(let i=0;i<20&&core.frontActorId()!==taunter;i++)core.resolveTurn(()=>noopDecision());
+    expect(core.frontActorId()).toBe(taunter);
+    const ref=gd.jobAbilitiesOrEmpty("CrabKing").find(r=>r.type==="Defensive.Scapegoat")!;
+    core.resolveTurn(()=>({ability:gd.ability(ref.type),args:ref.arguments,enemyTargets:[],friendlyTargets:[taunter],rngDraws:0}));
+    for(let i=0;i<20&&core.frontActorId()!==actor;i++)core.resolveTurn(()=>noopDecision());
+    expect(core.frontActorId()).toBe(actor);
+    const start=core.events.length;
+    core.resolveTurn(()=>({ability:gd.ability("Utility.Capture"),args:{captureCardLevel:2,capturePartyLevel:113},enemyTargets:[bird],friendlyTargets:[],rngDraws:0}));
+    const events=core.events.slice(start);
+    expect(events).toContainEqual({type:"targetAltered",source:actor,target:taunter});
+    expect(events).toContainEqual({type:"captureResolved",source:actor,target:taunter,cardLevel:2,chance:0,success:false});
+    expect(core.captureStatusOf(bird)).toBe("available");
+  });
+});

@@ -142,6 +142,8 @@ type KeyValueStorageWithIndex = KeyValueStorage & {
 export interface AcquiredContent {
   readonly content: ImportedContentPackage;
   readonly saveStore: SaveSlotStore;
+  /** Retire the DOM bridge only after the renderer has drawn its first startup scene. */
+  readonly dismissLoadingScreen?: () => void;
   readonly official?: OfficialAuthoritySaveStore;
   /** Development-only, tab-local fixture request. Production builds never render its selector. */
   readonly scenario?: {
@@ -179,6 +181,7 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
       return {
         content,
         saveStore: BrowserSaveConnection.forContent(fingerprint),
+        dismissLoadingScreen: firstLoadScreen.dismiss,
       };
     } catch (error) {
       content.dispose();
@@ -1663,13 +1666,13 @@ export async function acquireLocalContent(host: HTMLElement): Promise<AcquiredCo
         .then(async (acquired) => {
           closeStorageDialog();
           closeRegisterDialog();
-              const firstLoadScreen = await prepareSourceLoadingScreen(acquired.content);
+          const firstLoadScreen = await prepareSourceLoadingScreen(acquired.content);
           await fadeOutContentGate(panel);
           disposeOfflineShellStatus();
           firstLoadScreen.mount(host);
           landingBackdrop?.dismiss();
           landingBackdrop = undefined;
-          resolve(acquired);
+          resolve({ ...acquired, dismissLoadingScreen: firstLoadScreen.dismiss });
         })
         .catch((error: unknown) => {
           busy = false;

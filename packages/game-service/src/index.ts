@@ -228,9 +228,14 @@ export interface GameCommandReducer<S, P extends ProjectionBody = ProjectionBody
   ): Promise<CommandReducerResult<S, P>> | CommandReducerResult<S, P>;
 }
 
-interface StoredReceipt<P extends ProjectionBody = ProjectionBodyV1> {
+export type StoredReceipt<P extends ProjectionBody = ProjectionBodyV1> = {
   readonly canonicalEnvelope: string;
-  readonly result: CommandResultForBody<P>;
+} & ({ readonly result: CommandResultForBody<P>; readonly loadResult?: never }
+  | { readonly result?: never; readonly loadResult: () => Promise<CommandResultForBody<P>> });
+
+/** Storage may retain immutable historical results separately from the validated slot index. */
+export async function readStoredReceipt<P extends ProjectionBody>(receipt: StoredReceipt<P>): Promise<CommandResultForBody<P>> {
+  return receipt.loadResult === undefined ? receipt.result : await receipt.loadResult();
 }
 
 export interface AuthoritativeSlotRecord<S, P extends ProjectionBody = ProjectionBodyV1> {
@@ -427,8 +432,19 @@ export class AuthoritativeGameService<S, P extends ProjectionBody = ProjectionBo
             { currentRevision: current.revision },
           );
         }
+        let replay: CommandResultForBody<P>;
+        try { replay = this.parseCommandResult(await readStoredReceipt(priorReceipt)); }
+        catch (error) {
+          if (error instanceof GameServiceError) throw error;
+          throw new GameServiceError("STATE_CORRUPT", error instanceof Error ? error.message : "invalid persisted receipt");
+        }
+        if (replay.commandId !== envelope.commandId || replay.revision > current.revision ||
+          replay.projection.slotId !== slotId || replay.projection.revision !== replay.revision ||
+          replay.projection.logicPackId !== current.logicPackId ||
+          replay.projection.simulationVersion !== current.simulationVersion) {
+          throw new GameServiceError("STATE_CORRUPT", "persisted receipt does not belong to this slot generation");
+        }
         validationFinishedAt = this.timingNow();
-        const replay = this.parseCommandResult(priorReceipt.result);
         reductionFinishedAt = validationFinishedAt;
         transactionFinishedAt = this.timingNow();
         idempotentReplay = true;
@@ -594,7 +610,7 @@ export class AuthoritativeGameService<S, P extends ProjectionBody = ProjectionBo
       ) {
         throw new Error("persisted projection is pinned to a different installed simulation");
       }
-      // File storage validates sidecars while loading, but AuthoritativeSlotStore is also the
+      // File storage validates deferred sidecars on access, but AuthoritativeSlotStore is also the
       // boundary implemented by future database adapters and test stores. Validate every receipt
       // once for each externally supplied immutable record identity; service-created successors
       // are marked at construction after their one new result has passed the same parser.
@@ -607,6 +623,9 @@ export class AuthoritativeGameService<S, P extends ProjectionBody = ProjectionBo
           ) {
             throw new Error(`persisted receipt ${commandId} has a mismatched canonical envelope`);
           }
+          // Deferred results are validated when replayed. The full canonical index is still
+          // checked now, so mismatched duplicate bodies never trigger a historical read.
+          if (receipt.loadResult !== undefined) continue;
           const result = this.parseCommandResult(receipt.result);
           if (result.commandId !== commandId) {
             throw new Error(`persisted receipt ${commandId} contains result ${result.commandId}`);

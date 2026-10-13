@@ -161,6 +161,46 @@ describe("local dungeon terminal retry ownership", () => {
 });
 
 describe("LocalDungeonTerminal", () => {
+  it("persists battle start and victory chats with the win across a rejected terminal save", async () => {
+    const original = new GuildQuestRuntime(questCatalog, emptyGuildQuestStateSnapshot());
+    let live = original;
+    let saved: LocalDungeonTerminalCheckpoint | undefined;
+    let writes = 0;
+    const terminal = new LocalDungeonTerminal({
+      data,
+      player: player(),
+      quests: original,
+      prepareApplication: (_outcome, _player, quests) => ({
+        accept: () => { live = quests!; },
+        rollback: () => { live = original; },
+      }),
+      persist: async (checkpoint) => {
+        if (++writes === 1) throw new Error("save rejected");
+        saved = checkpoint;
+      },
+    });
+    expect(terminal.requestChatPresentation("CaiusIntro", false)).toBe(true);
+    expect(terminal.requestChatPresentation("CaiusIntro", false)).toBe(false);
+    expect(terminal.requestChatPresentation("CaiusIntro", true)).toBe(true);
+    terminal.onQuestEvent({ id: 9, battle: {
+      uniqueKey: "FinalBattle6", friendlyTeamCount: 1, battingOrderSize: 4, difficultyModifier: 0,
+    } });
+    expect(terminal.requestChatPresentation("CaiusDefeated", true)).toBe(true);
+    expect(live.stateSnapshot().dialogsSeen).toEqual([]);
+    terminal.beginTerminalPreparation("victory");
+    await expect(terminal.persist(dungeon)).rejects.toThrow("save rejected");
+    expect(live).toBe(original);
+    expect(live.stateSnapshot().dialogsSeen).toEqual([]);
+    terminal.beginTerminalPreparation("victory");
+    await terminal.persist(dungeon);
+    terminal.commit();
+    const restored = new GuildQuestRuntime(questCatalog, saved!.quests!);
+    expect(restored.stateSnapshot().dialogsSeen).toEqual(["CaiusDefeated", "CaiusIntro"]);
+    expect(restored.stateSnapshot().completedFixedEncounterKeys).toContain("FinalBattle6");
+    expect(restored.requestChatPresentation("CaiusDefeated", false)).toBe(false);
+    expect(live.stateSnapshot()).toEqual(restored.stateSnapshot());
+  });
+
   it("allocates capture IDs from detached terminal state and preserves the live serial on rejection", async () => {
     const live = player();
     let writes = 0;

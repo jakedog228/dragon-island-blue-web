@@ -28,6 +28,7 @@
     "scenario:account-registration": "node apps/web/tests/browser/account-registration.playwright.mjs",
     "scenario:content-gate-login": "node apps/web/tests/browser/content-gate-login.playwright.mjs",
     "scenario:content-gate-handoff": "node apps/web/tests/browser/content-gate-handoff.playwright.mjs",
+    "scenario:loading-handoff": "node apps/web/tests/browser/loading-handoff.playwright.mjs",
     "scenario:content-gate-memory": "node apps/web/tests/browser/content-gate-memory.playwright.mjs",
     "scenario:fullscreen-shell": "node apps/web/tests/browser/fullscreen-shell.playwright.mjs",
     "scenario:offline-pwa": "node apps/web/tests/browser/offline-pwa.playwright.mjs",
